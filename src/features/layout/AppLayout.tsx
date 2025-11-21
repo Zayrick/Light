@@ -14,7 +14,9 @@ export function AppLayout({ sidebar, children }: AppLayoutProps) {
       {sidebar}
       <main className="main-content">
         <div className="scroll-container">
-          {children}
+          <div className="content-max-width">
+            {children}
+          </div>
         </div>
       </main>
     </div>
