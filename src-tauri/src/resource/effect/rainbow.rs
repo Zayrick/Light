@@ -17,17 +17,16 @@ impl Effect for RainbowEffect {
         "Rainbow".to_string()
     }
 
-    fn tick(&mut self, elapsed: Duration, led_count: usize) -> Vec<Color> {
-        let mut colors = Vec::with_capacity(led_count);
+    fn tick(&mut self, elapsed: Duration, buffer: &mut [Color]) {
+        let led_count = buffer.len();
         // Simple animation logic: offset hue by time
         let offset = (elapsed.as_millis() as f32 * self.speed / 10.0) % 360.0; 
 
         for i in 0..led_count {
              let hue = ((i as f32 * 360.0 / led_count as f32) + offset) % 360.0;
              let (r, g, b) = hsv_to_rgb(hue, 1.0, 1.0);
-             colors.push(Color { r, g, b });
+             buffer[i] = Color { r, g, b };
         }
-        colors
     }
 
     fn update_params(&mut self, params: Value) {
