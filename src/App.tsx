@@ -48,7 +48,7 @@ function App() {
 
   async function setEffect(port: string, effectId: string) {
     try {
-      await invoke("set_effect", { port, effect_id: effectId });
+      await invoke("set_effect", { port, effectId });
       setStatusMsg(`Set effect '${effectId}' on ${port}`);
     } catch (error) {
       console.error(error);
