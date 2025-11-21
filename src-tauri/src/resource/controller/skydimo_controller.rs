@@ -30,6 +30,10 @@ impl Controller for MoniAController {
         self.id.clone()
     }
 
+    fn length(&self) -> usize {
+        100 // Default to 100 for now
+    }
+
     fn update(&mut self, colors: &[Color]) -> Result<(), String> {
         let count = colors.len();
         let mut packet = Vec::new();
