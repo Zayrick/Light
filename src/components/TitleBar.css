@@ -1,5 +1,5 @@
 .titlebar {
-  height: 30px;
+  height: 32px; /* Matches padding-top in layout */
   background: transparent;
   user-select: none;
   display: flex;
@@ -16,9 +16,10 @@
   height: 100%;
   display: flex;
   align-items: center;
-  padding-left: 10px;
+  padding-left: 16px;
   font-size: 12px;
-  color: white;
+  color: var(--text-primary); /* Use theme variable */
+  font-family: var(--font-sans);
 }
 
 .titlebar-button {
@@ -26,22 +27,22 @@
   justify-content: center;
   align-items: center;
   width: 46px;
-  height: 30px;
-  color: #ffffff;
+  height: 100%;
+  color: var(--text-primary); /* Use theme variable */
   cursor: pointer;
   transition: background 0.1s;
 }
 
 .titlebar-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-card-hover); /* Use theme variable */
 }
 
 .titlebar-button.close:hover {
   background: #e81123;
+  color: white; /* Close button hover always white text on red */
 }
 
 .titlebar-icon {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
 }
-
