@@ -14,6 +14,11 @@ pub trait Controller: Send {
     fn serial_id(&self) -> String;
     fn length(&self) -> usize;
     fn update(&mut self, colors: &[Color]) -> Result<(), String>;
+    fn clear(&mut self) -> Result<(), String> {
+        let len = self.length();
+        let black = vec![Color::default(); len];
+        self.update(&black)
+    }
     fn disconnect(&mut self) -> Result<(), String> {
         Ok(())
     }
