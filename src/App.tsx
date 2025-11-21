@@ -9,14 +9,19 @@ interface Device {
   id: string;
 }
 
+interface EffectInfo {
+  id: string;
+  name: string;
+}
+
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [effects, setEffects] = useState<string[]>([]);
+  const [effects, setEffects] = useState<EffectInfo[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
 
   useEffect(() => {
-    invoke<string[]>("get_effects")
+    invoke<EffectInfo[]>("get_effects")
       .then(setEffects)
       .catch((err) => console.error("Failed to fetch effects:", err));
   }, []);
@@ -41,13 +46,13 @@ function App() {
     }
   }
 
-  async function setEffect(port: string, effect: string) {
+  async function setEffect(port: string, effectId: string) {
     try {
-      await invoke("set_effect", { port, effect });
-      setStatusMsg(`Set effect '${effect}' on ${port}`);
+      await invoke("set_effect", { port, effect_id: effectId });
+      setStatusMsg(`Set effect '${effectId}' on ${port}`);
     } catch (error) {
       console.error(error);
-      setStatusMsg(`Failed to set effect '${effect}' on ${port}: ${error}`);
+      setStatusMsg(`Failed to set effect '${effectId}' on ${port}: ${error}`);
     }
   }
 
@@ -85,10 +90,10 @@ function App() {
                     <div className="action-buttons">
                       {effects.map((effect) => (
                         <button
-                          key={effect}
-                          onClick={() => setEffect(dev.port, effect)}
+                          key={effect.id}
+                          onClick={() => setEffect(dev.port, effect.id)}
                         >
-                          {effect}
+                          {effect.name}
                         </button>
                       ))}
                     </div>
