@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { TitleBar } from "./components/TitleBar";
 
 interface Device {
   port: string;
@@ -21,8 +22,8 @@ function App() {
       const foundDevices = await invoke<Device[]>("scan_devices");
       setDevices(foundDevices);
       setStatusMsg(
-        foundDevices.length > 0 
-          ? `Found ${foundDevices.length} device(s).` 
+        foundDevices.length > 0
+          ? `Found ${foundDevices.length} device(s).`
           : "No devices found."
       );
     } catch (error) {
@@ -54,46 +55,48 @@ function App() {
   }
 
   return (
-    <main className="container">
-      <h1>Device Scanner</h1>
+    <>
+      <TitleBar />
+      <main className="container">
+        <h1>Device Scanner</h1>
 
-      <div className="row">
-        <button onClick={scanDevices} disabled={isScanning}>
-          {isScanning ? "Scanning..." : "Scan Devices"}
-        </button>
-      </div>
+        <div className="row">
+          <button onClick={scanDevices} disabled={isScanning}>
+            {isScanning ? "Scanning..." : "Scan Devices"}
+          </button>
+        </div>
 
-      <p>{statusMsg}</p>
+        <p>{statusMsg}</p>
 
-      {devices.length > 0 && (
-        <table className="device-table">
-          <thead>
-            <tr>
-              <th>Port</th>
-              <th>Model</th>
-              <th>ID</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {devices.map((dev, index) => (
-              <tr key={index}>
-                <td>{dev.port}</td>
-                <td>{dev.model}</td>
-                <td>{dev.id}</td>
-                <td>
-                  <div className="action-buttons">
-                    <button onClick={() => setRainbow(dev.port)}>彩虹</button>
-                    <button onClick={() => turnOff(dev.port)}>关灯</button>
-                  </div>
-                </td>
+        {devices.length > 0 && (
+          <table className="device-table">
+            <thead>
+              <tr>
+                <th>Port</th>
+                <th>Model</th>
+                <th>ID</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      
-      <style>{`
+            </thead>
+            <tbody>
+              {devices.map((dev, index) => (
+                <tr key={index}>
+                  <td>{dev.port}</td>
+                  <td>{dev.model}</td>
+                  <td>{dev.id}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button onClick={() => setRainbow(dev.port)}>彩虹</button>
+                      <button onClick={() => turnOff(dev.port)}>关灯</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <style>{`
         .device-table {
           margin-top: 20px;
           width: 100%;
@@ -113,7 +116,8 @@ function App() {
             gap: 8px;
         }
       `}</style>
-    </main>
+      </main>
+    </>
   );
 }
 
