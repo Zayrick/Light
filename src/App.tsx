@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { TitleBar } from "./components/TitleBar";
@@ -11,8 +11,15 @@ interface Device {
 
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
+  const [effects, setEffects] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+
+  useEffect(() => {
+    invoke<string[]>("get_effects")
+      .then(setEffects)
+      .catch((err) => console.error("Failed to fetch effects:", err));
+  }, []);
 
   async function scanDevices() {
     setIsScanning(true);
@@ -34,23 +41,13 @@ function App() {
     }
   }
 
-  async function setRainbow(port: string) {
+  async function setEffect(port: string, effect: string) {
     try {
-      await invoke("set_rainbow", { port });
-      setStatusMsg(`Sent Rainbow to ${port}`);
+      await invoke("set_effect", { port, effect });
+      setStatusMsg(`Set effect '${effect}' on ${port}`);
     } catch (error) {
       console.error(error);
-      setStatusMsg(`Failed to send Rainbow to ${port}: ${error}`);
-    }
-  }
-
-  async function turnOff(port: string) {
-    try {
-      await invoke("turn_off", { port });
-      setStatusMsg(`Turned off ${port}`);
-    } catch (error) {
-      console.error(error);
-      setStatusMsg(`Failed to turn off ${port}: ${error}`);
+      setStatusMsg(`Failed to set effect '${effect}' on ${port}: ${error}`);
     }
   }
 
@@ -86,8 +83,14 @@ function App() {
                   <td>{dev.id}</td>
                   <td>
                     <div className="action-buttons">
-                      <button onClick={() => setRainbow(dev.port)}>彩虹</button>
-                      <button onClick={() => turnOff(dev.port)}>关灯</button>
+                      {effects.map((effect) => (
+                        <button
+                          key={effect}
+                          onClick={() => setEffect(dev.port, effect)}
+                        >
+                          {effect}
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -114,6 +117,7 @@ function App() {
         .action-buttons {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
         }
       `}</style>
       </main>
