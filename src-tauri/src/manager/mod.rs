@@ -80,22 +80,4 @@ impl LightingManager {
             runner.stop();
         }
     }
-
-    pub fn turn_off(&self, port: &str) -> Result<(), String> {
-        self.stop_active_effect(port);
-        
-        // No sleep needed anymore, stop_active_effect waits for the thread to join
-
-        let controller_arc = {
-            let controllers = self.controllers.lock().unwrap();
-            controllers.get(port).cloned()
-        };
-
-        if let Some(c_arc) = controller_arc {
-            let mut c = c_arc.lock().unwrap();
-            let _ = c.clear();
-        }
-        
-        Ok(())
-    }
 }
