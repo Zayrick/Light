@@ -1,0 +1,54 @@
+import { useState, useEffect, useCallback } from "react";
+import { Device } from "../types";
+import { api } from "../services/api";
+
+export function useDevices() {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("Ready");
+
+  const scanDevices = useCallback(async () => {
+    setIsScanning(true);
+    setStatusMsg("Scanning devices...");
+    setDevices([]);
+    try {
+      const foundDevices = await api.scanDevices();
+      setDevices(foundDevices);
+      if (foundDevices.length > 0) {
+        // Preserve selection if still exists, otherwise select first
+        setSelectedDevice((prev) => {
+          const stillExists = foundDevices.find((d) => d.id === prev?.id);
+          return stillExists || foundDevices[0];
+        });
+      } else {
+        setSelectedDevice(null);
+      }
+      setStatusMsg(
+        foundDevices.length > 0
+          ? `Found ${foundDevices.length} device(s)`
+          : "No devices found"
+      );
+    } catch (error) {
+      console.error(error);
+      setStatusMsg("Error scanning devices");
+    } finally {
+      setIsScanning(false);
+    }
+  }, []);
+
+  // Initial scan
+  useEffect(() => {
+    scanDevices();
+  }, [scanDevices]);
+
+  return {
+    devices,
+    selectedDevice,
+    setSelectedDevice,
+    isScanning,
+    statusMsg,
+    scanDevices,
+  };
+}
+

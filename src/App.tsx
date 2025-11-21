@@ -1,296 +1,59 @@
-import { Settings, Monitor, RefreshCw, Zap } from "lucide-react";
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import clsx from "clsx";
-import { motion } from "framer-motion";
-import { TitleBar } from "./components/TitleBar";
+import { useState } from "react";
+import { AppLayout } from "./features/layout/AppLayout";
+import { Sidebar } from "./features/layout/Sidebar";
+import { DeviceGrid } from "./features/devices/components/DeviceGrid";
+import { DeviceDetail } from "./features/devices/components/DeviceDetail";
+import { SettingsPage } from "./features/settings/SettingsPage";
+import { useDevices } from "./hooks/useDevices";
+import { useEffects } from "./hooks/useEffects";
 import "./styles/theme.css";
 import "./styles/layout.css";
 
-interface Device {
-  port: string;
-  model: string;
-  id: string;
-}
-
-interface EffectInfo {
-  id: string;
-  name: string;
-}
-
 export default function App() {
   const [activeTab, setActiveTab] = useState("devices");
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
-  const [effects, setEffects] = useState<EffectInfo[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [statusMsg, setStatusMsg] = useState("Ready");
+  const {
+    devices,
+    selectedDevice,
+    setSelectedDevice,
+    isScanning,
+    statusMsg,
+    scanDevices,
+  } = useDevices();
+  
+  const { effects, applyEffect } = useEffects();
 
-  useEffect(() => {
-    invoke<EffectInfo[]>("get_effects")
-      .then(setEffects)
-      .catch((err) => console.error("Failed to fetch effects:", err));
-    
-    // Initial scan
-    scanDevices();
-  }, []);
-
-  async function scanDevices() {
-    setIsScanning(true);
-    setStatusMsg("Scanning devices...");
-    setDevices([]);
-    try {
-      const foundDevices = await invoke<Device[]>("scan_devices");
-      setDevices(foundDevices);
-      if (foundDevices.length > 0) {
-        setSelectedDevice(foundDevices[0]);
-      } else {
-        setSelectedDevice(null);
-      }
-      setStatusMsg(
-        foundDevices.length > 0
-          ? `Found ${foundDevices.length} device(s)`
-          : "No devices found"
-      );
-    } catch (error) {
-      console.error(error);
-      setStatusMsg("Error scanning devices");
-    } finally {
-      setIsScanning(false);
-    }
-  }
-
-  async function setEffect(port: string, effectId: string) {
-    try {
-      await invoke("set_effect", { port, effectId });
-    } catch (error) {
-      console.error(error);
-      setStatusMsg(`Failed to set effect: ${error}`);
-    }
-  }
+  const handleSetEffect = async (port: string, effectId: string) => {
+    await applyEffect(port, effectId);
+  };
 
   return (
-    <div className="app-layout">
-      <TitleBar />
-      
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-content">
-          <div className="nav-group nav-group-main">
-            <div>
-              <div
-                className={clsx("nav-item", activeTab === "devices" && "active")}
-                onClick={() => setActiveTab("devices")}
-              >
-                {activeTab === "devices" && (
-                  <motion.div
-                    layoutId="active-nav"
-                    className="active-highlight"
-                    transition={{
-                      duration: 0.3,
-                      ease: [0.16, 1, 0.3, 1], // easeOutExpo
-                    }}
-                  />
-                )}
-                <Monitor size={18} />
-                <span>Devices</span>
-              </div>
-              <div className="nav-divider"></div>
-            </div>
-            <div className="device-list">
-              {devices.map((device) => (
-                <div
-                  key={device.id}
-                  className={clsx(
-                    "device-list-item",
-                    activeTab === "device-detail" &&
-                      selectedDevice?.id === device.id &&
-                      "active"
-                  )}
-                  onClick={() => {
-                    setSelectedDevice(device);
-                    setActiveTab("device-detail");
-                  }}
-                >
-                  {activeTab === "device-detail" &&
-                    selectedDevice?.id === device.id && (
-                      <motion.div
-                        layoutId="active-nav"
-                        className="active-highlight"
-                        transition={{
-                          duration: 0.3,
-                          ease: [0.16, 1, 0.3, 1], // easeOutExpo
-                        }}
-                      />
-                    )}
-                  <Zap size={18} className="device-list-icon" />
-                  <div className="device-list-info">
-                    <div className="device-list-item-name">{device.model}</div>
-                    <div className="device-list-item-port">{device.port}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="nav-group nav-group-settings">
-            <div
-              className={clsx("nav-item", activeTab === "settings" && "active")}
-              onClick={() => setActiveTab("settings")}
-            >
-              {activeTab === "settings" && (
-                <motion.div
-                  layoutId="active-nav"
-                  className="active-highlight"
-                  transition={{
-                    duration: 0.3,
-                    ease: [0.16, 1, 0.3, 1], // easeOutExpo
-                  }}
-                />
-              )}
-              <Settings size={18} />
-              <span>Settings</span>
-            </div>
-          </div>
-        </div>
+    <AppLayout
+      sidebar={
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          devices={devices}
+          selectedDevice={selectedDevice}
+          setSelectedDevice={setSelectedDevice}
+          statusMsg={statusMsg}
+        />
+      }
+    >
+      {activeTab === "devices" && (
+        <DeviceGrid
+          devices={devices}
+          effects={effects}
+          isScanning={isScanning}
+          onScan={scanDevices}
+          onSetEffect={handleSetEffect}
+        />
+      )}
 
-        <div className="status-bar">{statusMsg}</div>
-      </aside>
+      {activeTab === "device-detail" && selectedDevice && (
+        <DeviceDetail device={selectedDevice} />
+      )}
 
-      {/* Main Content */}
-      <main className="main-content">
-        <div className="scroll-container">
-          {activeTab === "devices" && (
-            <>
-              <header className="page-header">
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div>
-                    <h1 className="page-title">Connected Devices</h1>
-                    <p className="page-subtitle">
-                      Manage your lighting devices and effects
-                    </p>
-                  </div>
-                  <button
-                    className={clsx(
-                      "btn btn-primary",
-                      isScanning && "opacity-70"
-                    )}
-                    onClick={scanDevices}
-                    disabled={isScanning}
-                  >
-                    <RefreshCw
-                      size={16}
-                      className={clsx(isScanning && "animate-spin")}
-                    />
-                    Scan Devices
-                  </button>
-                </div>
-              </header>
-
-              {devices.length === 0 && !isScanning ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "50%",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  <Monitor
-                    size={48}
-                    style={{ marginBottom: 16, opacity: 0.3 }}
-                  />
-                  <p>No devices connected</p>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ marginTop: 16 }}
-                    onClick={scanDevices}
-                  >
-                    Try Again
-                  </button>
-                </div>
-              ) : (
-                <div className="devices-grid">
-                  {devices.map((dev, idx) => (
-                    <div key={idx} className="device-card">
-                      <div className="device-header">
-                        <div className="device-info">
-                          <h3>{dev.model}</h3>
-                          <p>{dev.id}</p>
-                          <p style={{ fontSize: 10, opacity: 0.7 }}>
-                            {dev.port}
-                          </p>
-                        </div>
-                        <div className="device-icon">
-                          <Zap size={20} />
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          margin: "12px 0",
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        Quick Effects
-                      </div>
-
-                      <div className="device-actions">
-                        {effects.map((effect) => (
-                          <button
-                            key={effect.id}
-                            className="btn btn-secondary"
-                            style={{ fontSize: 11, padding: "4px 8px" }}
-                            onClick={() => setEffect(dev.port, effect.id)}
-                          >
-                            {effect.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {activeTab === "device-detail" && selectedDevice && (
-            <>
-              <header className="page-header">
-                <div>
-                  <h1 className="page-title">{selectedDevice.model}</h1>
-                </div>
-              </header>
-            </>
-          )}
-
-          {activeTab === "settings" && (
-            <>
-               <header className="page-header">
-                <div>
-                  <h1 className="page-title">Settings</h1>
-                  <p className="page-subtitle">
-                    Configure application settings
-                  </p>
-                </div>
-              </header>
-              {/* Settings content will go here */}
-              <div style={{ padding: '20px' }}>
-                <p>Settings page is empty for now.</p>
-              </div>
-            </>
-          )}
-        </div>
-      </main>
-    </div>
+      {activeTab === "settings" && <SettingsPage />}
+    </AppLayout>
   );
 }
