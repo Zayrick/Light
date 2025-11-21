@@ -1,11 +1,18 @@
 use crate::interface::effect::{Effect, EffectMetadata};
 use crate::interface::controller::Color;
 use std::time::Duration;
+use serde_json::Value;
 use inventory;
 
-pub struct RainbowEffect;
+pub struct RainbowEffect {
+    speed: f32,
+}
 
 impl Effect for RainbowEffect {
+    fn id(&self) -> String {
+        "rainbow".to_string()
+    }
+
     fn name(&self) -> String {
         "Rainbow".to_string()
     }
@@ -13,7 +20,7 @@ impl Effect for RainbowEffect {
     fn tick(&mut self, elapsed: Duration, led_count: usize) -> Vec<Color> {
         let mut colors = Vec::with_capacity(led_count);
         // Simple animation logic: offset hue by time
-        let offset = (elapsed.as_millis() as f32 / 10.0) % 360.0; 
+        let offset = (elapsed.as_millis() as f32 * self.speed / 10.0) % 360.0; 
 
         for i in 0..led_count {
              let hue = ((i as f32 * 360.0 / led_count as f32) + offset) % 360.0;
@@ -21,6 +28,12 @@ impl Effect for RainbowEffect {
              colors.push(Color { r, g, b });
         }
         colors
+    }
+
+    fn update_params(&mut self, params: Value) {
+        if let Some(speed) = params.get("speed").and_then(|v| v.as_f64()) {
+            self.speed = speed as f32;
+        }
     }
 }
 
@@ -51,11 +64,11 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
 }
 
 fn factory() -> Box<dyn Effect> {
-    Box::new(RainbowEffect)
+    Box::new(RainbowEffect { speed: 1.0 })
 }
 
 inventory::submit!(EffectMetadata {
+    id: "rainbow",
     name: "Rainbow",
     factory: factory,
 });
-

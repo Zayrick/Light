@@ -1,69 +1,152 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Condvar};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::sync::mpsc::{self, Sender};
+use serde_json::Value;
 
-use crate::interface::controller::Controller;
+use crate::interface::controller::{Controller, Color};
 use crate::manager::inventory::create_effect;
 
 pub struct EffectRunner {
     running: Arc<AtomicBool>,
-    thread_handle: Option<JoinHandle<()>>,
+    ticker_thread: Option<JoinHandle<()>>,
+    writer_thread: Option<JoinHandle<()>>,
+    shared_state: Arc<(Mutex<Option<Vec<Color>>>, Condvar)>,
+    param_tx: Sender<Value>,
 }
 
 impl EffectRunner {
     pub fn start(
-        effect_name: &str,
+        effect_id: &str,
         controller_arc: Arc<Mutex<Box<dyn Controller>>>,
     ) -> Result<Self, String> {
         // Check if effect exists before spawning
-        if create_effect(effect_name).is_none() {
-            return Err(format!("Effect '{}' not found", effect_name));
+        if create_effect(effect_id).is_none() {
+            return Err(format!("Effect '{}' not found", effect_id));
         }
 
         let running = Arc::new(AtomicBool::new(true));
-        let running_clone = running.clone();
-        let c_clone = controller_arc.clone();
-        let effect_name = effect_name.to_string();
+        let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
+        let (param_tx, param_rx) = mpsc::channel();
+        
+        // --- Writer Thread ---
+        let writer_running = running.clone();
+        let writer_state = shared_state.clone();
+        let writer_controller = controller_arc.clone();
 
-        let handle = thread::spawn(move || {
-            let mut effect = match create_effect(&effect_name) {
+        let writer_thread = thread::spawn(move || {
+            let (lock, cvar) = &*writer_state;
+            loop {
+                let mut frame_guard = lock.lock().unwrap();
+                
+                // Wait for data or stop signal
+                while frame_guard.is_none() && writer_running.load(Ordering::Relaxed) {
+                    frame_guard = cvar.wait(frame_guard).unwrap();
+                }
+
+                // Check exit condition
+                if !writer_running.load(Ordering::Relaxed) && frame_guard.is_none() {
+                    break;
+                }
+
+                // Take latest frame
+                let frame = frame_guard.take();
+                drop(frame_guard); // Unlock to allow Ticker to produce next frame
+
+                if let Some(colors) = frame {
+                    let mut c = writer_controller.lock().unwrap();
+                    if let Err(_) = c.update(&colors) {
+                        break; // Stop on hardware error
+                    }
+                }
+            }
+        });
+
+        // --- Ticker Thread ---
+        let ticker_running = running.clone();
+        let ticker_state = shared_state.clone();
+        let effect_id = effect_id.to_string();
+        let ticker_controller = controller_arc.clone(); // For getting length
+
+        let ticker_thread = thread::spawn(move || {
+            let mut effect = match create_effect(&effect_id) {
                 Some(e) => e,
-                None => return, // Should not happen given check above
+                None => return,
             };
 
-            let start = std::time::Instant::now();
-            
-            // Get LED count from controller
             let led_count = {
-                let c = c_clone.lock().unwrap();
+                let c = ticker_controller.lock().unwrap();
                 c.length()
             };
 
-            while running_clone.load(Ordering::Relaxed) {
-                let colors = effect.tick(start.elapsed(), led_count);
-                
-                {
-                    let mut c = c_clone.lock().unwrap();
-                    if let Err(_) = c.update(&colors) {
-                        break; // Stop if update fails
-                    }
+            let (lock, cvar) = &*ticker_state;
+            let start_time = Instant::now();
+            let frame_duration = Duration::from_micros(16666); // ~60 FPS
+            let mut next_frame_time = start_time;
+
+            while ticker_running.load(Ordering::Relaxed) {
+                // 0. Check for param updates
+                while let Ok(params) = param_rx.try_recv() {
+                    effect.update_params(params);
                 }
-                thread::sleep(Duration::from_millis(16));
+
+                // 1. Tick Effect
+                let now = Instant::now();
+                let colors = effect.tick(now.duration_since(start_time), led_count);
+
+                // 2. Send to Writer (Overwrite existing)
+                {
+                    let mut frame_guard = lock.lock().unwrap();
+                    *frame_guard = Some(colors);
+                    cvar.notify_one();
+                }
+
+                // 3. Precise Timing
+                next_frame_time += frame_duration;
+                let now_after = Instant::now();
+
+                if next_frame_time > now_after {
+                    thread::sleep(next_frame_time - now_after);
+                } else {
+                    // Running behind: reset schedule to prevent catch-up bursts
+                    next_frame_time = now_after; 
+                    thread::yield_now();
+                }
             }
+            
+            // Ensure Writer wakes up to see running=false
+            let (_lock, cvar) = &*ticker_state;
+            cvar.notify_all();
         });
 
         Ok(Self { 
             running,
-            thread_handle: Some(handle),
+            ticker_thread: Some(ticker_thread),
+            writer_thread: Some(writer_thread),
+            shared_state,
+            param_tx,
         })
+    }
+
+    pub fn update_params(&self, params: Value) {
+        let _ = self.param_tx.send(params);
     }
 
     pub fn stop(mut self) {
         self.running.store(false, Ordering::Relaxed);
-        if let Some(handle) = self.thread_handle.take() {
+        
+        // Wake up writer in case it's waiting
+        {
+            let (_lock, cvar) = &*self.shared_state;
+            cvar.notify_all();
+        }
+
+        if let Some(handle) = self.ticker_thread.take() {
+            let _ = handle.join();
+        }
+        if let Some(handle) = self.writer_thread.take() {
             let _ = handle.join();
         }
     }
 }
-

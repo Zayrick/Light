@@ -14,13 +14,13 @@ pub fn scan_controllers() -> Vec<Box<dyn Controller>> {
     controllers
 }
 
-pub fn list_effects() -> Vec<&'static str> {
-    inventory::iter::<EffectMetadata>.into_iter().map(|e| e.name).collect()
+pub fn list_effects() -> Vec<&'static EffectMetadata> {
+    inventory::iter::<EffectMetadata>.into_iter().collect()
 }
 
-pub fn create_effect(name: &str) -> Option<Box<dyn Effect>> {
+pub fn create_effect(id: &str) -> Option<Box<dyn Effect>> {
     for effect in inventory::iter::<EffectMetadata> {
-        if effect.name == name {
+        if effect.id == id {
             return Some((effect.factory)());
         }
     }

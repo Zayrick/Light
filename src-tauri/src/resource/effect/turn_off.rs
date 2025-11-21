@@ -6,6 +6,10 @@ use inventory;
 pub struct TurnOffEffect;
 
 impl Effect for TurnOffEffect {
+    fn id(&self) -> String {
+        "turn_off".to_string()
+    }
+
     fn name(&self) -> String {
         "Turn Off".to_string()
     }
@@ -20,6 +24,7 @@ fn factory() -> Box<dyn Effect> {
 }
 
 inventory::submit!(EffectMetadata {
+    id: "turn_off",
     name: "Turn Off",
     factory: factory,
 });

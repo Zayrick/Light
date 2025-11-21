@@ -1,1 +1,1 @@
-pub mod skydimo_controller;
+pub mod skydimo;
