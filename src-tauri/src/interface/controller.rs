@@ -12,6 +12,7 @@ pub trait Controller: Send {
     fn port_name(&self) -> String;
     fn model(&self) -> String;
     fn serial_id(&self) -> String;
+    fn length(&self) -> usize;
     fn update(&mut self, colors: &[Color]) -> Result<(), String>;
     fn disconnect(&mut self) -> Result<(), String> {
         Ok(())
