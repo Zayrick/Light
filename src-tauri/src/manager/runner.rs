@@ -30,10 +30,14 @@ impl EffectRunner {
         let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
         let (param_tx, param_rx) = mpsc::channel();
         
+        // Channel for recycling buffers to avoid allocation
+        let (recycle_tx, recycle_rx) = mpsc::channel();
+
         // --- Writer Thread ---
         let writer_running = running.clone();
         let writer_state = shared_state.clone();
         let writer_controller = controller_arc.clone();
+        let writer_recycle_tx = recycle_tx.clone();
 
         let writer_thread = thread::spawn(move || {
             let (lock, cvar) = &*writer_state;
@@ -59,6 +63,8 @@ impl EffectRunner {
                     if let Err(_) = c.update(&colors) {
                         break; // Stop on hardware error
                     }
+                    // Recycle the buffer
+                    let _ = writer_recycle_tx.send(colors);
                 }
             }
         });
@@ -68,6 +74,7 @@ impl EffectRunner {
         let ticker_state = shared_state.clone();
         let effect_id = effect_id.to_string();
         let ticker_controller = controller_arc.clone(); // For getting length
+        let ticker_recycle_tx = recycle_tx; // Move original tx here (or clone if needed later)
 
         let ticker_thread = thread::spawn(move || {
             let mut effect = match create_effect(&effect_id) {
@@ -91,18 +98,34 @@ impl EffectRunner {
                     effect.update_params(params);
                 }
 
-                // 1. Tick Effect
-                let now = Instant::now();
-                let colors = effect.tick(now.duration_since(start_time), led_count);
+                // 1. Get buffer (recycle or create)
+                let mut buffer = recycle_rx.try_recv().unwrap_or_else(|_| {
+                    vec![Color::default(); led_count]
+                });
+                
+                // Ensure size is correct (in case led_count changed or new buffer)
+                if buffer.len() != led_count {
+                    buffer.resize(led_count, Color::default());
+                }
 
-                // 2. Send to Writer (Overwrite existing)
+                // 2. Tick Effect
+                let now = Instant::now();
+                effect.tick(now.duration_since(start_time), &mut buffer);
+
+                // 3. Send to Writer (Overwrite existing)
                 {
                     let mut frame_guard = lock.lock().unwrap();
-                    *frame_guard = Some(colors);
+                    
+                    // If there was an unconsumed frame, recycle it
+                    if let Some(dropped_frame) = frame_guard.take() {
+                        let _ = ticker_recycle_tx.send(dropped_frame);
+                    }
+                    
+                    *frame_guard = Some(buffer);
                     cvar.notify_one();
                 }
 
-                // 3. Precise Timing
+                // 4. Precise Timing
                 next_frame_time += frame_duration;
                 let now_after = Instant::now();
 

@@ -14,8 +14,8 @@ impl Effect for TurnOffEffect {
         "Turn Off".to_string()
     }
 
-    fn tick(&mut self, _elapsed: Duration, led_count: usize) -> Vec<Color> {
-        vec![Color::default(); led_count]
+    fn tick(&mut self, _elapsed: Duration, buffer: &mut [Color]) {
+        buffer.fill(Color::default());
     }
 }
 

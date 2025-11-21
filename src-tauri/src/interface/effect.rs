@@ -5,7 +5,7 @@ use serde_json::Value;
 pub trait Effect: Send {
     fn id(&self) -> String;
     fn name(&self) -> String;
-    fn tick(&mut self, elapsed: Duration, led_count: usize) -> Vec<Color>;
+    fn tick(&mut self, elapsed: Duration, buffer: &mut [Color]);
     fn update_params(&mut self, _params: Value) {}
 }
 
