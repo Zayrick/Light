@@ -25,9 +25,36 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  justify-content: space-between;
+  overflow: hidden; /* Prevent content from spilling out */
+  position: relative;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  /* Let's remove gap from here and apply it where needed */
+}
+
+.nav-group-main {
+  flex: 1;
+  min-height: 0; /* Allow this group to shrink and enable scrolling in child */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nav-group-settings {
+  position: relative;
+  z-index: 10;
+  background: linear-gradient(to top, var(--bg-sidebar) 70%, transparent);
+  backdrop-filter: blur(8px);
+  padding-top: 16px;
+  margin-top: -16px; /* Pull up to overlap with device list */
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -35,9 +62,9 @@
   border-radius: var(--radius-s);
   color: var(--text-primary);
   text-decoration: none;
-  transition: background-color 0.2s;
   cursor: pointer;
   font-size: 14px;
+  z-index: 1;
 }
 
 .nav-item:hover {
@@ -45,12 +72,98 @@
 }
 
 .nav-item.active {
-  background-color: rgba(128, 128, 128, 0.15); /* Distinct active state without being heavy */
+  /* Background handled by framer-motion */
   font-weight: 600;
 }
 
 .nav-item.active .icon {
   color: var(--accent-color);
+}
+
+.nav-divider {
+  height: 1px;
+  background-color: var(--border-subtle);
+  margin: 8px 16px;
+}
+
+.device-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0; /* Important for flexbox scrolling */
+  padding: 0 0 60px 0; /* Remove horizontal padding, keep bottom padding */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  
+  /* Fade out effect at the bottom */
+  mask-image: linear-gradient(to bottom, black calc(100% - 70px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 70px), transparent 100%);
+  
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.device-list-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.device-list-item:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+/* Background handled by framer-motion */
+/* .device-list-item.active {} */
+
+.device-list-icon {
+  color: var(--text-primary);
+  opacity: 0.8;
+}
+
+.device-list-item.active .device-list-icon {
+  color: var(--accent-color);
+  opacity: 1;
+}
+
+.active-highlight {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(128, 128, 128, 0.15);
+  border-radius: inherit;
+  z-index: -1;
+}
+
+.device-list-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Enable text truncation if needed */
+}
+
+.device-list-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-list-item-port {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 0;
+  line-height: 1.2;
 }
 
 /* Main Content */
