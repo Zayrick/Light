@@ -28,6 +28,7 @@ export default function App() {
 
   return (
     <AppLayout
+      disableScroll={activeTab === "device-detail"}
       sidebar={
         <Sidebar
           activeTab={activeTab}
