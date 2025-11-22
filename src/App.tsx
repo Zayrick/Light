@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AppLayout } from "./features/layout/AppLayout";
 import { Sidebar } from "./features/layout/Sidebar";
-import { DeviceGrid } from "./features/devices/components/DeviceGrid";
+import { HomePage } from "./features/home/HomePage";
 import { DeviceDetail } from "./features/devices/components/DeviceDetail";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useDevices } from "./hooks/useDevices";
@@ -10,7 +10,7 @@ import "./styles/theme.css";
 import "./styles/layout.css";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("devices");
+  const [activeTab, setActiveTab] = useState("home");
   const {
     devices,
     selectedDevice,
@@ -40,8 +40,8 @@ export default function App() {
         />
       }
     >
-      {activeTab === "devices" && (
-        <DeviceGrid
+      {activeTab === "home" && (
+        <HomePage
           devices={devices}
           effects={effects}
           isScanning={isScanning}
