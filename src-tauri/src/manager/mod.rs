@@ -4,6 +4,7 @@ pub mod runner;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde_json::Value;
+use tauri::AppHandle;
 
 use crate::interface::controller::Controller;
 use self::inventory::scan_controllers;
@@ -15,6 +16,7 @@ pub struct Device {
     pub model: String,
     pub description: String,
     pub id: String,
+    pub length: usize,
 }
 
 pub struct LightingManager {
@@ -50,12 +52,13 @@ impl LightingManager {
                 model: c.model(),
                 description: c.description(),
                 id: c.serial_id(),
+                length: c.length(),
             });
         }
         devices
     }
 
-    pub fn start_effect(&self, port: &str, effect_id: &str) -> Result<(), String> {
+    pub fn start_effect(&self, port: &str, effect_id: &str, app_handle: AppHandle) -> Result<(), String> {
         let controller_arc = {
             let controllers = self.controllers.lock().unwrap();
             controllers.get(port).cloned()
@@ -69,7 +72,7 @@ impl LightingManager {
         // Stop existing effect first
         self.stop_active_effect(port);
 
-        let runner = EffectRunner::start(effect_id, controller_arc)?;
+        let runner = EffectRunner::start(effect_id, controller_arc, app_handle)?;
 
         let mut active = self.active_effects.lock().unwrap();
         active.insert(port.to_string(), runner);
