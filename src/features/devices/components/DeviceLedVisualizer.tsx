@@ -1,12 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import useMeasure from 'react-use-measure';
-import { listen } from '@tauri-apps/api/event';
-
-interface Color {
-  r: number;
-  g: number;
-  b: number;
-}
+import { useLedColors } from '../../../hooks/useLedStream';
 
 interface DeviceLedVisualizerProps {
   port: string;
@@ -15,42 +9,11 @@ interface DeviceLedVisualizerProps {
 
 export function DeviceLedVisualizer({ port, length }: DeviceLedVisualizerProps) {
   const [ref, bounds] = useMeasure();
-  const [colors, setColors] = useState<Color[] | null>(null);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const setupListener = async () => {
-      unlisten = await listen<{ port: string; colors: Color[] }>('device-led-update', (event) => {
-        if (event.payload.port === port) {
-            // Optimization: check if length matches? 
-            // Backend buffer might be resized if controller reports different length, but usually it's consistent.
-            setColors(event.payload.colors);
-        }
-      });
-    };
-
-    setupListener();
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [port]);
-
-  // Reset colors when port changes to avoid showing wrong data
-  useEffect(() => {
-    setColors(null);
-  }, [port]);
+  const { colors, isDefault } = useLedColors(port, length);
 
   const displayColors = useMemo(() => {
-    if (colors && colors.length > 0) {
-      return colors;
-    }
-    // Default gray beads
-    return Array(length).fill({ r: 128, g: 128, b: 128, a: 0.2 }); // Using 'a' to mark as default if needed, or just handle style
-  }, [colors, length]);
-
-  const isDefault = !colors || colors.length === 0;
+    return colors;
+  }, [colors]);
 
   // Layout Algorithm
   const { gap, size, cols } = useMemo(() => {
