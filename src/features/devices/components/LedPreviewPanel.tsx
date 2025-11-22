@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LedColor } from "../../../types";
+import { LedColor } from "../../../hooks/useLedStream";
 
 interface LedPreviewPanelProps {
   colors: LedColor[];
