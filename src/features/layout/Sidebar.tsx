@@ -3,6 +3,11 @@ import clsx from "clsx";
 import { motion } from "framer-motion";
 import { Device } from "../../types";
 
+const NAV_TRANSITION = {
+  duration: 0.25,
+  ease: [0.16, 1, 0.3, 1] as const,
+};
+
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -25,9 +30,13 @@ export function Sidebar({
       <div className="sidebar-content">
         <div className="nav-group nav-group-main">
           <div>
-            <div
+            <motion.div
               className={clsx("nav-item", activeTab === "devices" && "active")}
               onClick={() => setActiveTab("devices")}
+              animate={{
+                fontWeight: activeTab === "devices" ? 600 : 400,
+              }}
+              transition={NAV_TRANSITION}
             >
               {activeTab === "devices" && (
                 <motion.div
@@ -41,7 +50,7 @@ export function Sidebar({
               )}
               <Monitor size={18} />
               <span>Devices</span>
-            </div>
+            </motion.div>
             <div className="nav-divider"></div>
           </div>
           <div className="device-list">
@@ -80,9 +89,13 @@ export function Sidebar({
           </div>
         </div>
         <div className="nav-group nav-group-settings">
-          <div
+          <motion.div
             className={clsx("nav-item", activeTab === "settings" && "active")}
             onClick={() => setActiveTab("settings")}
+            animate={{
+              fontWeight: activeTab === "settings" ? 600 : 400,
+            }}
+            transition={NAV_TRANSITION}
           >
             {activeTab === "settings" && (
               <motion.div
@@ -96,7 +109,7 @@ export function Sidebar({
             )}
             <Settings size={18} />
             <span>Settings</span>
-          </div>
+          </motion.div>
         </div>
       </div>
 

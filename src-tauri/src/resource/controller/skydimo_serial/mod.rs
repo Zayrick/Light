@@ -28,6 +28,10 @@ impl Controller for SkydimoSerialController {
         self.model.clone()
     }
 
+    fn description(&self) -> String {
+        "Skydimo Serial Device".to_string()
+    }
+
     fn serial_id(&self) -> String {
         self.id.clone()
     }
