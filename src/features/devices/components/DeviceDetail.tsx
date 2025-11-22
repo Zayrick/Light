@@ -109,19 +109,35 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                   className={`${isSelected ? 'active-mode-card' : ''}`}
                   style={{ 
                     border: isSelected ? '1px solid var(--accent-color)' : '1px solid transparent',
-                    backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined
+                    backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
+                    transition: 'all 0.2s ease'
                   }}
                   onClick={() => setSelectedModeId(mode.id)}
                 >
-                   <div className="device-icon" style={{ 
-                     width: '36px', height: '36px', marginBottom: '4px',
-                     color: isSelected ? 'var(--accent-color)' : undefined 
+                   <div style={{ 
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'flex-start',
+                     gap: '12px'
                    }}>
-                      <mode.icon size={20} />
-                   </div>
-                   <div>
-                     <div style={{ fontSize: '14px', fontWeight: 600 }}>{mode.name}</div>
-                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{mode.description}</div>
+                     <div style={{ 
+                       width: '40px', 
+                       height: '40px', 
+                       borderRadius: '10px',
+                       display: 'flex',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       backgroundColor: isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.1)',
+                       color: isSelected ? 'var(--accent-text)' : 'var(--text-primary)',
+                       transition: 'all 0.2s ease',
+                       boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+                     }}>
+                        <mode.icon size={20} />
+                     </div>
+                     <div>
+                       <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{mode.name}</div>
+                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{mode.description}</div>
+                     </div>
                    </div>
                 </Card>
                );
@@ -159,9 +175,18 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
           {/* Current Mode Settings */}
           {selectedMode && (
             <Card style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                <selectedMode.icon size={18} />
-                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <div style={{
+                  width: '32px', height: '32px',
+                  borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'var(--accent-color)',
+                  color: 'var(--accent-text)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                }}>
+                   <selectedMode.icon size={18} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
               </div>
 
               {/* Configuration Controls based on mode type */}
