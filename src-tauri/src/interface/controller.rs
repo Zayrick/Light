@@ -11,6 +11,7 @@ pub struct Color {
 pub trait Controller: Send {
     fn port_name(&self) -> String;
     fn model(&self) -> String;
+    fn description(&self) -> String;
     fn serial_id(&self) -> String;
     fn length(&self) -> usize;
     fn update(&mut self, colors: &[Color]) -> Result<(), String>;

@@ -13,6 +13,7 @@ use self::runner::EffectRunner;
 pub struct Device {
     pub port: String,
     pub model: String,
+    pub description: String,
     pub id: String,
 }
 
@@ -47,6 +48,7 @@ impl LightingManager {
             devices.push(Device {
                 port: port.clone(),
                 model: c.model(),
+                description: c.description(),
                 id: c.serial_id(),
             });
         }

@@ -72,8 +72,7 @@
 }
 
 .nav-item.active {
-  /* Background handled by framer-motion */
-  font-weight: 600;
+  /* Background handled by framer-motion and component logic */
 }
 
 .nav-item.active .icon {
@@ -325,4 +324,47 @@
   font-size: 12px;
   color: var(--text-secondary);
   background-color: transparent; /* Fully transparent */
+}
+
+/* Device detail mode category tabs */
+.mode-tabs {
+  position: relative;
+  display: flex;
+  width: 100%;
+  gap: 24px;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 0;
+  margin-bottom: 24px;
+}
+
+.mode-tab-button {
+  position: relative;
+  background: none;
+  border: none;
+  padding: 0 4px 12px 4px;
+  margin-bottom: -1px; /* Overlap border */
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  outline: none;
+}
+
+.mode-tab-button-active {
+  font-weight: 600;
+}
+
+.mode-tab-label {
+  position: relative;
+  z-index: 1;
+}
+
+.mode-tab-underline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background-color: var(--accent-color);
+  border-radius: 9999px;
 }
