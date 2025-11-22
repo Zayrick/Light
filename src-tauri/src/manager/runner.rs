@@ -4,6 +4,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use std::sync::mpsc::{self, Sender};
 use serde_json::Value;
+use tauri::{AppHandle, Emitter};
 
 use crate::interface::controller::{Controller, Color};
 use crate::manager::inventory::create_effect;
@@ -20,11 +21,17 @@ impl EffectRunner {
     pub fn start(
         effect_id: &str,
         controller_arc: Arc<Mutex<Box<dyn Controller>>>,
+        app_handle: AppHandle,
     ) -> Result<Self, String> {
         // Check if effect exists before spawning
         if create_effect(effect_id).is_none() {
             return Err(format!("Effect '{}' not found", effect_id));
         }
+
+        let port_name = {
+            let c = controller_arc.lock().unwrap();
+            c.port_name()
+        };
 
         let running = Arc::new(AtomicBool::new(true));
         let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
@@ -75,6 +82,8 @@ impl EffectRunner {
         let effect_id = effect_id.to_string();
         let ticker_controller = controller_arc.clone(); // For getting length
         let ticker_recycle_tx = recycle_tx; // Move original tx here (or clone if needed later)
+        let ticker_app_handle = app_handle.clone();
+        let ticker_port_name = port_name.clone();
 
         let ticker_thread = thread::spawn(move || {
             let mut effect = match create_effect(&effect_id) {
@@ -111,6 +120,12 @@ impl EffectRunner {
                 // 2. Tick Effect
                 let now = Instant::now();
                 effect.tick(now.duration_since(start_time), &mut buffer);
+
+                // Emit event to frontend
+                let _ = ticker_app_handle.emit("device-led-update", serde_json::json!({
+                    "port": ticker_port_name,
+                    "colors": buffer
+                }));
 
                 // 3. Send to Writer (Overwrite existing)
                 {

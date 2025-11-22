@@ -3,6 +3,7 @@ export interface Device {
   model: string;
   description: string;
   id: string;
+  length: number;
 }
 
 export interface EffectInfo {

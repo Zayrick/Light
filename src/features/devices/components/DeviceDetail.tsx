@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Device } from "../../../types";
+import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { 
   Palette, Wind, Zap, Waves, Sparkles, Flame, Music, Monitor,
   Sun, Gauge, RotateCw, Sliders
@@ -49,13 +50,16 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <header className="page-header">
+      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>{device.model}</h1>
           <p className="page-subtitle">{device.description}</p>
           <p className="page-subtitle" style={{ fontSize: '12px', opacity: 0.7 }}>
             SN: {device.id}
           </p>
+        </div>
+        <div style={{ flex: 1, height: '80px', minWidth: '200px', maxWidth: '600px' }}>
+          <DeviceLedVisualizer port={device.port} length={device.length} />
         </div>
       </header>
 

@@ -31,8 +31,8 @@ fn get_effects() -> Vec<EffectInfo> {
 }
 
 #[tauri::command]
-fn set_effect(port: String, effect_id: String, manager: State<LightingManager>) -> Result<(), String> {
-    manager.start_effect(&port, &effect_id)
+fn set_effect(port: String, effect_id: String, manager: State<LightingManager>, app_handle: tauri::AppHandle) -> Result<(), String> {
+    manager.start_effect(&port, &effect_id, app_handle)
 }
 
 #[tauri::command]
