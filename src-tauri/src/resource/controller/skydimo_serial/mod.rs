@@ -4,22 +4,22 @@ use std::time::Duration;
 use inventory;
 
 mod protocol;
-use protocol::MoniAProtocol;
+use protocol::SkydimoSerialProtocol;
 
-pub struct MoniAController {
+pub struct SkydimoSerialController {
     pub port_name: String, 
     model: String,
     id: String,
     port: Box<dyn SerialPort>,
 }
 
-impl MoniAController {
+impl SkydimoSerialController {
     fn new(port_name: String, model: String, id: String, port: Box<dyn SerialPort>) -> Self {
         Self { port_name, model, id, port }
     }
 }
 
-impl Controller for MoniAController {
+impl Controller for SkydimoSerialController {
     fn port_name(&self) -> String {
         self.port_name.clone()
     }
@@ -38,7 +38,7 @@ impl Controller for MoniAController {
     }
 
     fn update(&mut self, colors: &[Color]) -> Result<(), String> {
-        let packet = MoniAProtocol::encode_frame(colors);
+        let packet = SkydimoSerialProtocol::encode_frame(colors);
         self.port.write_all(&packet).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -59,7 +59,7 @@ fn probe() -> Vec<Box<dyn Controller>> {
             .timeout(Duration::from_millis(200))
             .open() 
         {
-             match MoniAProtocol::handshake(&mut port) {
+             match SkydimoSerialProtocol::handshake(&mut port) {
                  Ok((model, id)) => {
                      // Prepend "Skydimo" if not present, to match C++ "Skydimo " + model
                      let full_model = if !model.starts_with("Skydimo") {
@@ -68,7 +68,7 @@ fn probe() -> Vec<Box<dyn Controller>> {
                          model
                      };
 
-                     controllers.push(Box::new(MoniAController::new(
+                     controllers.push(Box::new(SkydimoSerialController::new(
                          p.port_name.clone(), 
                          full_model, 
                          id, 
@@ -85,8 +85,7 @@ fn probe() -> Vec<Box<dyn Controller>> {
 }
 
 inventory::submit!(ControllerMetadata {
-    name: "Skydimo Controller",
+    name: "Skydimo Serial Controller",
     description: "Skydimo Serial LED Strip Driver",
     probe: probe,
 });
-

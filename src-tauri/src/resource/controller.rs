@@ -1,1 +1,1 @@
-pub mod skydimo;
+pub mod skydimo_serial;

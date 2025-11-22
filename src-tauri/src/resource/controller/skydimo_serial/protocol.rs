@@ -3,9 +3,9 @@ use serialport::SerialPort;
 use std::io::{Read, Write};
 use std::time::Duration;
 
-pub struct MoniAProtocol;
+pub struct SkydimoSerialProtocol;
 
-impl MoniAProtocol {
+impl SkydimoSerialProtocol {
     pub fn encode_frame(colors: &[Color]) -> Vec<u8> {
         let count = colors.len();
         let mut packet = Vec::with_capacity(6 + count * 3);
