@@ -224,13 +224,15 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
 }
 
 .device-card.card-interactive {
-  position: relative;
-  overflow: hidden;
+  /* Remove overflow hidden if we want outer glow, but inner glow is safer */
+  overflow: hidden; 
 }
 
+/* Spotlight Effect (Inner Glow) */
 .device-card.card-interactive::before {
   content: "";
   position: absolute;
@@ -238,31 +240,56 @@
   left: 0;
   right: 0;
   bottom: 0;
-  /* Increase base intensity so we can modulate it with opacity */
   background: radial-gradient(
-    circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(255, 255, 255, 0.4) 0%,
-    transparent 120px
+    800px circle at var(--mouse-x) var(--mouse-y),
+    rgba(255, 255, 255, 0.06),
+    transparent 40%
   );
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  opacity: 0; /* Hidden by default, revealed by JS/CSS */
+  transition: opacity 0.5s ease;
   pointer-events: none;
   z-index: 1;
 }
 
-.device-card.card-interactive:hover::before {
-  opacity: 0.4; /* 0.4 * 0.4 ~= 0.16 (similar to previous 0.15) */
+/* Only show the spotlight when the mouse is interacting with the grid */
+/* Since we update vars globally, we can just set opacity to 1 generally, 
+   or manage it via a class on the grid. 
+   But simply having it always on (opacity 1) is fine because the gradient 
+   moves away. */
+.device-card.card-interactive::before {
+  opacity: var(--spotlight-opacity, 0);
 }
 
-.device-card.card-interactive:active::before {
-  opacity: 1; /* Full intensity on click */
-  transition: opacity 0.1s ease-out; /* Faster transition for feedback */
+/* Border Reveal Effect */
+.device-card.card-interactive::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  padding: 1px; /* Border width */
+  background: radial-gradient(
+    600px circle at var(--mouse-x) var(--mouse-y),
+    rgba(255, 255, 255, 0.4),
+    transparent 40%
+  );
+  -webkit-mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.5s ease;
 }
 
-/* Ensure content stays above the spotlight effect */
+/* Ensure content stays above the spotlight effects */
 .device-card > * {
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
 .device-card.card-interactive:hover {
