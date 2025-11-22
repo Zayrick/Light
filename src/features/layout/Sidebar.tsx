@@ -1,4 +1,4 @@
-import { Monitor, Settings, Zap } from "lucide-react";
+import { Home, Settings, Zap } from "lucide-react";
 import clsx from "clsx";
 import { motion } from "framer-motion";
 import { Device } from "../../types";
@@ -31,14 +31,14 @@ export function Sidebar({
         <div className="nav-group nav-group-main">
           <div>
             <motion.div
-              className={clsx("nav-item", activeTab === "devices" && "active")}
-              onClick={() => setActiveTab("devices")}
+              className={clsx("nav-item", activeTab === "home" && "active")}
+              onClick={() => setActiveTab("home")}
               animate={{
-                fontWeight: activeTab === "devices" ? 600 : 400,
+                fontWeight: activeTab === "home" ? 600 : 400,
               }}
               transition={NAV_TRANSITION}
             >
-              {activeTab === "devices" && (
+              {activeTab === "home" && (
                 <motion.div
                   layoutId="active-nav"
                   className="active-highlight"
@@ -48,8 +48,8 @@ export function Sidebar({
                   }}
                 />
               )}
-              <Monitor size={18} />
-              <span>Devices</span>
+              <Home size={18} />
+              <span>Home</span>
             </motion.div>
             <div className="nav-divider"></div>
           </div>

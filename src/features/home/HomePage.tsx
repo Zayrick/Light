@@ -1,11 +1,11 @@
 import { Monitor, RefreshCw } from "lucide-react";
 import clsx from "clsx";
 import { useRef } from "react";
-import { Device, EffectInfo } from "../../../types";
-import { DeviceCard } from "./DeviceCard";
-import { Button } from "../../../components/ui/Button";
+import { Device, EffectInfo } from "../../types";
+import { DeviceCard } from "../devices/components/DeviceCard";
+import { Button } from "../../components/ui/Button";
 
-interface DeviceGridProps {
+interface HomePageProps {
   devices: Device[];
   effects: EffectInfo[];
   isScanning: boolean;
@@ -13,13 +13,13 @@ interface DeviceGridProps {
   onSetEffect: (port: string, effectId: string) => void;
 }
 
-export function DeviceGrid({
+export function HomePage({
   devices,
   effects,
   isScanning,
   onScan,
   onSetEffect,
-}: DeviceGridProps) {
+}: HomePageProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -107,3 +107,4 @@ export function DeviceGrid({
     </>
   );
 }
+
