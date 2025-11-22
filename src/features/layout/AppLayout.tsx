@@ -5,16 +5,17 @@ import "../../styles/layout.css";
 interface AppLayoutProps {
   sidebar: ReactNode;
   children: ReactNode;
+  disableScroll?: boolean;
 }
 
-export function AppLayout({ sidebar, children }: AppLayoutProps) {
+export function AppLayout({ sidebar, children, disableScroll = false }: AppLayoutProps) {
   return (
     <div className="app-layout">
       <TitleBar />
       {sidebar}
       <main className="main-content">
-        <div className="scroll-container">
-          <div className="content-max-width">
+        <div className={`scroll-container ${disableScroll ? 'no-scroll' : ''}`}>
+          <div className={`content-max-width ${disableScroll ? 'full-height' : ''}`}>
             {children}
           </div>
         </div>
@@ -22,4 +23,3 @@ export function AppLayout({ sidebar, children }: AppLayoutProps) {
     </div>
   );
 }
-

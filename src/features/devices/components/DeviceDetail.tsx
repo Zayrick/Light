@@ -61,7 +61,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
 
       <div style={{ display: 'flex', gap: '24px', flex: 1, minHeight: 0 }}>
         {/* Left Column: Modes */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', paddingRight: '8px' }}>
+        <div className="no-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', }}>
           
           {/* Categories */}
           <div className="mode-tabs" style={{ marginTop: '0' }}>
@@ -130,7 +130,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
         </div>
 
         {/* Right Column: Configuration */}
-        <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="no-scrollbar" style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0, overflowY: 'auto', paddingBottom: '20px' }}>
           
           {/* Global Device Settings */}
           <Card style={{ padding: '20px' }}>
@@ -158,7 +158,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
 
           {/* Current Mode Settings */}
           {selectedMode && (
-            <Card style={{ padding: '20px', flex: 1 }}>
+            <Card style={{ padding: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
                 <selectedMode.icon size={18} />
                 <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{selectedMode.name} Config</h3>

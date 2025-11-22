@@ -184,10 +184,33 @@
   overflow-y: auto;
 }
 
+.scroll-container.no-scroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Utility class to hide scrollbar but keep functionality */
+.no-scrollbar {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 .content-max-width {
   max-width: 1500px;
   width: 100%;
   margin: 0 auto;
+}
+
+.content-max-width.full-height {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-header {
