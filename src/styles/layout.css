@@ -69,14 +69,41 @@
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.nav-item:hover {
-  background-color: transparent;
-  border-color: var(--border-strong);
+/* Border Spotlight Effect */
+.nav-item::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  padding: 1px; /* Border width */
+  background: radial-gradient(
+    300px circle at var(--mouse-x, 0px) var(--mouse-y, 0px),
+    var(--border-strong),
+    transparent 40%
+  );
+  -webkit-mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.2s ease;
 }
 
-.nav-item.active {
-  /* Background handled by framer-motion and component logic */
+.nav-item:hover {
+  background-color: transparent;
+  border-color: transparent; /* Handled by spotlight effect */
 }
+
+/* Active state styles for nav item handled dynamically by React/Framer Motion */
 
 .nav-item.active .icon {
   color: var(--accent-color);
@@ -123,9 +150,38 @@
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
+/* Border Spotlight Effect */
+.device-list-item::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  padding: 1px; /* Border width */
+  background: radial-gradient(
+    300px circle at var(--mouse-x, 0px) var(--mouse-y, 0px),
+    var(--border-strong),
+    transparent 40%
+  );
+  -webkit-mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.2s ease;
+}
+
 .device-list-item:hover {
   background-color: transparent;
-  border-color: var(--border-strong);
+  border-color: transparent; /* Handled by spotlight effect */
 }
 
 /* Background handled by framer-motion */
@@ -307,6 +363,9 @@
   -webkit-mask: 
      linear-gradient(#fff 0 0) content-box, 
      linear-gradient(#fff 0 0);
+  mask:
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -465,6 +524,7 @@
 /* Range Input Styling */
 input[type="range"] {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   height: 4px;
   border-radius: 2px;
