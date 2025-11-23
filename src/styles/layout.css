@@ -58,17 +58,20 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 9px 15px; /* Reduced by 1px to accommodate border */
   border-radius: var(--radius-s);
   color: var(--text-primary);
   text-decoration: none;
   cursor: pointer;
   font-size: 14px;
   z-index: 1;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .nav-item:hover {
-  background-color: rgba(128, 128, 128, 0.1); /* Subtle hover effect */
+  background-color: transparent;
+  border-color: var(--border-strong);
 }
 
 .nav-item.active {
@@ -112,14 +115,17 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 9px 15px; /* Reduced by 1px to accommodate border */
   border-radius: var(--radius-s);
   cursor: pointer;
   z-index: 1;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .device-list-item:hover {
-  background-color: rgba(128, 128, 128, 0.1);
+  background-color: transparent;
+  border-color: var(--border-strong);
 }
 
 /* Background handled by framer-motion */
