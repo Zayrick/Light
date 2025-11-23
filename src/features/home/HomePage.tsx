@@ -1,6 +1,5 @@
 import { Monitor, RefreshCw } from "lucide-react";
 import clsx from "clsx";
-import { useRef } from "react";
 import { Device, EffectInfo } from "../../types";
 import { DeviceCard } from "../devices/components/DeviceCard";
 import { Button } from "../../components/ui/Button";
@@ -20,24 +19,6 @@ export function HomePage({
   onScan,
   onSetEffect,
 }: HomePageProps) {
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!gridRef.current) return;
-
-    const cards = gridRef.current.getElementsByClassName("device-card");
-    
-    for (const card of cards) {
-      const rect = card.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      (card as HTMLElement).style.setProperty("--mouse-x", `${x}px`);
-      (card as HTMLElement).style.setProperty("--mouse-y", `${y}px`);
-      (card as HTMLElement).style.setProperty("--spotlight-opacity", "1");
-    }
-  };
-
   return (
     <>
       <header className="page-header">
@@ -79,21 +60,7 @@ export function HomePage({
           </Button>
         </div>
       ) : (
-        <div 
-          ref={gridRef}
-          className="devices-grid" 
-          onMouseMove={handleMouseMove}
-          onMouseLeave={() => {
-            // Optional: reset or fade out effects when leaving grid
-            if (gridRef.current) {
-              const cards = gridRef.current.getElementsByClassName("device-card");
-              for (const card of cards) {
-                // Handle via CSS opacity for smooth fade out
-                (card as HTMLElement).style.setProperty("--spotlight-opacity", "0");
-              }
-            }
-          }}
-        >
+        <div className="devices-grid">
           {devices.map((dev, idx) => (
             <DeviceCard
               key={`${dev.id}-${idx}`}
