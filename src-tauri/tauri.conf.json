@@ -19,7 +19,7 @@
         "transparent": true,
         "windowEffects": {
           "effects": [
-            "acrylic"
+            "mica"
           ],
           "radius": 12
         }

@@ -25,6 +25,19 @@ export function Sidebar({
   setSelectedDevice,
   statusMsg,
 }: SidebarProps) {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    e.currentTarget.style.setProperty("--mouse-x", `${x}px`);
+    e.currentTarget.style.setProperty("--mouse-y", `${y}px`);
+    e.currentTarget.style.setProperty("--spotlight-opacity", "1");
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.setProperty("--spotlight-opacity", "0");
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-content">
@@ -33,6 +46,8 @@ export function Sidebar({
             <motion.div
               className={clsx("nav-item", activeTab === "home" && "active")}
               onClick={() => setActiveTab("home")}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
               animate={{
                 fontWeight: activeTab === "home" ? 600 : 400,
               }}
@@ -67,6 +82,8 @@ export function Sidebar({
                   setSelectedDevice(device);
                   setActiveTab("device-detail");
                 }}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
               >
                 {activeTab === "device-detail" &&
                   selectedDevice?.id === device.id && (
@@ -92,6 +109,8 @@ export function Sidebar({
           <motion.div
             className={clsx("nav-item", activeTab === "settings" && "active")}
             onClick={() => setActiveTab("settings")}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
             animate={{
               fontWeight: activeTab === "settings" ? 600 : 400,
             }}
