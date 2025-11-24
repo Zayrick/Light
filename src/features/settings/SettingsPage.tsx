@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card } from "../../components/ui/Card";
+import { Slider } from "../../components/ui/Slider";
 import { api } from "../../services/api";
 
 export function SettingsPage() {
@@ -14,22 +15,6 @@ export function SettingsPage() {
       setLoading(false);
     });
   }, []);
-
-  const handleScaleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCaptureScale(Number(e.target.value));
-  };
-
-  const handleScaleCommit = () => {
-    api.setCaptureScale(captureScale);
-  };
-
-  const handleFpsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCaptureFps(Number(e.target.value));
-  };
-
-  const handleFpsCommit = () => {
-    api.setCaptureFps(captureFps);
-  };
 
   return (
     <>
@@ -47,16 +32,13 @@ export function SettingsPage() {
               <label htmlFor="capture-scale">Resolution Scale</label>
               <span>{captureScale}% {captureScale === 100 && "(Original)"}</span>
             </div>
-            <input
+            <Slider
               id="capture-scale"
-              type="range"
-              min="1"
-              max="100"
+              min={1}
+              max={100}
               value={captureScale}
-              onChange={handleScaleChange}
-              onMouseUp={handleScaleCommit}
-              onTouchEnd={handleScaleCommit}
-              style={{ width: "100%" }}
+              onChange={setCaptureScale}
+              onCommit={(val) => api.setCaptureScale(val)}
               disabled={loading}
             />
             <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
@@ -70,16 +52,13 @@ export function SettingsPage() {
               <label htmlFor="capture-fps">Sampling Frame Rate</label>
               <span>{captureFps} FPS</span>
             </div>
-            <input
+            <Slider
               id="capture-fps"
-              type="range"
-              min="1"
-              max="60"
+              min={1}
+              max={60}
               value={captureFps}
-              onChange={handleFpsChange}
-              onMouseUp={handleFpsCommit}
-              onTouchEnd={handleFpsCommit}
-              style={{ width: "100%" }}
+              onChange={setCaptureFps}
+              onCommit={(val) => api.setCaptureFps(val)}
               disabled={loading}
             />
             <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
