@@ -14,8 +14,11 @@ export const api = {
     return await invoke("set_effect", { port, effectId });
   },
 
+  updateEffectParams: async (port: string, params: Record<string, unknown>): Promise<void> => {
+    return await invoke("update_effect_params", { port, params });
+  },
+
   setBrightness: async (port: string, brightness: number): Promise<void> => {
     return await invoke("set_brightness", { port, brightness });
   },
 };
-

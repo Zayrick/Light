@@ -28,6 +28,6 @@ inventory::submit!(EffectMetadata {
     name: "Turn Off",
     description: Some("Turn off all LEDs"),
     group: Some("Basic"),
+    params: &[],
     factory: factory,
 });
-

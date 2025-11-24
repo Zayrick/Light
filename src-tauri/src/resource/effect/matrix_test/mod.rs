@@ -88,7 +88,7 @@ inventory::submit!(EffectMetadata {
     name: "Matrix Test",
     description: Some("Matrix alignment test pattern"),
     group: Some("Test"),
+    params: &[],
     factory: factory,
 });
-
 

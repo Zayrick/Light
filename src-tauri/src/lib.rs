@@ -5,6 +5,7 @@ pub mod resource;
 use tauri::State;
 use crate::manager::{LightingManager, Device};
 use crate::manager::inventory::list_effects;
+use crate::interface::effect::{EffectParam, EffectParamKind};
 
 #[tauri::command]
 async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>, String> {
@@ -14,11 +15,41 @@ async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>
 use serde::Serialize;
 
 #[derive(Serialize)]
+#[serde(tag = "type")]
+enum EffectParamInfo {
+    #[serde(rename = "slider")]
+    Slider {
+        key: &'static str,
+        label: &'static str,
+        min: f64,
+        max: f64,
+        step: f64,
+        default: f64,
+    },
+}
+
+impl From<&'static EffectParam> for EffectParamInfo {
+    fn from(param: &'static EffectParam) -> Self {
+        match param.kind {
+            EffectParamKind::Slider => EffectParamInfo::Slider {
+                key: param.key,
+                label: param.label,
+                min: param.min,
+                max: param.max,
+                step: param.step,
+                default: param.default,
+            },
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct EffectInfo {
     id: &'static str,
     name: &'static str,
     description: Option<&'static str>,
     group: Option<&'static str>,
+    params: Vec<EffectParamInfo>,
 }
 
 #[tauri::command]
@@ -30,6 +61,7 @@ fn get_effects() -> Vec<EffectInfo> {
             name: e.name,
             description: e.description,
             group: e.group,
+            params: e.params.iter().map(EffectParamInfo::from).collect(),
         })
         .collect()
 }
