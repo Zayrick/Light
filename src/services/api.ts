@@ -22,4 +22,11 @@ export const api = {
     return await invoke("set_brightness", { port, brightness });
   },
 
+  getCaptureScale: async (): Promise<number> => {
+    return await invoke("get_capture_scale");
+  },
+
+  setCaptureScale: async (percent: number): Promise<void> => {
+    return await invoke("set_capture_scale", { percent });
+  },
 };
