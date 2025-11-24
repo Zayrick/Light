@@ -27,15 +27,18 @@ pub enum DependencyBehavior {
 /// - Only show slider B when select A has a certain value
 /// - Disable advanced settings when a toggle is off
 #[derive(Clone, Copy, Debug)]
-pub struct EffectParamDependency {
-    /// Key of the parameter this one depends on.
-    pub key: &'static str,
-    /// Optional equality condition: dependency is met when `key` equals this value.
-    pub equals: Option<f64>,
-    /// Optional inequality condition: dependency is met when `key` does NOT equal this value.
-    pub not_equals: Option<f64>,
-    /// How the frontend should react when the dependency is not satisfied.
-    pub behavior: DependencyBehavior,
+pub enum EffectParamDependency {
+    Dependency {
+        /// Key of the parameter this one depends on.
+        key: &'static str,
+        /// Optional equality condition: dependency is met when `key` equals this value.
+        equals: Option<f64>,
+        /// Optional inequality condition: dependency is met when `key` does NOT equal this value.
+        not_equals: Option<f64>,
+        /// How the frontend should react when the dependency is not satisfied.
+        behavior: DependencyBehavior,
+    },
+    Always(DependencyBehavior),
 }
 
 pub struct EffectParam {
