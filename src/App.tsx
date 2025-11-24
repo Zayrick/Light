@@ -70,9 +70,17 @@ export default function App() {
     }
   };
 
+  const handleNavigate = (deviceId: string) => {
+    const device = devices.find((d) => d.id === deviceId);
+    if (device) {
+      setSelectedDevice(device);
+      setActiveTab("device-detail");
+    }
+  };
+
   return (
     <AppLayout
-      disableScroll={activeTab === "device-detail"}
+      disableScroll={activeTab === "device-detail" || activeTab === "home"}
       sidebar={
         <Sidebar
           activeTab={activeTab}
@@ -94,7 +102,7 @@ export default function App() {
             animate="center"
             exit="exit"
             transition={ANIMATION_TRANSITION}
-            style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
+            style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
           >
             <HomePage
               devices={devices}
@@ -102,6 +110,7 @@ export default function App() {
               isScanning={isScanning}
               onScan={scanDevices}
               onSetEffect={handleSetEffect}
+              onNavigate={handleNavigate}
             />
           </motion.div>
         )}

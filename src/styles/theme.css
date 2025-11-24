@@ -17,6 +17,8 @@
   --accent-hover: #1975c5;
   --accent-text: #ffffff;
 
+  --success-color: #107c10;
+
   --radius-s: 4px;
   --radius-m: 8px;
   --radius-l: 12px;
@@ -42,6 +44,8 @@
     --accent-color: #60cdff;
     --accent-hover: #7ad6ff;
     --accent-text: #000000;
+
+    --success-color: #6cc4a1;
   }
 }
 
