@@ -579,6 +579,7 @@ input[type="range"]:active::-webkit-slider-thumb {
   gap: 24px;
   overflow-y: auto;
   padding-right: 8px;
+  padding-bottom: 40px;
   /* Hide scrollbar */
   &::-webkit-scrollbar {
     display: none;
@@ -593,6 +594,7 @@ input[type="range"]:active::-webkit-slider-thumb {
   gap: 24px;
   overflow-y: auto;
   padding-right: 8px;
+  padding-bottom: 40px;
   /* Hide scrollbar */
   &::-webkit-scrollbar {
     display: none;
