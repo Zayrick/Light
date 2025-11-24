@@ -34,6 +34,23 @@ use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 const BYTES_PER_PIXEL: usize = 4;
 const DEFAULT_TIMEOUT_MS: u32 = 16;
 
+/// Target maximum capture dimension used to automatically downscale
+/// the desktop frame, similar to HyperHDR's `actualDivide` logic.
+/// The desktop is downscaled in powers of two until its largest
+/// side is not greater than this value.
+const MAX_CAPTURE_DIMENSION: usize = 1920;
+
+// Legacy compatibility: previous versions exposed explicit sampling
+// ratio getters/setters on this module. They are now no-ops because
+// downscaling is handled automatically based on MAX_CAPTURE_DIMENSION.
+#[allow(dead_code)]
+pub fn set_sample_ratio(_percent: u8) {}
+
+#[allow(dead_code)]
+pub fn get_sample_ratio() -> u8 {
+    100
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DisplayInfo {
     pub index: usize,
@@ -371,51 +388,72 @@ impl DesktopDuplicator {
             let data = slice::from_raw_parts(mapped.pBits as *const u8, pitch * height);
             let (rotated_width, rotated_height) = rotated_dimensions(width, height, self.rotation);
 
-            self.buffer.clear();
-            self.buffer
-                .reserve(rotated_width * rotated_height * BYTES_PER_PIXEL);
-
-            match self.rotation {
-                DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => {
-                    for row in 0..height {
-                        let start = row * pitch;
-                        let end = start + width * BYTES_PER_PIXEL;
-                        self.buffer.extend_from_slice(&data[start..end]);
-                    }
-                }
-                DXGI_MODE_ROTATION_ROTATE90 => {
-                    for x in 0..width {
-                        for y in (0..height).rev() {
-                            let idx = y * pitch + x * BYTES_PER_PIXEL;
-                            self.buffer
-                                .extend_from_slice(&data[idx..idx + BYTES_PER_PIXEL]);
-                        }
-                    }
-                }
-                DXGI_MODE_ROTATION_ROTATE180 => {
-                    for y in (0..height).rev() {
-                        for x in (0..width).rev() {
-                            let idx = y * pitch + x * BYTES_PER_PIXEL;
-                            self.buffer
-                                .extend_from_slice(&data[idx..idx + BYTES_PER_PIXEL]);
-                        }
-                    }
-                }
-                DXGI_MODE_ROTATION_ROTATE270 => {
-                    for x in (0..width).rev() {
-                        for y in 0..height {
-                            let idx = y * pitch + x * BYTES_PER_PIXEL;
-                            self.buffer
-                                .extend_from_slice(&data[idx..idx + BYTES_PER_PIXEL]);
-                        }
-                    }
-                }
-                _ => {}
+            // Automatically determine downscale factor in powers of two so that
+            // the largest dimension does not exceed MAX_CAPTURE_DIMENSION.
+            let mut max_dim = rotated_width.max(rotated_height).max(1);
+            let mut divide = 0usize;
+            while max_dim > MAX_CAPTURE_DIMENSION {
+                divide += 1;
+                max_dim >>= 1;
             }
 
-            self.width = rotated_width as u32;
-            self.height = rotated_height as u32;
-            self.stride = rotated_width * BYTES_PER_PIXEL;
+            let scaled_width = (rotated_width >> divide).max(1);
+            let scaled_height = (rotated_height >> divide).max(1);
+
+            let mut scaled =
+                vec![0u8; scaled_width * scaled_height * BYTES_PER_PIXEL];
+
+            let src_width = width;
+            let src_height = height;
+
+            // Combined rotation + downsampling: for each pixel in the final
+            // buffer, compute its position in the logically rotated space,
+            // then map back to the original DXGI surface coordinates.
+            for y in 0..scaled_height {
+                let rotated_y = y * rotated_height / scaled_height;
+                let dst_row_start = y * scaled_width * BYTES_PER_PIXEL;
+
+                for x in 0..scaled_width {
+                    let rotated_x = x * rotated_width / scaled_width;
+
+                    let (src_x, src_y) = match self.rotation {
+                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => {
+                            (rotated_x, rotated_y)
+                        }
+                        DXGI_MODE_ROTATION_ROTATE90 => {
+                            // rotated: (rotated_width, rotated_height) = (src_height, src_width)
+                            // inverse mapping derived from the original rotation loops:
+                            // rx = H - 1 - y, ry = x  =>  x = ry, y = H - 1 - rx
+                            let h = src_height;
+                            (rotated_y, h - 1 - rotated_x)
+                        }
+                        DXGI_MODE_ROTATION_ROTATE180 => {
+                            // rx = W - 1 - x, ry = H - 1 - y  =>  x = W - 1 - rx, y = H - 1 - ry
+                            let w = src_width;
+                            let h = src_height;
+                            (w - 1 - rotated_x, h - 1 - rotated_y)
+                        }
+                        DXGI_MODE_ROTATION_ROTATE270 => {
+                            // rx = y, ry = W - 1 - x  =>  x = W - 1 - ry, y = rx
+                            let w = src_width;
+                            (w - 1 - rotated_y, rotated_x)
+                        }
+                        _ => (rotated_x, rotated_y),
+                    };
+
+                    let src_idx = src_y * pitch + src_x * BYTES_PER_PIXEL;
+                    let dst_idx = dst_row_start + x * BYTES_PER_PIXEL;
+
+                    scaled[dst_idx..dst_idx + BYTES_PER_PIXEL].copy_from_slice(
+                        &data[src_idx..src_idx + BYTES_PER_PIXEL],
+                    );
+                }
+            }
+
+            self.buffer = scaled;
+            self.width = scaled_width as u32;
+            self.height = scaled_height as u32;
+            self.stride = scaled_width * BYTES_PER_PIXEL;
         }
     }
 }
