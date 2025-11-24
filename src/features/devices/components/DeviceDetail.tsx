@@ -382,19 +382,6 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
           {/* Current Mode Settings */}
           {selectedMode && selectedMode.params && selectedMode.params.length > 0 && (
             <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '28px', height: '28px',
-                  borderRadius: '6px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: 'var(--accent-color)',
-                  color: 'var(--accent-text)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                }}>
-                   <selectedMode.icon size={16} />
-                </div>
-                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
-              </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {selectedMode.params?.map((param) => {
