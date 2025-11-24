@@ -14,6 +14,12 @@ export interface Zone {
   matrix?: MatrixMap;
 }
 
+export interface LedColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
 export interface Device {
   port: string;
   model: string;
@@ -22,6 +28,7 @@ export interface Device {
   length: number;
   zones: Zone[];
   virtual_layout: [number, number]; // Tuple [width, height]
+  brightness: number;
 }
 
 export interface EffectInfo {

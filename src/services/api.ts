@@ -13,5 +13,9 @@ export const api = {
   setEffect: async (port: string, effectId: string): Promise<void> => {
     return await invoke("set_effect", { port, effectId });
   },
+
+  setBrightness: async (port: string, brightness: number): Promise<void> => {
+    return await invoke("set_brightness", { port, brightness });
+  },
 };
 

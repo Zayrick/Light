@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import type { LedColor as LedColorType } from "../types";
 
-export interface LedColor {
-  r: number;
-  g: number;
-  b: number;
-}
+export type LedColor = LedColorType;
 
 type Subscriber = (colors: LedColor[]) => void;
 

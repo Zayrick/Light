@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Device } from "../../../types";
+import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { 
   Palette, Wind, Zap, Waves, Sparkles, Flame, Music, Monitor,
@@ -41,9 +42,14 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
   const [selectedModeId, setSelectedModeId] = useState("static");
   
   // Mock settings states
-  const [brightness, setBrightness] = useState(80);
+  const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [speed, setSpeed] = useState(50);
   const [selectedColor, setSelectedColor] = useState("#FF0000");
+
+  const handleBrightnessChange = (value: number) => {
+    setBrightness(value);
+    api.setBrightness(device.port, value).catch(console.error);
+  };
 
   const filteredModes = MOCK_MODES.filter(m => m.category === selectedCategory);
   const selectedMode = MOCK_MODES.find(m => m.id === selectedModeId);
@@ -170,7 +176,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                 min="0" 
                 max="100" 
                 value={brightness} 
-                onChange={(e) => setBrightness(parseInt(e.target.value))}
+                onChange={(e) => handleBrightnessChange(parseInt(e.target.value))}
                 style={{ width: '100%', accentColor: 'var(--accent-color)' }}
               />
             </div>

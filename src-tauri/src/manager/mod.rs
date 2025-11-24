@@ -19,11 +19,13 @@ pub struct Device {
     pub length: usize,
     pub zones: Vec<Zone>,
     pub virtual_layout: (usize, usize),
+    pub brightness: u8,
 }
 
 pub struct LightingManager {
     controllers: Mutex<HashMap<String, Arc<Mutex<Box<dyn Controller>>>>>,
     active_effects: Mutex<HashMap<String, EffectRunner>>,
+    device_brightness: Mutex<HashMap<String, u8>>,
 }
 
 impl LightingManager {
@@ -31,6 +33,7 @@ impl LightingManager {
         Self {
             controllers: Mutex::new(HashMap::new()),
             active_effects: Mutex::new(HashMap::new()),
+            device_brightness: Mutex::new(HashMap::new()),
         }
     }
 
@@ -47,8 +50,12 @@ impl LightingManager {
         }
 
         let mut devices = Vec::new();
+        let brightness_map = self.device_brightness.lock().unwrap();
+
         for (port, c_arc) in state_controllers.iter() {
             let c = c_arc.lock().unwrap();
+            let brightness = *brightness_map.get(port).unwrap_or(&100);
+            
             devices.push(Device {
                 port: port.clone(),
                 model: c.model(),
@@ -57,6 +64,7 @@ impl LightingManager {
                 length: c.length(),
                 zones: c.zones(),
                 virtual_layout: c.virtual_layout(),
+                brightness,
             });
         }
         devices
@@ -76,7 +84,12 @@ impl LightingManager {
         // Stop existing effect first
         self.stop_active_effect(port);
 
-        let runner = EffectRunner::start(effect_id, controller_arc, app_handle)?;
+        let brightness = {
+            let map = self.device_brightness.lock().unwrap();
+            *map.get(port).unwrap_or(&100)
+        };
+
+        let runner = EffectRunner::start(effect_id, controller_arc, app_handle, brightness)?;
 
         let mut active = self.active_effects.lock().unwrap();
         active.insert(port.to_string(), runner);
@@ -92,6 +105,21 @@ impl LightingManager {
         } else {
             Err("No active effect on this device".to_string())
         }
+    }
+
+    pub fn set_brightness(&self, port: &str, brightness: u8) -> Result<(), String> {
+        // Update stored brightness
+        {
+            let mut map = self.device_brightness.lock().unwrap();
+            map.insert(port.to_string(), brightness);
+        }
+
+        // Update active effect if any
+        let active = self.active_effects.lock().unwrap();
+        if let Some(runner) = active.get(port) {
+            runner.set_brightness(brightness);
+        }
+        Ok(())
     }
 
     fn stop_active_effect(&self, port: &str) {
