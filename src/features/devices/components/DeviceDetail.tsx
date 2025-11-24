@@ -49,7 +49,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
   const selectedMode = MOCK_MODES.find(m => m.id === selectedModeId);
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>{device.model}</h1>
@@ -65,23 +65,10 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
 
       <div style={{ display: 'flex', gap: '24px', flex: 1, minHeight: 0 }}>
         {/* Left Column: Modes */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <div className="no-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', }}>
           
           {/* Categories */}
-          <div 
-            className="mode-tabs no-scrollbar" 
-            style={{ 
-              marginTop: '0',
-              overflowX: 'auto',
-              flexShrink: 0,
-              width: '100%',
-            }}
-            onWheel={(e) => {
-              if (e.deltaY !== 0) {
-                e.currentTarget.scrollLeft += e.deltaY;
-              }
-            }}
-          >
+          <div className="mode-tabs" style={{ marginTop: '0' }}>
             {MODE_CATEGORIES.map((category) => {
               const isActive = selectedCategory === category;
               return (
@@ -90,7 +77,6 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                   type="button"
                   onClick={() => setSelectedCategory(category)}
                   className={`mode-tab-button ${isActive ? "mode-tab-button-active" : ""}`}
-                  style={{ flexShrink: 0 }}
                   animate={{
                     opacity: isActive ? 1 : 0.6,
                     scale: isActive ? 1 : 0.98,
@@ -100,7 +86,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                 >
                   {isActive && (
                     <motion.div
-                      layoutId={`mode-category-underline-${device.id}`}
+                      layoutId="mode-category-underline"
                       className="mode-tab-underline"
                       transition={CATEGORY_TRANSITION}
                     />
@@ -112,61 +98,54 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
           </div>
 
           {/* Modes Grid */}
-          <div className="no-scrollbar" style={{ 
-            overflowY: 'auto',
-            flex: 1,
-            minHeight: 0,
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+            gap: '12px',
+            paddingBottom: '20px'
           }}>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-              gap: '12px',
-              paddingBottom: '20px',
-              alignItems: 'start'
-            }}>
-               {filteredModes.map(mode => {
-                 const isSelected = selectedModeId === mode.id;
-                 return (
-                  <Card 
-                    key={mode.id} 
-                    hoverable
-                    className={`${isSelected ? 'active-mode-card' : ''}`}
-                    style={{ 
-                      border: isSelected ? '1px solid var(--accent-color)' : '1px solid transparent',
-                      backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => setSelectedModeId(mode.id)}
-                  >
+             {filteredModes.map(mode => {
+               const isSelected = selectedModeId === mode.id;
+               return (
+                <Card 
+                  key={mode.id} 
+                  hoverable
+                  className={`${isSelected ? 'active-mode-card' : ''}`}
+                  style={{ 
+                    border: isSelected ? '1px solid var(--accent-color)' : '1px solid transparent',
+                    backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
+                    transition: 'all 0.2s ease'
+                  }}
+                  onClick={() => setSelectedModeId(mode.id)}
+                >
+                   <div style={{ 
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'flex-start',
+                     gap: '12px'
+                   }}>
                      <div style={{ 
+                       width: '40px', 
+                       height: '40px', 
+                       borderRadius: '10px',
                        display: 'flex',
-                       flexDirection: 'column',
-                       alignItems: 'flex-start',
-                       gap: '12px'
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       backgroundColor: isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.1)',
+                       color: isSelected ? 'var(--accent-text)' : 'var(--text-primary)',
+                       transition: 'all 0.2s ease',
+                       boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
                      }}>
-                       <div style={{ 
-                         width: '40px', 
-                         height: '40px', 
-                         borderRadius: '10px',
-                         display: 'flex',
-                         alignItems: 'center',
-                         justifyContent: 'center',
-                         backgroundColor: isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.1)',
-                         color: isSelected ? 'var(--accent-text)' : 'var(--text-primary)',
-                         transition: 'all 0.2s ease',
-                         boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
-                       }}>
-                          <mode.icon size={20} />
-                       </div>
-                       <div>
-                         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{mode.name}</div>
-                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{mode.description}</div>
-                       </div>
+                        <mode.icon size={20} />
                      </div>
-                  </Card>
-                 );
-               })}
-            </div>
+                     <div>
+                       <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{mode.name}</div>
+                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{mode.description}</div>
+                     </div>
+                   </div>
+                </Card>
+               );
+             })}
           </div>
         </div>
 
