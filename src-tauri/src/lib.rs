@@ -7,8 +7,12 @@ use crate::manager::inventory::list_effects;
 use crate::manager::{Device, LightingManager};
 #[cfg(target_os = "windows")]
 use crate::resource::screen::windows::{
-    list_displays as list_windows_displays, DisplayInfo as WindowsDisplayInfo,
-    get_capture_scale_percent, set_capture_scale_percent,
+    get_capture_fps as get_windows_capture_fps,
+    get_capture_scale_percent,
+    list_displays as list_windows_displays,
+    set_capture_fps as set_windows_capture_fps,
+    set_capture_scale_percent,
+    DisplayInfo as WindowsDisplayInfo,
 };
 use tauri::State;
 
@@ -198,6 +202,20 @@ fn get_capture_scale() -> u8 {
     100
 }
 
+#[tauri::command]
+fn set_capture_fps(fps: u8) {
+    #[cfg(target_os = "windows")]
+    set_windows_capture_fps(fps);
+}
+
+#[tauri::command]
+fn get_capture_fps() -> u8 {
+    #[cfg(target_os = "windows")]
+    return get_windows_capture_fps();
+    #[cfg(not(target_os = "windows"))]
+    30
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -211,7 +229,9 @@ pub fn run() {
             update_effect_params,
             set_brightness,
             set_capture_scale,
-            get_capture_scale
+            get_capture_scale,
+            set_capture_fps,
+            get_capture_fps
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

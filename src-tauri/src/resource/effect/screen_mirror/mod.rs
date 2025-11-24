@@ -9,14 +9,26 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 use crate::resource::screen::windows::ScreenSubscription;
 
-const SCREEN_PARAMS: [EffectParam; 1] = [EffectParam {
-    key: "displayIndex",
-    label: "屏幕来源",
-    kind: EffectParamKind::Select {
-        default: 0.0,
-        options: SelectOptions::Dynamic(screen_source_options),
+const SCREEN_PARAMS: [EffectParam; 2] = [
+    EffectParam {
+        key: "displayIndex",
+        label: "屏幕来源",
+        kind: EffectParamKind::Select {
+            default: 0.0,
+            options: SelectOptions::Dynamic(screen_source_options),
+        },
     },
-}];
+    EffectParam {
+        key: "smoothness",
+        label: "平滑度",
+        kind: EffectParamKind::Slider {
+            min: 0.0,
+            max: 100.0,
+            step: 1.0,
+            default: 80.0,
+        },
+    },
+];
 
 #[cfg(target_os = "windows")]
 fn screen_source_options() -> Result<Vec<SelectOption>, String> {
@@ -47,6 +59,8 @@ pub struct ScreenMirrorEffect {
     screen: Option<ScreenSubscription>,
     #[cfg(target_os = "windows")]
     display_index: usize,
+    smoothness: u32,
+    previous_buffer: Vec<Color>,
 }
 
 impl ScreenMirrorEffect {
@@ -58,6 +72,8 @@ impl ScreenMirrorEffect {
             screen: None,
             #[cfg(target_os = "windows")]
             display_index: 0,
+            smoothness: 80,
+            previous_buffer: Vec::new(),
         }
     }
 
@@ -87,6 +103,10 @@ impl ScreenMirrorEffect {
 
     fn capture_and_render(&mut self, buffer: &mut [Color]) -> bool {
         let layout = (self.width, self.height);
+        
+        if self.previous_buffer.len() != buffer.len() {
+            self.previous_buffer.resize(buffer.len(), Color::default());
+        }
 
         #[cfg(target_os = "windows")]
         {
@@ -94,8 +114,11 @@ impl ScreenMirrorEffect {
                 return false;
             }
 
+            let prev = &mut self.previous_buffer;
+            let smoothness = self.smoothness;
+
             if let Some(subscription) = &self.screen {
-                match subscription.capture_with(|frame| render_frame(layout, frame, buffer)) {
+                match subscription.capture_with(|frame| render_frame(layout, frame, buffer, prev, smoothness)) {
                     Ok(true) => {
                         return true;
                     }
@@ -152,6 +175,10 @@ impl Effect for ScreenMirrorEffect {
     }
 
     fn update_params(&mut self, _params: serde_json::Value) {
+        if let Some(smoothness) = _params.get("smoothness").and_then(|v| v.as_f64()) {
+            self.smoothness = smoothness.clamp(0.0, 100.0) as u32;
+        }
+
         #[cfg(not(target_os = "windows"))]
         let _ = _params;
 
@@ -172,15 +199,46 @@ impl Effect for ScreenMirrorEffect {
     }
 }
 
-fn render_frame(layout: (usize, usize), frame: &ScreenFrame<'_>, buffer: &mut [Color]) {
+fn render_frame(
+    layout: (usize, usize),
+    frame: &ScreenFrame<'_>,
+    buffer: &mut [Color],
+    previous_buffer: &mut [Color],
+    smoothness: u32,
+) {
     if layout.1 <= 1 {
-        render_linear(frame, buffer);
+        render_linear(frame, buffer, previous_buffer, smoothness);
     } else {
-        render_matrix(layout, frame, buffer);
+        render_matrix(layout, frame, buffer, previous_buffer, smoothness);
     }
 }
 
-fn render_linear(frame: &ScreenFrame<'_>, buffer: &mut [Color]) {
+fn interpolate(c1: Color, c2: Color, factor: f32) -> Color {
+    Color {
+        r: (c1.r as f32 + (c2.r as f32 - c1.r as f32) * factor) as u8,
+        g: (c1.g as f32 + (c2.g as f32 - c1.g as f32) * factor) as u8,
+        b: (c1.b as f32 + (c2.b as f32 - c1.b as f32) * factor) as u8,
+    }
+}
+
+fn smooth_color(prev: Color, target: Color, smoothness: u32) -> Color {
+    if smoothness == 0 {
+        return target;
+    }
+    if smoothness >= 100 {
+        return prev;
+    }
+    
+    let factor = (100.0 - smoothness as f32) / 100.0;
+    interpolate(prev, target, factor)
+}
+
+fn render_linear(
+    frame: &ScreenFrame<'_>,
+    buffer: &mut [Color],
+    previous_buffer: &mut [Color],
+    smoothness: u32,
+) {
     let leds = buffer.len();
     if leds == 0 {
         return;
@@ -192,11 +250,26 @@ fn render_linear(frame: &ScreenFrame<'_>, buffer: &mut [Color]) {
         } else {
             (index as f32 + 0.5) / leds as f32
         };
-        *color = sample_pixel(frame, ratio_x, 0.5);
+        let target = sample_pixel(frame, ratio_x, 0.5);
+        
+        if index < previous_buffer.len() {
+            let prev = previous_buffer[index];
+            let smoothed = smooth_color(prev, target, smoothness);
+            previous_buffer[index] = smoothed;
+            *color = smoothed;
+        } else {
+            *color = target;
+        }
     }
 }
 
-fn render_matrix(layout: (usize, usize), frame: &ScreenFrame<'_>, buffer: &mut [Color]) {
+fn render_matrix(
+    layout: (usize, usize),
+    frame: &ScreenFrame<'_>,
+    buffer: &mut [Color],
+    previous_buffer: &mut [Color],
+    smoothness: u32,
+) {
     let width = layout.0.max(1);
     let height = layout.1.max(1);
     let total = width.saturating_mul(height);
@@ -220,7 +293,16 @@ fn render_matrix(layout: (usize, usize), frame: &ScreenFrame<'_>, buffer: &mut [
                 (y as f32 + 0.5) / height as f32
             };
 
-            buffer[idx] = sample_pixel(frame, ratio_x, ratio_y);
+            let target = sample_pixel(frame, ratio_x, ratio_y);
+            
+            if idx < previous_buffer.len() {
+                let prev = previous_buffer[idx];
+                let smoothed = smooth_color(prev, target, smoothness);
+                previous_buffer[idx] = smoothed;
+                buffer[idx] = smoothed;
+            } else {
+                buffer[idx] = target;
+            }
         }
     }
 }

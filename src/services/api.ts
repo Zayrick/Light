@@ -29,4 +29,12 @@ export const api = {
   setCaptureScale: async (percent: number): Promise<void> => {
     return await invoke("set_capture_scale", { percent });
   },
+
+  getCaptureFps: async (): Promise<number> => {
+    return await invoke("get_capture_fps");
+  },
+
+  setCaptureFps: async (fps: number): Promise<void> => {
+    return await invoke("set_capture_fps", { fps });
+  },
 };
