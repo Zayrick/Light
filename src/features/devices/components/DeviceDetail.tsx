@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
+import Slider from "@mui/material/Slider";
+import FormControl from "@mui/material/FormControl";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 import { Device, EffectInfo, EffectParam, SliderParam } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
-import { 
-  Palette, Zap, Waves, Sparkles, Monitor,
-  Sun, Gauge, Sliders, ListFilter
+import {
+  Palette,
+  Zap,
+  Waves,
+  Sparkles,
+  Monitor,
+  Sun,
+  Gauge,
+  Sliders,
+  ListFilter,
 } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
 
@@ -61,6 +72,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, number>>({});
   const [hasMounted, setHasMounted] = useState(false);
+  const normalizeSliderValue = (value: number | number[]) =>
+    Array.isArray(value) ? value[0] : value;
 
   useEffect(() => {
     // Avoid underline "floating" on initial page enter; only animate on user interactions
@@ -297,13 +310,15 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Sun size={12} /> Brightness</span>
                 <span>{brightness}%</span>
               </div>
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={brightness} 
-                onChange={(e) => handleBrightnessChange(parseInt(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+              <Slider
+                value={brightness}
+                min={0}
+                max={100}
+                step={1}
+                onChange={(_, newValue) =>
+                  handleBrightnessChange(normalizeSliderValue(newValue))
+                }
+                sx={{ color: 'var(--accent-color)' }}
               />
             </div>
           </Card>
@@ -335,20 +350,26 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={12} /> {param.label}</span>
                           <span>{formatParamValue(param, value)}</span>
                         </div>
-                        <input
-                          type="range"
+                        <Slider
+                          value={value}
                           min={param.min}
                           max={param.max}
                           step={param.step}
-                          value={value}
-                          onChange={(e) => handleParamChange(selectedMode, param, Number(e.target.value))}
-                          style={{ width: '100%', accentColor: 'var(--accent-color)' }}
+                          onChange={(_, newValue) =>
+                            handleParamChange(
+                              selectedMode,
+                              param,
+                              normalizeSliderValue(newValue)
+                            )
+                          }
+                          sx={{ color: 'var(--accent-color)' }}
                         />
                       </div>
                     );
                   } else if (param.type === 'select') {
                     const value = getParamValue(selectedMode, param);
                     const hasOptions = param.options.length > 0;
+                    const selectLabelId = `${selectedMode.id}-${param.key}-label`;
                     return (
                       <div key={param.key}>
                         <div
@@ -371,27 +392,69 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           )}
                         </div>
                         {hasOptions ? (
-                          <select
-                            value={String(value)}
-                            onChange={(e) =>
-                              handleParamChange(selectedMode, param, Number(e.target.value))
-                            }
-                            style={{
-                              width: '100%',
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              backgroundColor: 'rgba(255,255,255,0.03)',
-                              color: 'var(--text-primary)',
-                              fontSize: '13px',
-                            }}
-                          >
-                            {param.options.map((option) => (
-                              <option key={option.value} value={String(option.value)}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                          <FormControl fullWidth size="small" variant="outlined">
+                            <Select
+                              labelId={selectLabelId}
+                              value={String(value)}
+                              onChange={(event: SelectChangeEvent<string>) =>
+                                handleParamChange(
+                                  selectedMode,
+                                  param,
+                                  Number(event.target.value)
+                                )
+                              }
+                              MenuProps={{
+                                PaperProps: {
+                                  sx: {
+                                    maxHeight: 280,
+                                    backgroundColor: "var(--bg-card)",
+                                    backdropFilter: "blur(20px)",
+                                    color: "var(--text-primary)",
+                                    borderRadius: "var(--radius-m)",
+                                    border: "1px solid var(--border-subtle)",
+                                    "& .MuiMenuItem-root": {
+                                      "&.Mui-selected": {
+                                        backgroundColor: "var(--accent-color)",
+                                        color: "var(--accent-text)",
+                                        "&:hover": {
+                                          backgroundColor: "var(--accent-hover)",
+                                        },
+                                      },
+                                      "&:hover": {
+                                        backgroundColor: "var(--bg-card-hover)",
+                                      },
+                                    },
+                                  },
+                                },
+                              }}
+                              sx={{
+                                color: "var(--text-primary)",
+                                borderRadius: "var(--radius-m)",
+                                ".MuiOutlinedInput-notchedOutline": {
+                                  borderColor: "var(--border-subtle)",
+                                },
+                                "&:hover .MuiOutlinedInput-notchedOutline": {
+                                  borderColor: "var(--text-secondary)",
+                                },
+                                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                                  borderColor: "var(--accent-color)",
+                                },
+                                ".MuiSvgIcon-root": {
+                                  color: "var(--text-secondary)",
+                                },
+                                ".MuiSelect-select": {
+                                  display: "flex",
+                                  alignItems: "center",
+                                },
+                              }}
+                            >
+                              {param.options.map((option) => (
+                                <MenuItem key={option.value} value={String(option.value)}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                         ) : (
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                             No options available.
