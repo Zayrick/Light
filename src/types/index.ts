@@ -37,4 +37,17 @@ export interface EffectInfo {
   name: string;
   description?: string;
   group?: string;
+  params?: EffectParam[];
+}
+
+export type EffectParam = SliderParam;
+
+export interface SliderParam {
+  type: 'slider';
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  default: number;
 }

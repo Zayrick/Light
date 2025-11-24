@@ -12,11 +12,27 @@ pub trait Effect: Send {
     fn update_params(&mut self, _params: Value) {}
 }
 
+#[derive(Clone, Copy)]
+pub enum EffectParamKind {
+    Slider,
+}
+
+pub struct EffectParam {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub kind: EffectParamKind,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub default: f64,
+}
+
 pub struct EffectMetadata {
     pub id: &'static str,
     pub name: &'static str,
     pub description: Option<&'static str>,
     pub group: Option<&'static str>,
+    pub params: &'static [EffectParam],
     pub factory: fn() -> Box<dyn Effect>,
 }
 

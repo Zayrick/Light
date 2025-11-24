@@ -1,4 +1,4 @@
-use crate::interface::effect::{Effect, EffectMetadata};
+use crate::interface::effect::{Effect, EffectMetadata, EffectParam, EffectParamKind};
 use crate::interface::controller::Color;
 use std::time::Duration;
 use serde_json::Value;
@@ -9,6 +9,16 @@ pub struct RainbowEffect {
     width: usize,
     height: usize,
 }
+
+const RAINBOW_PARAMS: [EffectParam; 1] = [EffectParam {
+    key: "speed",
+    label: "速度",
+    kind: EffectParamKind::Slider,
+    min: 0.0,
+    max: 5.0,
+    step: 0.1,
+    default: 2.5,
+}];
 
 impl Effect for RainbowEffect {
     fn id(&self) -> String {
@@ -99,5 +109,6 @@ inventory::submit!(EffectMetadata {
     name: "Rainbow",
     description: Some("Cycling rainbow colors"),
     group: Some("Dynamic"),
+    params: &RAINBOW_PARAMS,
     factory: factory,
 });

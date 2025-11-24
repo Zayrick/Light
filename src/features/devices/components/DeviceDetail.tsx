@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
-import { Device, EffectInfo } from "../../../types";
+import { Device, EffectInfo, SliderParam } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { 
-  Palette, Wind, Zap, Waves, Sparkles, Flame, Music, Monitor,
-  Sun, Gauge, RotateCw, Sliders
+  Palette, Zap, Waves, Sparkles, Monitor,
+  Sun, Gauge, Sliders
 } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
 
@@ -37,8 +37,6 @@ const GROUP_ICON_MAP: Record<string, ComponentType<{ size?: number }>> = {
 
 const DEFAULT_ICON = Zap;
 
-const MOCK_COLORS = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF", "#FFFFFF"];
-
 interface DisplayMode extends EffectInfo {
   category: ModeCategory;
   icon: ComponentType<{ size?: number }>;
@@ -61,8 +59,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   
   // Mock settings states
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
-  const [speed, setSpeed] = useState(50);
-  const [selectedColor, setSelectedColor] = useState("#FF0000");
+  const [paramValues, setParamValues] = useState<Record<string, number>>({});
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
@@ -119,10 +116,61 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
 
   const selectedMode = modes.find((m) => m.id === selectedModeId);
 
+  // Ensure defaults exist for the selected mode so sliders have values
+  useEffect(() => {
+    if (!selectedMode?.params?.length) return;
+    setParamValues((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      selectedMode.params?.forEach((p) => {
+        const key = `${selectedMode.id}:${p.key}`;
+        if (!(key in next)) {
+          next[key] = p.default;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [selectedMode]);
+
+  const getParamValue = (mode: DisplayMode, param: SliderParam) => {
+    const key = `${mode.id}:${param.key}`;
+    return paramValues[key] ?? param.default;
+  };
+
+  const formatParamValue = (param: SliderParam, value: number) => {
+    if (param.step < 1) return value.toFixed(1);
+    return Math.round(value).toString();
+  };
+
+  const pushParamsToBackend = async (mode: DisplayMode, payload: Record<string, number>) => {
+    if (!mode.params || mode.params.length === 0) return;
+    try {
+      await api.updateEffectParams(device.port, payload);
+    } catch (err) {
+      console.error("Failed to update params:", err);
+    }
+  };
+
+  const handleParamChange = (mode: DisplayMode, param: SliderParam, value: number) => {
+    const storageKey = `${mode.id}:${param.key}`;
+    setParamValues((prev) => ({ ...prev, [storageKey]: value }));
+    pushParamsToBackend(mode, { [param.key]: value });
+  };
+
   const handleModeClick = async (modeId: string) => {
     setSelectedModeId(modeId);
     try {
       await onSetEffect(device.port, modeId);
+
+      const mode = modes.find((m) => m.id === modeId);
+      if (mode?.params?.length) {
+        const payload: Record<string, number> = {};
+        mode.params.forEach((p) => {
+          payload[p.key] = getParamValue(mode, p);
+        });
+        await pushParamsToBackend(mode, payload);
+      }
     } catch (err) {
       console.error("Failed to set effect:", err);
     }
@@ -257,7 +305,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
           </Card>
 
           {/* Current Mode Settings */}
-          {selectedMode && (
+          {selectedMode && selectedMode.params && selectedMode.params.length > 0 && (
             <Card style={{ padding: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                 <div style={{
@@ -273,82 +321,30 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                 <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
               </div>
 
-              {/* Configuration Controls based on mode type */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                
-                {/* Speed Control (Dynamic Modes) */}
-                {selectedMode.category === 'Dynamic' && (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={12} /> Speed</span>
-                       <span>{speed}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="1" 
-                      max="100" 
-                      value={speed} 
-                      onChange={(e) => setSpeed(parseInt(e.target.value))}
-                      style={{ width: '100%', accentColor: 'var(--accent-color)' }}
-                    />
-                  </div>
-                )}
-
-                {/* Direction Control (Dynamic Modes) */}
-                {selectedMode.category === 'Dynamic' && (
-                  <div>
-                    <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <RotateCw size={12} /> Direction
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '12px' }}>Clockwise</button>
-                      <button className="btn btn-secondary" style={{ flex: 1, fontSize: '12px', opacity: 0.5 }}>Counter</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Color Control (Static/Basic Modes) */}
-                {selectedMode.category === 'Basic' && (
-                  <div>
-                    <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Palette size={12} /> Color
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {MOCK_COLORS.map(color => (
-                        <div 
-                          key={color}
-                          onClick={() => setSelectedColor(color)}
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '50%',
-                            backgroundColor: color,
-                            cursor: 'pointer',
-                            border: selectedColor === color ? '2px solid var(--text-primary)' : '1px solid var(--border-strong)',
-                            boxShadow: selectedColor === color ? '0 0 0 2px var(--bg-card)' : 'none',
-                            transition: 'all 0.2s'
-                          }}
+                {selectedMode.params?.map((param) => {
+                  if (param.type === 'slider') {
+                    const value = getParamValue(selectedMode, param);
+                    return (
+                      <div key={param.key}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={12} /> {param.label}</span>
+                          <span>{formatParamValue(param, value)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={param.min}
+                          max={param.max}
+                          step={param.step}
+                          value={value}
+                          onChange={(e) => handleParamChange(selectedMode, param, Number(e.target.value))}
+                          style={{ width: '100%', accentColor: 'var(--accent-color)' }}
                         />
-                      ))}
-                      <div style={{ 
-                        width: '24px', 
-                        height: '24px', 
-                        borderRadius: '50%', 
-                        background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
-                        cursor: 'pointer',
-                        border: '1px solid var(--border-strong)'
-                      }} title="Custom" />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Placeholder for other modes */}
-                {selectedMode.category === 'Screen' && (
-                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                     Screen synchronization settings will appear here.
-                   </div>
-                )}
-
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
               </div>
             </Card>
           )}
