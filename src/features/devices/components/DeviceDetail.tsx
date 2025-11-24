@@ -302,8 +302,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
           {/* Modes Grid */}
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-            gap: '12px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
+            gap: '8px',
             paddingBottom: '20px'
           }}>
              {filteredModes.map(mode => {
@@ -316,7 +316,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                   style={{ 
                     border: isSelected ? '1px solid var(--accent-color)' : '1px solid transparent',
                     backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    padding: '12px'
                   }}
                   onClick={() => handleModeClick(mode.id)}
                 >
@@ -324,12 +325,12 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                      display: 'flex',
                      flexDirection: 'column',
                      alignItems: 'flex-start',
-                     gap: '12px'
+                     gap: '10px'
                    }}>
                      <div style={{ 
-                       width: '40px', 
-                       height: '40px', 
-                       borderRadius: '10px',
+                       width: '32px', 
+                       height: '32px', 
+                       borderRadius: '8px',
                        display: 'flex',
                        alignItems: 'center',
                        justifyContent: 'center',
@@ -338,11 +339,11 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                        transition: 'all 0.2s ease',
                        boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
                      }}>
-                        <mode.icon size={20} />
+                        <mode.icon size={18} />
                      </div>
-                     <div>
-                       <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{mode.name}</div>
-                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{mode.description}</div>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                       <div style={{ fontSize: '13px', fontWeight: 600 }}>{mode.name}</div>
+                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.3' }}>{mode.description}</div>
                      </div>
                    </div>
                 </Card>
@@ -352,19 +353,19 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
         </div>
 
         {/* Right Column: Configuration */}
-        <div className="no-scrollbar" style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0, overflowY: 'auto', paddingBottom: '20px' }}>
+        <div className="no-scrollbar" style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0, overflowY: 'auto', paddingBottom: '20px' }}>
           
           {/* Global Device Settings */}
-          <Card style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-              <Sliders size={18} />
-              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Device Settings</h3>
+          <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sliders size={16} />
+              <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Device Settings</h3>
             </div>
             
             {/* Brightness Control */}
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Sun size={12} /> Brightness</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Sun size={11} /> Brightness</span>
                 <span>{brightness}%</span>
               </div>
               <Slider
@@ -380,22 +381,22 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
 
           {/* Current Mode Settings */}
           {selectedMode && selectedMode.params && selectedMode.params.length > 0 && (
-            <Card style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '32px', height: '32px',
-                  borderRadius: '8px',
+                  width: '28px', height: '28px',
+                  borderRadius: '6px',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   backgroundColor: 'var(--accent-color)',
                   color: 'var(--accent-text)',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                 }}>
-                   <selectedMode.icon size={18} />
+                   <selectedMode.icon size={16} />
                 </div>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
+                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>{selectedMode.name} Config</h3>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {selectedMode.params?.map((param) => {
                   if (param.type === 'slider') {
                     const value = getParamValue(selectedMode, param);
@@ -405,9 +406,9 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                     );
                     if (!visible) return null;
                     return (
-                      <div key={param.key}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={12} /> {param.label}</span>
+                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={11} /> {param.label}</span>
                           <span>{formatParamValue(param, value)}</span>
                         </div>
                         <Slider
@@ -435,19 +436,18 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                     );
                     if (!visible) return null;
                     return (
-                      <div key={param.key}>
+                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
-                            marginBottom: '8px',
-                            fontSize: '12px',
+                            fontSize: '11px',
                             color: 'var(--text-secondary)',
                             alignItems: 'center',
                           }}
                         >
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <ListFilter size={12} /> {param.label}
+                            <ListFilter size={11} /> {param.label}
                           </span>
                           {hasOptions && (
                             <span style={{ opacity: 0.7 }}>
@@ -486,6 +486,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                                       "&:hover": {
                                         backgroundColor: "var(--bg-card-hover)",
                                       },
+                                      fontSize: '13px', // Compact menu items
+                                      minHeight: '32px',
                                     },
                                   },
                                 },
@@ -493,6 +495,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                               sx={{
                                 color: "var(--text-primary)",
                                 borderRadius: "var(--radius-m)",
+                                fontSize: "13px", // Smaller text
+                                height: "32px",   // Reduced height
                                 ".MuiOutlinedInput-notchedOutline": {
                                   borderColor: "var(--border-subtle)",
                                 },
@@ -508,6 +512,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                                 ".MuiSelect-select": {
                                   display: "flex",
                                   alignItems: "center",
+                                  paddingTop: "4px",
+                                  paddingBottom: "4px",
                                 },
                               }}
                             >
@@ -519,7 +525,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                             </Select>
                           </FormControl>
                         ) : (
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                             No options available.
                           </div>
                         )}
