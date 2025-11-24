@@ -1,8 +1,8 @@
-use crate::interface::controller::{Controller, ControllerMetadata, Color, DeviceType, Zone};
+use crate::interface::controller::{Color, Controller, ControllerMetadata, DeviceType, Zone};
+use inventory;
 use serialport::{SerialPort, SerialPortType};
 use std::io::Write;
 use std::time::Duration;
-use inventory;
 
 mod protocol;
 use protocol::SkydimoSerialProtocol;
@@ -10,7 +10,7 @@ mod config;
 use config::build_layout_from_device_name;
 
 pub struct SkydimoSerialController {
-    pub port_name: String, 
+    pub port_name: String,
     model: String,
     id: String,
     port: Box<dyn SerialPort>,
@@ -30,12 +30,12 @@ impl SkydimoSerialController {
             (vec![Zone::linear("LED Strip", 0, 100)], 100)
         };
 
-        Self { 
-            port_name, 
-            model, 
-            id, 
-            port, 
-            zones, 
+        Self {
+            port_name,
+            model,
+            id,
+            port,
+            zones,
             led_count,
             buffer_cache: Vec::with_capacity(led_count),
             packet_cache: Vec::with_capacity(led_count * 3 + 10),
@@ -91,7 +91,7 @@ impl Controller for SkydimoSerialController {
                 }
             } else {
                 // Clear buffer with black first if needed, but usually we overwrite.
-                // Since the mapping might be sparse (Option<usize>), we should clear or 
+                // Since the mapping might be sparse (Option<usize>), we should clear or
                 // assume unmapped LEDs are black.
                 // For performance, if we map *all* LEDs, we don't need to clear.
                 // But let's be safe and fill with default (black) if map is sparse.
@@ -113,15 +113,17 @@ impl Controller for SkydimoSerialController {
             // Copy min(colors.len(), led_count)
             let len = colors.len().min(self.led_count);
             self.buffer_cache[..len].copy_from_slice(&colors[..len]);
-            
+
             // If buffer is larger than input, zero out the rest?
             if len < self.led_count {
-                 self.buffer_cache[len..].fill(Color::default());
+                self.buffer_cache[len..].fill(Color::default());
             }
         };
 
         SkydimoSerialProtocol::encode_into(&self.buffer_cache, &mut self.packet_cache);
-        self.port.write_all(&self.packet_cache).map_err(|e| e.to_string())?;
+        self.port
+            .write_all(&self.packet_cache)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 }
@@ -132,37 +134,37 @@ fn probe() -> Vec<Box<dyn Controller>> {
 
     for p in ports {
         let is_valid = match &p.port_type {
-            SerialPortType::UsbPort(info) => {
-                info.vid == 0x1A86 && info.pid == 0x7523
-            },
+            SerialPortType::UsbPort(info) => info.vid == 0x1A86 && info.pid == 0x7523,
             _ => false,
         };
-        if !is_valid { continue; }
+        if !is_valid {
+            continue;
+        }
 
         if let Ok(mut port) = serialport::new(&p.port_name, 115_200)
             .timeout(Duration::from_millis(200))
-            .open() 
+            .open()
         {
-             match SkydimoSerialProtocol::handshake(&mut port) {
-                 Ok((model, id)) => {
-                     // Prepend "Skydimo" if not present, to match C++ "Skydimo " + model
-                     let full_model = if !model.starts_with("Skydimo") {
-                         format!("Skydimo {}", model)
-                     } else {
-                         model
-                     };
+            match SkydimoSerialProtocol::handshake(&mut port) {
+                Ok((model, id)) => {
+                    // Prepend "Skydimo" if not present, to match C++ "Skydimo " + model
+                    let full_model = if !model.starts_with("Skydimo") {
+                        format!("Skydimo {}", model)
+                    } else {
+                        model
+                    };
 
-                     controllers.push(Box::new(SkydimoSerialController::new(
-                         p.port_name.clone(), 
-                         full_model, 
-                         id, 
-                         port
-                     )));
-                 },
-                 Err(_) => {
-                     // Failed handshake, ignore device
-                 }
-             }
+                    controllers.push(Box::new(SkydimoSerialController::new(
+                        p.port_name.clone(),
+                        full_model,
+                        id,
+                        port,
+                    )));
+                }
+                Err(_) => {
+                    // Failed handshake, ignore device
+                }
+            }
         }
     }
     controllers

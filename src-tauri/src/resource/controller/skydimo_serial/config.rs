@@ -30,40 +30,70 @@ pub fn get_skydimo_model_config(model_id: &str) -> Option<SkydimoModelConfig> {
         "SK0201" => SkydimoModelConfig {
             layout: Sides2,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 20 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 20 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 20,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 20,
+                },
             ],
             total_leds: 40,
         },
         "SK0202" => SkydimoModelConfig {
             layout: Sides2,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 30 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 30 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 30,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 30,
+                },
             ],
             total_leds: 60,
         },
         "SK0204" => SkydimoModelConfig {
             layout: Sides2,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 25 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 25 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 25,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 25,
+                },
             ],
             total_leds: 50,
         },
         "SK0F01" => SkydimoModelConfig {
             layout: Sides2,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 29 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 29 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 29,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 29,
+                },
             ],
             total_leds: 58,
         },
         "SK0F02" => SkydimoModelConfig {
             layout: Sides2,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 25 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 25 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 25,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 25,
+                },
             ],
             total_leds: 50,
         },
@@ -72,54 +102,108 @@ pub fn get_skydimo_model_config(model_id: &str) -> Option<SkydimoModelConfig> {
         "SK0121" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 13 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 25 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 13 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 13,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 25,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 13,
+                },
             ],
             total_leds: 51,
         },
         "SK0124" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 14 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 26 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 14 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 14,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 26,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 14,
+                },
             ],
             total_leds: 54,
         },
         "SK0127" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 17 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 31 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 17 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 17,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 31,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 17,
+                },
             ],
             total_leds: 65,
         },
         "SK0132" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 20 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 37 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 20 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 20,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 37,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 20,
+                },
             ],
             total_leds: 77,
         },
         "SK0134" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 15 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 41 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 15 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 15,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 41,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 15,
+                },
             ],
             total_leds: 71,
         },
         "SK0149" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 19 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 69 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 19 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 19,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 69,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 19,
+                },
             ],
             total_leds: 107,
         },
@@ -128,50 +212,110 @@ pub fn get_skydimo_model_config(model_id: &str) -> Option<SkydimoModelConfig> {
         "SK0L21" => SkydimoModelConfig {
             layout: Perimeter4,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 13 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 25 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 13 },
-                SkydimoZoneConfig { name: "Zone 4", led_count: 25 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 13,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 25,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 13,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 4",
+                    led_count: 25,
+                },
             ],
             total_leds: 76,
         },
         "SK0L24" => SkydimoModelConfig {
             layout: Perimeter4,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 14 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 26 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 14 },
-                SkydimoZoneConfig { name: "Zone 4", led_count: 26 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 14,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 26,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 14,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 4",
+                    led_count: 26,
+                },
             ],
             total_leds: 80,
         },
         "SK0L27" => SkydimoModelConfig {
             layout: Perimeter4,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 17 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 31 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 17 },
-                SkydimoZoneConfig { name: "Zone 4", led_count: 31 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 17,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 31,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 17,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 4",
+                    led_count: 31,
+                },
             ],
             total_leds: 96,
         },
         "SK0L32" => SkydimoModelConfig {
             layout: Perimeter4,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 20 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 37 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 20 },
-                SkydimoZoneConfig { name: "Zone 4", led_count: 37 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 20,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 37,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 20,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 4",
+                    led_count: 37,
+                },
             ],
             total_leds: 114,
         },
         "SK0L34" => SkydimoModelConfig {
             layout: Perimeter4,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 15 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 41 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 15 },
-                SkydimoZoneConfig { name: "Zone 4", led_count: 41 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 15,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 41,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 15,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 4",
+                    led_count: 41,
+                },
             ],
             total_leds: 112,
         },
@@ -180,36 +324,72 @@ pub fn get_skydimo_model_config(model_id: &str) -> Option<SkydimoModelConfig> {
         "SKA124" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 18 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 34 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 18 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 18,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 34,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 18,
+                },
             ],
             total_leds: 70,
         },
         "SKA127" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 20 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 41 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 20 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 20,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 41,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 20,
+                },
             ],
             total_leds: 81,
         },
         "SKA132" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 25 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 45 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 25 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 25,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 45,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 25,
+                },
             ],
             total_leds: 95,
         },
         "SKA134" => SkydimoModelConfig {
             layout: Perimeter3,
             zones: vec![
-                SkydimoZoneConfig { name: "Zone 1", led_count: 21 },
-                SkydimoZoneConfig { name: "Zone 2", led_count: 51 },
-                SkydimoZoneConfig { name: "Zone 3", led_count: 21 },
+                SkydimoZoneConfig {
+                    name: "Zone 1",
+                    led_count: 21,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 2",
+                    led_count: 51,
+                },
+                SkydimoZoneConfig {
+                    name: "Zone 3",
+                    led_count: 21,
+                },
             ],
             total_leds: 93,
         },
@@ -217,82 +397,130 @@ pub fn get_skydimo_model_config(model_id: &str) -> Option<SkydimoModelConfig> {
         // Single-zone LED strips (keep linear)
         "SK0402" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 72 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 72,
+            }],
             total_leds: 72,
         },
         "SK0403" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 96 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 96,
+            }],
             total_leds: 96,
         },
         "SK0404" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 144 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 144,
+            }],
             total_leds: 144,
         },
         "SK0901" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 14 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 14,
+            }],
             total_leds: 14,
         },
         "SK0801" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 2 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 2,
+            }],
             total_leds: 2,
         },
         "SK0803" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 10 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 10,
+            }],
             total_leds: 10,
         },
         "SK0E01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 16 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 16,
+            }],
             total_leds: 16,
         },
         "SK0H01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 2 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 2,
+            }],
             total_leds: 2,
         },
         "SK0H02" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 4 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 4,
+            }],
             total_leds: 4,
         },
         "SK0S01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 32 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 32,
+            }],
             total_leds: 32,
         },
         "SK0K01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 120 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 120,
+            }],
             total_leds: 120,
         },
         "SK0K02" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 15 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 15,
+            }],
             total_leds: 15,
         },
         "SK0M01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 24 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 24,
+            }],
             total_leds: 24,
         },
         "SK0N01" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 256 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 256,
+            }],
             total_leds: 256,
         },
         "SK0N02" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 1024 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 1024,
+            }],
             total_leds: 1024,
         },
         "SK0N03" => SkydimoModelConfig {
             layout: Strip1,
-            zones: vec![SkydimoZoneConfig { name: "LED Strip", led_count: 253 }],
+            zones: vec![SkydimoZoneConfig {
+                name: "LED Strip",
+                led_count: 253,
+            }],
             total_leds: 253,
         },
 
@@ -323,10 +551,26 @@ fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixL
     use SkydimoLayoutType::*;
 
     let zone_count = config.zones.len();
-    let z1 = if zone_count >= 1 { config.zones[0].led_count } else { 0 };
-    let z2 = if zone_count >= 2 { config.zones[1].led_count } else { 0 };
-    let z3 = if zone_count >= 3 { config.zones[2].led_count } else { 0 };
-    let z4 = if zone_count >= 4 { config.zones[3].led_count } else { 0 };
+    let z1 = if zone_count >= 1 {
+        config.zones[0].led_count
+    } else {
+        0
+    };
+    let z2 = if zone_count >= 2 {
+        config.zones[1].led_count
+    } else {
+        0
+    };
+    let z3 = if zone_count >= 3 {
+        config.zones[2].led_count
+    } else {
+        0
+    };
+    let z4 = if zone_count >= 4 {
+        config.zones[3].led_count
+    } else {
+        0
+    };
 
     let total_leds = config.total_leds;
 
@@ -462,11 +706,7 @@ fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixL
         }
     }
 
-    let matrix = MatrixMap {
-        width,
-        height,
-        map,
-    };
+    let matrix = MatrixMap { width, height, map };
 
     let zone = Zone::matrix("Matrix", matrix, total_leds);
 
@@ -489,5 +729,3 @@ pub fn build_layout_from_device_name(device_name: &str) -> Option<SkydimoMatrixL
 
     None
 }
-
-

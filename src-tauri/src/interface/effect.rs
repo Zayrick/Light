@@ -1,6 +1,6 @@
 use super::controller::Color;
-use std::time::Duration;
 use serde_json::Value;
+use std::time::Duration;
 
 pub trait Effect: Send {
     fn id(&self) -> String;

@@ -1,7 +1,7 @@
-use crate::interface::effect::{Effect, EffectMetadata};
 use crate::interface::controller::Color;
-use std::time::Duration;
+use crate::interface::effect::{Effect, EffectMetadata};
 use inventory;
+use std::time::Duration;
 
 pub struct TurnOffEffect;
 

@@ -12,10 +12,7 @@ pub struct ScreenFrame<'a> {
 #[derive(Debug)]
 pub enum ScreenCaptureError {
     Unsupported(&'static str),
-    OsError {
-        context: &'static str,
-        code: u32,
-    },
+    OsError { context: &'static str, code: u32 },
     InvalidState(&'static str),
 }
 
@@ -76,4 +73,3 @@ pub mod windows {
         }
     }
 }
-
