@@ -27,7 +27,8 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 struct ParamDependencyInfo {
-    key: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     equals: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,16 +39,37 @@ struct ParamDependencyInfo {
 
 impl From<&EffectParamDependency> for ParamDependencyInfo {
     fn from(dep: &EffectParamDependency) -> Self {
-        let behavior = match dep.behavior {
-            DependencyBehavior::Hide => Some("hide"),
-            DependencyBehavior::Disable => Some("disable"),
-        };
+        match dep {
+            EffectParamDependency::Dependency {
+                key,
+                equals,
+                not_equals,
+                behavior,
+            } => {
+                let behavior_str = match behavior {
+                    DependencyBehavior::Hide => Some("hide"),
+                    DependencyBehavior::Disable => Some("disable"),
+                };
 
-        ParamDependencyInfo {
-            key: dep.key,
-            equals: dep.equals,
-            not_equals: dep.not_equals,
-            behavior,
+                ParamDependencyInfo {
+                    key: Some(key),
+                    equals: *equals,
+                    not_equals: *not_equals,
+                    behavior: behavior_str,
+                }
+            }
+            EffectParamDependency::Always(behavior) => {
+                let behavior_str = match behavior {
+                    DependencyBehavior::Hide => Some("hide"),
+                    DependencyBehavior::Disable => Some("disable"),
+                };
+                ParamDependencyInfo {
+                    key: None,
+                    equals: None,
+                    not_equals: None,
+                    behavior: behavior_str,
+                }
+            }
         }
     }
 }

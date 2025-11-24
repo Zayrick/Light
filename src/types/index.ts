@@ -43,7 +43,7 @@ export interface EffectInfo {
 export type ParamDependencyBehavior = 'hide' | 'disable';
 
 export interface ParamDependency {
-  key: string;
+  key?: string;
   equals?: number;
   notEquals?: number;
   behavior?: ParamDependencyBehavior;

@@ -165,6 +165,15 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
       return { visible: true, disabled: false };
     }
 
+    if (!dependency.key) {
+      if (dependency.behavior === "hide") {
+        return { visible: false, disabled: false };
+      } else if (dependency.behavior === "disable") {
+        return { visible: true, disabled: true };
+      }
+      return { visible: true, disabled: false };
+    }
+
     const controlling = mode.params?.find((p) => p.key === dependency.key);
     if (!controlling) {
       return { visible: true, disabled: false };
