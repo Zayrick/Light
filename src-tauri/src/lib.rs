@@ -40,12 +40,17 @@ fn update_effect_params(port: String, params: serde_json::Value, manager: State<
     manager.update_effect_params(&port, params)
 }
 
+#[tauri::command]
+fn set_brightness(port: String, brightness: u8, manager: State<LightingManager>) -> Result<(), String> {
+    manager.set_brightness(&port, brightness)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .manage(LightingManager::new())
-    .invoke_handler(tauri::generate_handler![scan_devices, get_effects, set_effect, update_effect_params])
+    .invoke_handler(tauri::generate_handler![scan_devices, get_effects, set_effect, update_effect_params, set_brightness])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

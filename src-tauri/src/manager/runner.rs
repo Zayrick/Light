@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex, Condvar};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use std::sync::mpsc::{self, Sender};
@@ -11,6 +11,7 @@ use crate::manager::inventory::create_effect;
 
 pub struct EffectRunner {
     running: Arc<AtomicBool>,
+    brightness: Arc<AtomicU8>,
     ticker_thread: Option<JoinHandle<()>>,
     writer_thread: Option<JoinHandle<()>>,
     shared_state: Arc<(Mutex<Option<Vec<Color>>>, Condvar)>,
@@ -22,6 +23,7 @@ impl EffectRunner {
         effect_id: &str,
         controller_arc: Arc<Mutex<Box<dyn Controller>>>,
         app_handle: AppHandle,
+        initial_brightness: u8,
     ) -> Result<Self, String> {
         // Check if effect exists before spawning
         if create_effect(effect_id).is_none() {
@@ -34,6 +36,7 @@ impl EffectRunner {
         };
 
         let running = Arc::new(AtomicBool::new(true));
+        let brightness = Arc::new(AtomicU8::new(initial_brightness));
         let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
         let (param_tx, param_rx) = mpsc::channel();
         
@@ -42,12 +45,15 @@ impl EffectRunner {
 
         // --- Writer Thread ---
         let writer_running = running.clone();
+        let writer_brightness = brightness.clone();
         let writer_state = shared_state.clone();
         let writer_controller = controller_arc.clone();
         let writer_recycle_tx = recycle_tx.clone();
 
         let writer_thread = thread::spawn(move || {
             let (lock, cvar) = &*writer_state;
+            let mut output_buffer = Vec::<Color>::new();
+
             loop {
                 let mut frame_guard = lock.lock().unwrap();
                 
@@ -66,8 +72,28 @@ impl EffectRunner {
                 drop(frame_guard); // Unlock to allow Ticker to produce next frame
 
                 if let Some(colors) = frame {
+                    let b_val = writer_brightness.load(Ordering::Relaxed);
+                    
+                    // Apply brightness if needed
+                    let target_slice = if b_val >= 100 {
+                        &colors[..]
+                    } else {
+                        let factor = b_val as f32 / 100.0;
+                        if output_buffer.len() != colors.len() {
+                            output_buffer.resize(colors.len(), Color::default());
+                        }
+                        for (i, c) in colors.iter().enumerate() {
+                            output_buffer[i] = Color {
+                                r: (c.r as f32 * factor).round() as u8,
+                                g: (c.g as f32 * factor).round() as u8,
+                                b: (c.b as f32 * factor).round() as u8,
+                            };
+                        }
+                        &output_buffer[..]
+                    };
+
                     let mut c = writer_controller.lock().unwrap();
-                    if let Err(_) = c.update(&colors) {
+                    if let Err(_) = c.update(target_slice) {
                         break; // Stop on hardware error
                     }
                     // Recycle the buffer
@@ -177,11 +203,16 @@ impl EffectRunner {
             writer_thread: Some(writer_thread),
             shared_state,
             param_tx,
+            brightness,
         })
     }
 
     pub fn update_params(&self, params: Value) {
         let _ = self.param_tx.send(params);
+    }
+
+    pub fn set_brightness(&self, brightness: u8) {
+        self.brightness.store(brightness, Ordering::Relaxed);
     }
 
     pub fn stop(mut self) {
