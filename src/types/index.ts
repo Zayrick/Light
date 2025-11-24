@@ -34,4 +34,6 @@ export interface Device {
 export interface EffectInfo {
   id: string;
   name: string;
+  description?: string;
+  group?: string;
 }

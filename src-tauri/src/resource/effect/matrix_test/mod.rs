@@ -86,6 +86,8 @@ fn factory() -> Box<dyn Effect> {
 inventory::submit!(EffectMetadata {
     id: "matrix_test",
     name: "Matrix Test",
+    description: Some("Matrix alignment test pattern"),
+    group: Some("Test"),
     factory: factory,
 });
 
