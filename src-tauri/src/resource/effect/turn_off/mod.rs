@@ -26,6 +26,8 @@ fn factory() -> Box<dyn Effect> {
 inventory::submit!(EffectMetadata {
     id: "turn_off",
     name: "Turn Off",
+    description: Some("Turn off all LEDs"),
+    group: Some("Basic"),
     factory: factory,
 });
 

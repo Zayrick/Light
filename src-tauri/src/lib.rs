@@ -17,6 +17,8 @@ use serde::Serialize;
 struct EffectInfo {
     id: &'static str,
     name: &'static str,
+    description: Option<&'static str>,
+    group: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -26,6 +28,8 @@ fn get_effects() -> Vec<EffectInfo> {
         .map(|e| EffectInfo {
             id: e.id,
             name: e.name,
+            description: e.description,
+            group: e.group,
         })
         .collect()
 }

@@ -15,6 +15,8 @@ pub trait Effect: Send {
 pub struct EffectMetadata {
     pub id: &'static str,
     pub name: &'static str,
+    pub description: Option<&'static str>,
+    pub group: Option<&'static str>,
     pub factory: fn() -> Box<dyn Effect>,
 }
 

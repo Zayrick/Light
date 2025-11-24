@@ -97,5 +97,7 @@ fn factory() -> Box<dyn Effect> {
 inventory::submit!(EffectMetadata {
     id: "rainbow",
     name: "Rainbow",
+    description: Some("Cycling rainbow colors"),
+    group: Some("Dynamic"),
     factory: factory,
 });
