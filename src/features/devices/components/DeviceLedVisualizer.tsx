@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import useMeasure from 'react-use-measure';
 import { useLedColors } from '../../../hooks/useLedStream';
-import { Device, ZoneType } from '../../../types';
+import { Device } from '../../../types';
 
 interface DeviceLedVisualizerProps {
   device: Device;
