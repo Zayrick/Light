@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
-import Slider from "@mui/material/Slider";
 import FormControl from "@mui/material/FormControl";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
@@ -25,6 +24,7 @@ import {
   ListFilter,
 } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
+import { Slider } from "../../../components/ui/Slider";
 
 interface DeviceDetailProps {
   device: Device;
@@ -78,16 +78,13 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, number>>({});
   const [hasMounted, setHasMounted] = useState(false);
-  const normalizeSliderValue = (value: number | number[]) =>
-    Array.isArray(value) ? value[0] : value;
 
   useEffect(() => {
     // Avoid underline "floating" on initial page enter; only animate on user interactions
     setHasMounted(true);
   }, []);
 
-  const handleBrightnessChange = (value: number) => {
-    setBrightness(value);
+  const commitBrightness = (value: number) => {
     api.setBrightness(device.port, value).catch(console.error);
   };
 
@@ -225,6 +222,13 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   ) => {
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
+  };
+
+  const handleParamCommit = (
+    mode: DisplayMode,
+    param: EffectParam,
+    value: number
+  ) => {
     pushParamsToBackend(mode, { [param.key]: value });
   };
 
@@ -359,8 +363,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
             
             {/* Brightness Control */}
             <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Sun size={12} /> Brightness</span>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Sun size={12} /> Brightness</span>
                 <span>{brightness}%</span>
               </div>
               <Slider
@@ -368,10 +372,8 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                 min={0}
                 max={100}
                 step={1}
-                onChange={(_, newValue) =>
-                  handleBrightnessChange(normalizeSliderValue(newValue))
-                }
-                sx={{ color: 'var(--accent-color)' }}
+                onChange={setBrightness}
+                onCommit={commitBrightness}
               />
             </div>
           </Card>
@@ -414,14 +416,12 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           max={param.max}
                           step={param.step}
                           disabled={disabled}
-                          onChange={(_, newValue) =>
-                            handleParamChange(
-                              selectedMode,
-                              param,
-                              normalizeSliderValue(newValue)
-                            )
+                          onChange={(newValue) =>
+                            handleParamChange(selectedMode, param, newValue)
                           }
-                          sx={{ color: 'var(--accent-color)' }}
+                          onCommit={(newValue) =>
+                            handleParamCommit(selectedMode, param, newValue)
+                          }
                         />
                       </div>
                     );
@@ -461,13 +461,11 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                               labelId={selectLabelId}
                               value={String(value)}
                               disabled={disabled}
-                              onChange={(event: SelectChangeEvent<string>) =>
-                                handleParamChange(
-                                  selectedMode,
-                                  param,
-                                  Number(event.target.value)
-                                )
-                              }
+                              onChange={(event: SelectChangeEvent<string>) => {
+                                const val = Number(event.target.value);
+                                handleParamChange(selectedMode, param, val);
+                                handleParamCommit(selectedMode, param, val);
+                              }}
                               MenuProps={{
                                 PaperProps: {
                                   sx: {
