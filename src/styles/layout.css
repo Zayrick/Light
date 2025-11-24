@@ -241,6 +241,7 @@
 
 .scroll-container {
   flex: 1;
+  min-height: 0;
   /* Reduced left padding to bring content closer to sidebar */
   padding: 24px 24px 24px 12px; 
   overflow-y: auto;
@@ -267,12 +268,13 @@
   max-width: 1500px;
   width: 100%;
   margin: 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .content-max-width.full-height {
   height: 100%;
-  display: flex;
-  flex-direction: column;
 }
 
 .page-header {
