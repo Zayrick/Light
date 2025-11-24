@@ -2,7 +2,9 @@ pub mod interface;
 pub mod manager;
 pub mod resource;
 
-use crate::interface::effect::{EffectParam, EffectParamKind};
+use crate::interface::effect::{
+    DependencyBehavior, EffectParam, EffectParamDependency, EffectParamKind,
+};
 use crate::manager::inventory::list_effects;
 use crate::manager::{Device, LightingManager};
 #[cfg(target_os = "windows")]
@@ -24,6 +26,33 @@ async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>
 use serde::Serialize;
 
 #[derive(Serialize)]
+struct ParamDependencyInfo {
+    key: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    equals: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_equals: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    behavior: Option<&'static str>,
+}
+
+impl From<&EffectParamDependency> for ParamDependencyInfo {
+    fn from(dep: &EffectParamDependency) -> Self {
+        let behavior = match dep.behavior {
+            DependencyBehavior::Hide => Some("hide"),
+            DependencyBehavior::Disable => Some("disable"),
+        };
+
+        ParamDependencyInfo {
+            key: dep.key,
+            equals: dep.equals,
+            not_equals: dep.not_equals,
+            behavior,
+        }
+    }
+}
+
+#[derive(Serialize)]
 #[serde(tag = "type")]
 enum EffectParamInfo {
     #[serde(rename = "slider")]
@@ -34,6 +63,8 @@ enum EffectParamInfo {
         max: f64,
         step: f64,
         default: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dependency: Option<ParamDependencyInfo>,
     },
     #[serde(rename = "select")]
     Select {
@@ -41,6 +72,8 @@ enum EffectParamInfo {
         label: &'static str,
         default: f64,
         options: Vec<SelectOptionInfo>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dependency: Option<ParamDependencyInfo>,
     },
 }
 
@@ -52,6 +85,8 @@ struct SelectOptionInfo {
 
 impl From<&'static EffectParam> for EffectParamInfo {
     fn from(param: &'static EffectParam) -> Self {
+        let dependency = param.dependency.as_ref().map(ParamDependencyInfo::from);
+
         match &param.kind {
             EffectParamKind::Slider {
                 min,
@@ -65,6 +100,7 @@ impl From<&'static EffectParam> for EffectParamInfo {
                 max: *max,
                 step: *step,
                 default: *default,
+                dependency,
             },
             EffectParamKind::Select { default, options } => {
                 let resolved = match options.resolve() {
@@ -100,6 +136,7 @@ impl From<&'static EffectParam> for EffectParamInfo {
                     label: param.label,
                     default: default_value,
                     options,
+                    dependency,
                 }
             }
         }
