@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
-import { Device } from "../../../types";
+import { Device, EffectInfo } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { 
@@ -11,48 +11,122 @@ import { Card } from "../../../components/ui/Card";
 
 interface DeviceDetailProps {
   device: Device;
+  effects: EffectInfo[];
+  onSetEffect: (port: string, effectId: string) => Promise<void>;
 }
 
-// Mock Data
-const MODE_CATEGORIES = ["Basic", "Dynamic", "Music", "Screen"];
+type ModeCategory = string;
 
 const CATEGORY_TRANSITION = {
   duration: 0.25,
   ease: [0.16, 1, 0.3, 1] as const,
 };
 
-const MOCK_MODES = [
-  { id: "static", name: "Static Color", category: "Basic", icon: Palette, description: "Solid color light" },
-  { id: "breathing", name: "Breathing", category: "Basic", icon: Wind, description: "Fading in and out" },
-  { id: "strobing", name: "Strobing", category: "Basic", icon: Zap, description: "Fast flashing" },
-  
-  { id: "rainbow", name: "Rainbow", category: "Dynamic", icon: Waves, description: "Flowing rainbow colors" },
-  { id: "meteor", name: "Meteor", category: "Dynamic", icon: Sparkles, description: "Falling meteor trail" },
-  { id: "fire", name: "Fire", category: "Dynamic", icon: Flame, description: "Flickering fire effect" },
-  
-  { id: "rhythm", name: "Rhythm", category: "Music", icon: Music, description: "Reacts to music beat" },
-  
-  { id: "sync", name: "Screen Sync", category: "Screen", icon: Monitor, description: "Matches screen colors" },
-];
+// Icon mapping helpers so visual style stays nice while data is real
+const EFFECT_ICON_MAP: Record<string, ComponentType<{ size?: number }>> = {
+  rainbow: Waves,
+  matrix_test: Monitor,
+  turn_off: Sun,
+};
+
+const GROUP_ICON_MAP: Record<string, ComponentType<{ size?: number }>> = {
+  Basic: Palette,
+  Dynamic: Waves,
+  Test: Sparkles,
+};
+
+const DEFAULT_ICON = Zap;
 
 const MOCK_COLORS = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF", "#FFFFFF"];
 
-export function DeviceDetail({ device }: DeviceDetailProps) {
-  const [selectedCategory, setSelectedCategory] = useState("Basic");
-  const [selectedModeId, setSelectedModeId] = useState("static");
+interface DisplayMode extends EffectInfo {
+  category: ModeCategory;
+  icon: ComponentType<{ size?: number }>;
+}
+
+export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps) {
+  const [selectedCategory, setSelectedCategory] = useState<ModeCategory>(() => {
+    const initialEffect = effects.find((e) => e.id === device.current_effect_id);
+    if (initialEffect?.group) return initialEffect.group;
+    const groups = Array.from(
+      new Set(effects.map((e) => e.group ?? "Other"))
+    );
+    const preferredOrder = ["Basic", "Dynamic", "Music", "Screen", "Test", "Other"];
+    for (const g of preferredOrder) {
+      if (groups.includes(g)) return g;
+    }
+    return groups[0] ?? "Other";
+  });
+  const [selectedModeId, setSelectedModeId] = useState<string | null>(device.current_effect_id ?? null);
   
   // Mock settings states
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [speed, setSpeed] = useState(50);
   const [selectedColor, setSelectedColor] = useState("#FF0000");
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    // Avoid underline "floating" on initial page enter; only animate on user interactions
+    setHasMounted(true);
+  }, []);
 
   const handleBrightnessChange = (value: number) => {
     setBrightness(value);
     api.setBrightness(device.port, value).catch(console.error);
   };
 
-  const filteredModes = MOCK_MODES.filter(m => m.category === selectedCategory);
-  const selectedMode = MOCK_MODES.find(m => m.id === selectedModeId);
+  // Adapt raw backend effects into display modes with categories and icons
+  const modes: DisplayMode[] = useMemo(() => {
+    return effects.map((effect) => {
+      const category: ModeCategory = effect.group ?? "Other";
+      const icon =
+        EFFECT_ICON_MAP[effect.id] ??
+        (effect.group ? GROUP_ICON_MAP[effect.group] : undefined) ??
+        DEFAULT_ICON;
+
+      return {
+        ...effect,
+        category,
+        icon,
+      };
+    });
+  }, [effects]);
+
+  // Compute available categories dynamically from backend groups
+  const categories: ModeCategory[] = useMemo(() => {
+    const set = new Set<ModeCategory>();
+    modes.forEach((m) => set.add(m.category));
+    const available = Array.from(set);
+    const preferredOrder = ["Basic", "Dynamic", "Music", "Screen", "Test", "Other"];
+    const ordered = preferredOrder.filter((c) => available.includes(c));
+    const remaining = available.filter((c) => !preferredOrder.includes(c));
+    return [...ordered, ...remaining];
+  }, [modes]);
+
+  // Keep selected category valid if effects list changes
+  useEffect(() => {
+    if (!categories.includes(selectedCategory) && categories.length > 0) {
+      setSelectedCategory(categories[0]);
+    }
+  }, [categories, selectedCategory]);
+
+  // Sync selected mode with backend-known current effect for this device
+  useEffect(() => {
+    setSelectedModeId(device.current_effect_id ?? null);
+  }, [device.current_effect_id, device.port]);
+
+  const filteredModes = modes.filter((m) => m.category === selectedCategory);
+
+  const selectedMode = modes.find((m) => m.id === selectedModeId);
+
+  const handleModeClick = async (modeId: string) => {
+    setSelectedModeId(modeId);
+    try {
+      await onSetEffect(device.port, modeId);
+    } catch (err) {
+      console.error("Failed to set effect:", err);
+    }
+  };
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -75,7 +149,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
           
           {/* Categories */}
           <div className="mode-tabs" style={{ marginTop: '0' }}>
-            {MODE_CATEGORIES.map((category) => {
+            {categories.map((category) => {
               const isActive = selectedCategory === category;
               return (
                 <motion.button
@@ -92,9 +166,9 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                 >
                   {isActive && (
                     <motion.div
-                      layoutId="mode-category-underline"
+                      layoutId={`mode-category-underline-${device.id}`}
                       className="mode-tab-underline"
-                      transition={CATEGORY_TRANSITION}
+                      transition={hasMounted ? CATEGORY_TRANSITION : { duration: 0 }}
                     />
                   )}
                   <span className="mode-tab-label">{category}</span>
@@ -122,7 +196,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                     backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
                     transition: 'all 0.2s ease'
                   }}
-                  onClick={() => setSelectedModeId(mode.id)}
+                  onClick={() => handleModeClick(mode.id)}
                 >
                    <div style={{ 
                      display: 'flex',
@@ -203,7 +277,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 
                 {/* Speed Control (Dynamic Modes) */}
-                {(selectedMode.category === 'Dynamic' || selectedMode.id === 'breathing' || selectedMode.id === 'strobing') && (
+                {selectedMode.category === 'Dynamic' && (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={12} /> Speed</span>
@@ -234,7 +308,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
                 )}
 
                 {/* Color Control (Static/Basic Modes) */}
-                {(selectedMode.category === 'Basic' || selectedMode.id === 'meteor') && (
+                {selectedMode.category === 'Basic' && (
                   <div>
                     <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Palette size={12} /> Color

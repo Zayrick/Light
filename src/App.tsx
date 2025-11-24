@@ -39,6 +39,7 @@ export default function App() {
     isScanning,
     statusMsg,
     scanDevices,
+    updateDeviceEffect,
   } = useDevices();
   
   const { effects, applyEffect } = useEffects();
@@ -63,7 +64,10 @@ export default function App() {
   }, [currentIndex]);
 
   const handleSetEffect = async (port: string, effectId: string) => {
-    await applyEffect(port, effectId);
+    const ok = await applyEffect(port, effectId);
+    if (ok) {
+      updateDeviceEffect(port, effectId);
+    }
   };
 
   return (
@@ -113,7 +117,11 @@ export default function App() {
             transition={ANIMATION_TRANSITION}
             style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
           >
-            <DeviceDetail device={selectedDevice} />
+            <DeviceDetail
+              device={selectedDevice}
+              effects={effects}
+              onSetEffect={handleSetEffect}
+            />
           </motion.div>
         )}
 

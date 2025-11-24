@@ -8,6 +8,22 @@ export function useDevices() {
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready");
 
+  const updateDeviceEffect = useCallback((port: string, effectId: string | null) => {
+    setDevices((prev) =>
+      prev.map((dev) =>
+        dev.port === port
+          ? { ...dev, current_effect_id: effectId ?? undefined }
+          : dev
+      )
+    );
+
+    setSelectedDevice((prev) =>
+      prev && prev.port === port
+        ? { ...prev, current_effect_id: effectId ?? undefined }
+        : prev
+    );
+  }, []);
+
   const scanDevices = useCallback(async () => {
     setIsScanning(true);
     setStatusMsg("Scanning devices...");
@@ -49,6 +65,7 @@ export function useDevices() {
     isScanning,
     statusMsg,
     scanDevices,
+    updateDeviceEffect,
   };
 }
 
