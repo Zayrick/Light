@@ -1,4 +1,4 @@
-use std::{mem, slice};
+use std::{mem, slice, time::Instant};
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -33,10 +33,12 @@ use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 
 const BYTES_PER_PIXEL: usize = 4;
 const DEFAULT_TIMEOUT_MS: u32 = 16;
+const DEFAULT_CAPTURE_FPS: u8 = 30;
 
 /// Percentage scale factor (1-100) for the capture resolution.
 /// 100% means original resolution, 1% means 1% of original resolution.
 static CAPTURE_SCALE_PERCENT: AtomicU8 = AtomicU8::new(5);
+static CAPTURE_FPS: AtomicU8 = AtomicU8::new(DEFAULT_CAPTURE_FPS);
 
 pub fn set_capture_scale_percent(percent: u8) {
     CAPTURE_SCALE_PERCENT.store(percent.clamp(1, 100), Ordering::Relaxed);
@@ -44,6 +46,17 @@ pub fn set_capture_scale_percent(percent: u8) {
 
 pub fn get_capture_scale_percent() -> u8 {
     CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed)
+}
+
+/// Target sampling frame rate (1-60 FPS) for screen capture.
+/// This controls how often a new desktop frame is acquired. Between samples,
+/// the last captured frame is reused.
+pub fn set_capture_fps(fps: u8) {
+    CAPTURE_FPS.store(fps.clamp(1, 60), Ordering::Relaxed);
+}
+
+pub fn get_capture_fps() -> u8 {
+    CAPTURE_FPS.load(Ordering::Relaxed)
 }
 
 // Legacy shim: manual sampling knobs now no-op because downscaling is automatic.
@@ -248,6 +261,7 @@ pub struct DesktopDuplicator {
     height: u32,
     stride: usize,
     has_frame: bool,
+    last_capture_time: Option<Instant>,
 }
 
 impl DesktopDuplicator {
@@ -271,6 +285,7 @@ impl DesktopDuplicator {
             height,
             stride: width as usize * BYTES_PER_PIXEL,
             has_frame: false,
+            last_capture_time: None,
         })
     }
 
@@ -292,6 +307,7 @@ impl DesktopDuplicator {
         self.stride = width as usize * BYTES_PER_PIXEL;
         self.buffer.clear();
         self.has_frame = false;
+        self.last_capture_time = None;
 
         Ok(())
     }
@@ -440,11 +456,25 @@ impl DesktopDuplicator {
 
 impl ScreenCapturer for DesktopDuplicator {
     fn capture(&mut self) -> Result<ScreenFrame<'_>, ScreenCaptureError> {
-        match self.capture_internal()? {
-            CaptureStatus::Updated => {}
-            CaptureStatus::NoFrame => {
-                if !self.has_frame {
-                    return Err(ScreenCaptureError::InvalidState("No frame available yet"));
+        // Determine desired sampling interval from configured FPS.
+        let fps = CAPTURE_FPS.load(Ordering::Relaxed).clamp(1, 60) as u64;
+        let interval = std::time::Duration::from_micros(1_000_000u64 / fps.max(1));
+        let now = Instant::now();
+
+        let should_capture = match self.last_capture_time {
+            Some(last) => now.duration_since(last) >= interval,
+            None => true,
+        };
+
+        if should_capture || !self.has_frame {
+            match self.capture_internal()? {
+                CaptureStatus::Updated => {
+                    self.last_capture_time = Some(now);
+                }
+                CaptureStatus::NoFrame => {
+                    if !self.has_frame {
+                        return Err(ScreenCaptureError::InvalidState("No frame available yet"));
+                    }
                 }
             }
         }

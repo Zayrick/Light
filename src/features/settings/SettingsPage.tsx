@@ -4,11 +4,13 @@ import { api } from "../../services/api";
 
 export function SettingsPage() {
   const [captureScale, setCaptureScale] = useState<number>(5);
+  const [captureFps, setCaptureFps] = useState<number>(30);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getCaptureScale().then((scale) => {
+    Promise.all([api.getCaptureScale(), api.getCaptureFps()]).then(([scale, fps]) => {
       setCaptureScale(scale);
+      setCaptureFps(fps);
       setLoading(false);
     });
   }, []);
@@ -19,6 +21,14 @@ export function SettingsPage() {
 
   const handleScaleCommit = () => {
     api.setCaptureScale(captureScale);
+  };
+
+  const handleFpsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCaptureFps(Number(e.target.value));
+  };
+
+  const handleFpsCommit = () => {
+    api.setCaptureFps(captureFps);
   };
 
   return (
@@ -52,6 +62,28 @@ export function SettingsPage() {
             <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
               Adjust the capture resolution. 100% maintains original quality (may affect performance).
               Lower values improve performance.
+            </p>
+          </div>
+
+          <div style={{ marginTop: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+              <label htmlFor="capture-fps">Sampling Frame Rate</label>
+              <span>{captureFps} FPS</span>
+            </div>
+            <input
+              id="capture-fps"
+              type="range"
+              min="1"
+              max="60"
+              value={captureFps}
+              onChange={handleFpsChange}
+              onMouseUp={handleFpsCommit}
+              onTouchEnd={handleFpsCommit}
+              style={{ width: "100%" }}
+              disabled={loading}
+            />
+            <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
+              Control how often the screen is sampled per second. Lower FPS reduces CPU/GPU usage but may look less smooth.
             </p>
           </div>
         </Card>
