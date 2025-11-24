@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use tauri::AppHandle;
 
-use crate::interface::controller::Controller;
+use crate::interface::controller::{Controller, Zone};
 use self::inventory::scan_controllers;
 use self::runner::EffectRunner;
 
@@ -17,6 +17,8 @@ pub struct Device {
     pub description: String,
     pub id: String,
     pub length: usize,
+    pub zones: Vec<Zone>,
+    pub virtual_layout: (usize, usize),
 }
 
 pub struct LightingManager {
@@ -53,6 +55,8 @@ impl LightingManager {
                 description: c.description(),
                 id: c.serial_id(),
                 length: c.length(),
+                zones: c.zones(),
+                virtual_layout: c.virtual_layout(),
             });
         }
         devices

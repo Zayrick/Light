@@ -6,6 +6,9 @@ pub trait Effect: Send {
     fn id(&self) -> String;
     fn name(&self) -> String;
     fn tick(&mut self, elapsed: Duration, buffer: &mut [Color]);
+    /// Called when the virtual device layout (width/height) changes.
+    /// Default implementation ignores the size, which is fine for 1D effects.
+    fn resize(&mut self, _width: usize, _height: usize) {}
     fn update_params(&mut self, _params: Value) {}
 }
 
