@@ -2,15 +2,12 @@ use crate::interface::controller::Color;
 use crate::interface::effect::{
     Effect, EffectMetadata, EffectParam, EffectParamKind, SelectOption, SelectOptions,
 };
-use crate::resource::screen::{ScreenCapturer, ScreenFrame};
+use crate::resource::screen::ScreenFrame;
 use inventory;
 use std::time::Duration;
 
 #[cfg(target_os = "windows")]
-use crate::resource::screen::DesktopDuplicator;
-
-#[cfg(not(target_os = "windows"))]
-use crate::resource::screen::windows::DesktopDuplicator;
+use crate::resource::screen::windows::ScreenSubscription;
 
 const SCREEN_PARAMS: [EffectParam; 1] = [EffectParam {
     key: "displayIndex",
@@ -47,7 +44,7 @@ pub struct ScreenMirrorEffect {
     width: usize,
     height: usize,
     #[cfg(target_os = "windows")]
-    capturer: Option<DesktopDuplicator>,
+    screen: Option<ScreenSubscription>,
     #[cfg(target_os = "windows")]
     display_index: usize,
 }
@@ -58,46 +55,30 @@ impl ScreenMirrorEffect {
             width: 0,
             height: 0,
             #[cfg(target_os = "windows")]
-            capturer: None,
+            screen: None,
             #[cfg(target_os = "windows")]
             display_index: 0,
         }
     }
 
     #[cfg(target_os = "windows")]
-    fn ensure_capturer(&mut self) -> Option<&mut DesktopDuplicator> {
-        let mut needs_refresh = false;
-
-        if let Some(capturer) = self.capturer.as_mut() {
-            if capturer.output_index() != self.display_index {
-                if let Err(err) = capturer.set_output_index(self.display_index) {
+    fn ensure_subscription(&mut self) -> bool {
+        if self.screen.is_none() {
+            match ScreenSubscription::new(self.display_index) {
+                Ok(handle) => {
+                    self.screen = Some(handle);
+                }
+                Err(err) => {
                     eprintln!(
-                        "[screen-mirror] Failed to switch display ({}): {}",
+                        "[screen-mirror] Failed to init screen subscription ({}): {}",
                         self.display_index, err
                     );
-                    self.capturer = None;
-                    needs_refresh = true;
-                }
-            }
-        } else {
-            needs_refresh = true;
-        }
-
-        if needs_refresh {
-            match DesktopDuplicator::with_output(self.display_index) {
-                Ok(c) => self.capturer = Some(c),
-                Err(err) => {
-                    eprintln!("[screen-mirror] Failed to init capturer: {}", err);
-                    return None;
+                    self.screen = None;
                 }
             }
         }
-        self.capturer.as_mut()
-    }
 
-    #[cfg(not(target_os = "windows"))]
-    fn ensure_capturer(&mut self) -> Option<&mut DesktopDuplicator> {
-        None
+        self.screen.is_some()
     }
 
     fn paint_black(&self, buffer: &mut [Color]) {
@@ -106,22 +87,40 @@ impl ScreenMirrorEffect {
 
     fn capture_and_render(&mut self, buffer: &mut [Color]) -> bool {
         let layout = (self.width, self.height);
-        match self.ensure_capturer() {
-            Some(capturer) => match capturer.capture() {
-                Ok(frame) => {
-                    render_frame(layout, &frame, buffer);
-                    true
-                }
-                Err(err) => {
-                    eprintln!("[screen-mirror] capture error: {}", err);
-                    #[cfg(target_os = "windows")]
-                    {
-                        self.capturer = None;
+
+        #[cfg(target_os = "windows")]
+        {
+            if !self.ensure_subscription() {
+                return false;
+            }
+
+            if let Some(subscription) = &self.screen {
+                match subscription.capture_with(|frame| render_frame(layout, frame, buffer)) {
+                    Ok(true) => {
+                        return true;
                     }
-                    false
+                    Ok(false) => {
+                        // No active duplicator for this display yet.
+                        return false;
+                    }
+                    Err(err) => {
+                        eprintln!("[screen-mirror] capture error: {}", err);
+                        // Drop current subscription so that a new one (and duplicator)
+                        // will be created on the next tick if needed.
+                        self.screen = None;
+                        return false;
+                    }
                 }
-            },
-            None => false,
+            }
+
+            return false;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = layout;
+            let _ = buffer;
+            false
         }
     }
 }
@@ -164,15 +163,9 @@ impl Effect for ScreenMirrorEffect {
                 let idx = display_index_value as usize;
                 if idx != self.display_index {
                     self.display_index = idx;
-                    if let Some(capturer) = self.capturer.as_mut() {
-                        if let Err(err) = capturer.set_output_index(idx) {
-                            eprintln!(
-                                "[screen-mirror] Failed to apply display selection ({}): {}",
-                                idx, err
-                            );
-                            self.capturer = None;
-                        }
-                    }
+                    // Drop existing subscription so that the next capture will
+                    // attach to the newly selected display via the manager.
+                    self.screen = None;
                 }
             }
         }

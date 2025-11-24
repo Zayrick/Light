@@ -1,6 +1,8 @@
 use std::{mem, slice};
 
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use windows::{
     core::Interface,
     Win32::{
@@ -89,6 +91,145 @@ pub fn list_displays() -> Result<Vec<DisplayInfo>, ScreenCaptureError> {
         }
 
         Ok(displays)
+    }
+}
+
+/// Global manager that owns one `DesktopDuplicator` per active display index and
+/// reference-counts how many consumers are using each display.
+///
+/// This ensures that:
+/// - A desktop duplication instance is created only on first use of a display.
+/// - All effects/devices requesting the same display share the same duplicator.
+/// - When the last consumer drops its handle, the duplicator is destroyed and
+///   underlying DXGI/D3D resources are released.
+struct ScreenCaptureManager {
+    outputs: HashMap<usize, ManagedOutput>,
+}
+
+struct ManagedOutput {
+    duplicator: DesktopDuplicator,
+    ref_count: usize,
+}
+
+impl ScreenCaptureManager {
+    fn new() -> Self {
+        Self {
+            outputs: HashMap::new(),
+        }
+    }
+
+    /// Increase reference count for a display, creating the duplicator on first use.
+    fn acquire(&mut self, output_index: usize) -> Result<(), ScreenCaptureError> {
+        if let Some(entry) = self.outputs.get_mut(&output_index) {
+            entry.ref_count += 1;
+            return Ok(());
+        }
+
+        let duplicator = DesktopDuplicator::with_output(output_index)?;
+        self.outputs.insert(
+            output_index,
+            ManagedOutput {
+                duplicator,
+                ref_count: 1,
+            },
+        );
+        Ok(())
+    }
+
+    /// Decrease reference count and drop the duplicator when it is no longer used.
+    fn release(&mut self, output_index: usize) {
+        if let Some(entry) = self.outputs.get_mut(&output_index) {
+            if entry.ref_count > 1 {
+                entry.ref_count -= 1;
+                return;
+            }
+        }
+        self.outputs.remove(&output_index);
+    }
+
+    /// Perform a capture on the specified display and hand the frame to the caller.
+    ///
+    /// Returns:
+    /// - Ok(true) if a frame was captured and the callback was invoked.
+    /// - Ok(false) if there is currently no active duplicator for this display.
+    /// - Err(_) if the capture failed; for certain invalid-state errors, the
+    ///   duplicator is dropped so that a future acquire will recreate it.
+    fn capture_with<F>(
+        &mut self,
+        output_index: usize,
+        f: F,
+    ) -> Result<bool, ScreenCaptureError>
+    where
+        F: FnOnce(&ScreenFrame<'_>),
+    {
+        let Some(entry) = self.outputs.get_mut(&output_index) else {
+            return Ok(false);
+        };
+
+        match entry.duplicator.capture() {
+            Ok(frame) => {
+                f(&frame);
+                Ok(true)
+            }
+            Err(err) => {
+                // If duplication is no longer valid, drop this instance so it
+                // can be recreated on next acquire.
+                if matches!(err, ScreenCaptureError::InvalidState(_)) {
+                    self.outputs.remove(&output_index);
+                }
+                Err(err)
+            }
+        }
+    }
+}
+
+static SCREEN_CAPTURE_MANAGER: OnceLock<Mutex<ScreenCaptureManager>> = OnceLock::new();
+
+fn global_manager() -> &'static Mutex<ScreenCaptureManager> {
+    SCREEN_CAPTURE_MANAGER.get_or_init(|| Mutex::new(ScreenCaptureManager::new()))
+}
+
+/// RAII handle representing a subscription to a particular display.
+///
+/// Cloning is intentionally not supported; each effect/device should own its
+/// own handle. Dropping the handle automatically decreases the reference count
+/// in the global manager.
+#[derive(Debug)]
+pub struct ScreenSubscription {
+    display_index: usize,
+}
+
+impl ScreenSubscription {
+    /// Create a new subscription for the specified display, incrementing the
+    /// global reference count and creating the duplicator if needed.
+    pub fn new(display_index: usize) -> Result<Self, ScreenCaptureError> {
+        let manager = global_manager();
+        let mut guard = manager.lock().unwrap();
+        guard.acquire(display_index)?;
+        Ok(Self { display_index })
+    }
+
+    pub fn display_index(&self) -> usize {
+        self.display_index
+    }
+
+    /// Capture a frame from the subscribed display and invoke the callback.
+    pub fn capture_with<F>(&self, f: F) -> Result<bool, ScreenCaptureError>
+    where
+        F: FnOnce(&ScreenFrame<'_>),
+    {
+        let manager = global_manager();
+        let mut guard = manager.lock().unwrap();
+        guard.capture_with(self.display_index, f)
+    }
+}
+
+impl Drop for ScreenSubscription {
+    fn drop(&mut self) {
+        let manager = global_manager();
+        if let Ok(mut guard) = manager.lock() {
+            guard.release(self.display_index);
+        }
     }
 }
 
