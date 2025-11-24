@@ -2,7 +2,7 @@ use std::{mem, slice};
 
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{atomic::{AtomicU8, Ordering}, Mutex, OnceLock};
 use windows::{
     core::Interface,
     Win32::{
@@ -34,15 +34,19 @@ use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 const BYTES_PER_PIXEL: usize = 4;
 const DEFAULT_TIMEOUT_MS: u32 = 16;
 
-/// Target maximum capture dimension used to automatically downscale
-/// the desktop frame, similar to HyperHDR's `actualDivide` logic.
-/// The desktop is downscaled in powers of two until its largest
-/// side is not greater than this value.
-const MAX_CAPTURE_DIMENSION: usize = 1920;
+/// Percentage scale factor (1-100) for the capture resolution.
+/// 100% means original resolution, 1% means 1% of original resolution.
+static CAPTURE_SCALE_PERCENT: AtomicU8 = AtomicU8::new(5);
 
-// Legacy compatibility: previous versions exposed explicit sampling
-// ratio getters/setters on this module. They are now no-ops because
-// downscaling is handled automatically based on MAX_CAPTURE_DIMENSION.
+pub fn set_capture_scale_percent(percent: u8) {
+    CAPTURE_SCALE_PERCENT.store(percent.clamp(1, 100), Ordering::Relaxed);
+}
+
+pub fn get_capture_scale_percent() -> u8 {
+    CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed)
+}
+
+// Legacy shim: manual sampling knobs now no-op because downscaling is automatic.
 #[allow(dead_code)]
 pub fn set_sample_ratio(_percent: u8) {}
 
@@ -111,14 +115,7 @@ pub fn list_displays() -> Result<Vec<DisplayInfo>, ScreenCaptureError> {
     }
 }
 
-/// Global manager that owns one `DesktopDuplicator` per active display index and
-/// reference-counts how many consumers are using each display.
-///
-/// This ensures that:
-/// - A desktop duplication instance is created only on first use of a display.
-/// - All effects/devices requesting the same display share the same duplicator.
-/// - When the last consumer drops its handle, the duplicator is destroyed and
-///   underlying DXGI/D3D resources are released.
+/// Shares one `DesktopDuplicator` per display and frees it when unused.
 struct ScreenCaptureManager {
     outputs: HashMap<usize, ManagedOutput>,
 }
@@ -135,7 +132,7 @@ impl ScreenCaptureManager {
         }
     }
 
-    /// Increase reference count for a display, creating the duplicator on first use.
+    /// Bumps reference count and lazily creates the duplicator.
     fn acquire(&mut self, output_index: usize) -> Result<(), ScreenCaptureError> {
         if let Some(entry) = self.outputs.get_mut(&output_index) {
             entry.ref_count += 1;
@@ -153,7 +150,7 @@ impl ScreenCaptureManager {
         Ok(())
     }
 
-    /// Decrease reference count and drop the duplicator when it is no longer used.
+    /// Drops the duplicator once the last user leaves.
     fn release(&mut self, output_index: usize) {
         if let Some(entry) = self.outputs.get_mut(&output_index) {
             if entry.ref_count > 1 {
@@ -164,13 +161,7 @@ impl ScreenCaptureManager {
         self.outputs.remove(&output_index);
     }
 
-    /// Perform a capture on the specified display and hand the frame to the caller.
-    ///
-    /// Returns:
-    /// - Ok(true) if a frame was captured and the callback was invoked.
-    /// - Ok(false) if there is currently no active duplicator for this display.
-    /// - Err(_) if the capture failed; for certain invalid-state errors, the
-    ///   duplicator is dropped so that a future acquire will recreate it.
+    /// Captures on the display, recreating invalid duplicators when needed.
     fn capture_with<F>(
         &mut self,
         output_index: usize,
@@ -206,19 +197,14 @@ fn global_manager() -> &'static Mutex<ScreenCaptureManager> {
     SCREEN_CAPTURE_MANAGER.get_or_init(|| Mutex::new(ScreenCaptureManager::new()))
 }
 
-/// RAII handle representing a subscription to a particular display.
-///
-/// Cloning is intentionally not supported; each effect/device should own its
-/// own handle. Dropping the handle automatically decreases the reference count
-/// in the global manager.
+/// RAII handle for a display subscription; dropping releases the reference.
 #[derive(Debug)]
 pub struct ScreenSubscription {
     display_index: usize,
 }
 
 impl ScreenSubscription {
-    /// Create a new subscription for the specified display, incrementing the
-    /// global reference count and creating the duplicator if needed.
+    /// Subscribes to the display, creating its duplicator if necessary.
     pub fn new(display_index: usize) -> Result<Self, ScreenCaptureError> {
         let manager = global_manager();
         let mut guard = manager.lock().unwrap();
@@ -388,17 +374,11 @@ impl DesktopDuplicator {
             let data = slice::from_raw_parts(mapped.pBits as *const u8, pitch * height);
             let (rotated_width, rotated_height) = rotated_dimensions(width, height, self.rotation);
 
-            // Automatically determine downscale factor in powers of two so that
-            // the largest dimension does not exceed MAX_CAPTURE_DIMENSION.
-            let mut max_dim = rotated_width.max(rotated_height).max(1);
-            let mut divide = 0usize;
-            while max_dim > MAX_CAPTURE_DIMENSION {
-                divide += 1;
-                max_dim >>= 1;
-            }
-
-            let scaled_width = (rotated_width >> divide).max(1);
-            let scaled_height = (rotated_height >> divide).max(1);
+            // Determine downscale factor based on CAPTURE_SCALE_PERCENT.
+            let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as usize;
+            
+            let scaled_width = (rotated_width * scale_percent / 100).max(1);
+            let scaled_height = (rotated_height * scale_percent / 100).max(1);
 
             let mut scaled =
                 vec![0u8; scaled_width * scaled_height * BYTES_PER_PIXEL];
