@@ -21,4 +21,5 @@ export const api = {
   setBrightness: async (port: string, brightness: number): Promise<void> => {
     return await invoke("set_brightness", { port, brightness });
   },
+
 };

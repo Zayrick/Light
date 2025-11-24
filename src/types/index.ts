@@ -40,14 +40,27 @@ export interface EffectInfo {
   params?: EffectParam[];
 }
 
-export type EffectParam = SliderParam;
-
-export interface SliderParam {
-  type: 'slider';
+interface EffectParamBase {
   key: string;
   label: string;
+  default: number;
+}
+
+export interface SliderParam extends EffectParamBase {
+  type: 'slider';
   min: number;
   max: number;
   step: number;
-  default: number;
 }
+
+export interface SelectOption {
+  label: string;
+  value: number;
+}
+
+export interface SelectParam extends EffectParamBase {
+  type: 'select';
+  options: SelectOption[];
+}
+
+export type EffectParam = SliderParam | SelectParam;

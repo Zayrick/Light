@@ -1,5 +1,6 @@
 use std::{mem, slice};
 
+use serde::Serialize;
 use windows::{
     core::Interface,
     Win32::{
@@ -31,11 +32,72 @@ use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 const BYTES_PER_PIXEL: usize = 4;
 const DEFAULT_TIMEOUT_MS: u32 = 16;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DisplayInfo {
+    pub index: usize,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn list_displays() -> Result<Vec<DisplayInfo>, ScreenCaptureError> {
+    unsafe {
+        let factory: IDXGIFactory1 =
+            CreateDXGIFactory1().map_err(|err| os_error("CreateDXGIFactory1", err))?;
+        let mut displays = Vec::new();
+        let mut current_index = 0usize;
+
+        for adapter_index in 0.. {
+            let adapter = match factory.EnumAdapters1(adapter_index) {
+                Ok(adapter) => adapter,
+                Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                Err(err) => return Err(os_error("EnumAdapters1", err)),
+            };
+
+            for output_index in 0.. {
+                let output = match adapter.EnumOutputs(output_index) {
+                    Ok(output) => output,
+                    Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                    Err(err) => return Err(os_error("IDXGIAdapter::EnumOutputs", err)),
+                };
+
+                let desc = output
+                    .GetDesc()
+                    .map_err(|err| os_error("IDXGIOutput::GetDesc", err))?;
+                if !desc.AttachedToDesktop.as_bool() {
+                    continue;
+                }
+
+                let (width, height) = output_dimensions(&desc);
+                let raw_name = wide_to_string(&desc.DeviceName);
+                let fallback = format!("Display {}", current_index + 1);
+                let name = raw_name
+                    .trim()
+                    .is_empty()
+                    .then(|| fallback.clone())
+                    .unwrap_or(raw_name);
+
+                displays.push(DisplayInfo {
+                    index: current_index,
+                    name,
+                    width,
+                    height,
+                });
+
+                current_index += 1;
+            }
+        }
+
+        Ok(displays)
+    }
+}
+
 pub struct DesktopDuplicator {
     device: ID3D11Device,
     device_context: ID3D11DeviceContext,
     duplication: IDXGIOutputDuplication,
     rotation: DXGI_MODE_ROTATION,
+    output_index: usize,
     timeout_ms: u32,
     buffer: Vec<u8>,
     width: u32,
@@ -46,7 +108,11 @@ pub struct DesktopDuplicator {
 
 impl DesktopDuplicator {
     pub fn new() -> Result<Self, ScreenCaptureError> {
-        let (device, device_context, duplication, desc) = create_duplication()?;
+        Self::with_output(0)
+    }
+
+    pub fn with_output(output_index: usize) -> Result<Self, ScreenCaptureError> {
+        let (device, device_context, duplication, desc) = create_duplication(output_index)?;
         let (width, height) = output_dimensions(&desc);
 
         Ok(Self {
@@ -54,6 +120,7 @@ impl DesktopDuplicator {
             device_context,
             duplication,
             rotation: desc.Rotation,
+            output_index,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             buffer: Vec::new(),
             width,
@@ -61,6 +128,32 @@ impl DesktopDuplicator {
             stride: width as usize * BYTES_PER_PIXEL,
             has_frame: false,
         })
+    }
+
+    pub fn set_output_index(&mut self, output_index: usize) -> Result<(), ScreenCaptureError> {
+        if self.output_index == output_index {
+            return Ok(());
+        }
+
+        let (device, device_context, duplication, desc) = create_duplication(output_index)?;
+        let (width, height) = output_dimensions(&desc);
+
+        self.device = device;
+        self.device_context = device_context;
+        self.duplication = duplication;
+        self.rotation = desc.Rotation;
+        self.output_index = output_index;
+        self.width = width;
+        self.height = height;
+        self.stride = width as usize * BYTES_PER_PIXEL;
+        self.buffer.clear();
+        self.has_frame = false;
+
+        Ok(())
+    }
+
+    pub fn output_index(&self) -> usize {
+        self.output_index
     }
 
     fn capture_internal(&mut self) -> Result<CaptureStatus, ScreenCaptureError> {
@@ -212,7 +305,9 @@ impl ScreenCapturer for DesktopDuplicator {
 
 unsafe impl Send for DesktopDuplicator {}
 
-fn create_duplication() -> Result<
+fn create_duplication(
+    target_output_index: usize,
+) -> Result<
     (
         ID3D11Device,
         ID3D11DeviceContext,
@@ -224,6 +319,7 @@ fn create_duplication() -> Result<
     unsafe {
         let factory: IDXGIFactory1 =
             CreateDXGIFactory1().map_err(|err| os_error("CreateDXGIFactory1", err))?;
+        let mut current_index = 0usize;
 
         for adapter_index in 0.. {
             let adapter = match factory.EnumAdapters1(adapter_index) {
@@ -232,7 +328,9 @@ fn create_duplication() -> Result<
                 Err(err) => return Err(os_error("EnumAdapters1", err)),
             };
 
-            if let Some(result) = try_initialize_on_adapter(&adapter)? {
+            if let Some(result) =
+                try_initialize_on_adapter(&adapter, target_output_index, &mut current_index)?
+            {
                 return Ok(result);
             }
         }
@@ -245,6 +343,8 @@ fn create_duplication() -> Result<
 
 fn try_initialize_on_adapter(
     adapter: &IDXGIAdapter1,
+    target_output_index: usize,
+    current_index: &mut usize,
 ) -> Result<
     Option<(
         ID3D11Device,
@@ -275,16 +375,19 @@ fn try_initialize_on_adapter(
                 continue;
             }
 
-            let output1: IDXGIOutput1 = output
-                .cast()
-                .map_err(|err| os_error("IDXGIOutput::cast<IDXGIOutput1>", err))?;
+            if *current_index == target_output_index {
+                let output1: IDXGIOutput1 = output
+                    .cast()
+                    .map_err(|err| os_error("IDXGIOutput::cast<IDXGIOutput1>", err))?;
 
-            match output1.DuplicateOutput(&device) {
-                Ok(duplication) => {
-                    return Ok(Some((device, device_context, duplication, desc)));
+                match output1.DuplicateOutput(&device) {
+                    Ok(duplication) => {
+                        return Ok(Some((device, device_context, duplication, desc)));
+                    }
+                    Err(err) => return Err(os_error("IDXGIOutput1::DuplicateOutput", err)),
                 }
-                Err(err) if err.code() == DXGI_ERROR_ACCESS_DENIED => continue,
-                Err(err) => return Err(os_error("IDXGIOutput1::DuplicateOutput", err)),
+            } else {
+                *current_index += 1;
             }
         }
     }
@@ -327,6 +430,11 @@ fn rotated_dimensions(width: usize, height: usize, rotation: DXGI_MODE_ROTATION)
         DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270 => (height, width),
         _ => (width, height),
     }
+}
+
+fn wide_to_string(buffer: &[u16]) -> String {
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    String::from_utf16_lossy(&buffer[..end])
 }
 
 fn os_error(context: &'static str, err: windows::core::Error) -> ScreenCaptureError {

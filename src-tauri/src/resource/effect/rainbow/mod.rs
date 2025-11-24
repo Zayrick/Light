@@ -13,11 +13,12 @@ pub struct RainbowEffect {
 const RAINBOW_PARAMS: [EffectParam; 1] = [EffectParam {
     key: "speed",
     label: "速度",
-    kind: EffectParamKind::Slider,
-    min: 0.0,
-    max: 5.0,
-    step: 0.1,
-    default: 2.5,
+    kind: EffectParamKind::Slider {
+        min: 0.0,
+        max: 5.0,
+        step: 0.1,
+        default: 2.5,
+    },
 }];
 
 impl Effect for RainbowEffect {

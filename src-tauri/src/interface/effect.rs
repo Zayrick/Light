@@ -12,19 +12,56 @@ pub trait Effect: Send {
     fn update_params(&mut self, _params: Value) {}
 }
 
-#[derive(Clone, Copy)]
-pub enum EffectParamKind {
-    Slider,
-}
-
 pub struct EffectParam {
     pub key: &'static str,
     pub label: &'static str,
     pub kind: EffectParamKind,
-    pub min: f64,
-    pub max: f64,
-    pub step: f64,
-    pub default: f64,
+}
+
+pub enum EffectParamKind {
+    Slider {
+        min: f64,
+        max: f64,
+        step: f64,
+        default: f64,
+    },
+    Select {
+        default: f64,
+        options: SelectOptions,
+    },
+}
+
+pub enum SelectOptions {
+    Static(&'static [StaticSelectOption]),
+    Dynamic(DynamicSelectOptions),
+}
+
+pub struct StaticSelectOption {
+    pub label: &'static str,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectOption {
+    pub label: String,
+    pub value: f64,
+}
+
+pub type DynamicSelectOptions = fn() -> Result<Vec<SelectOption>, String>;
+
+impl SelectOptions {
+    pub fn resolve(&self) -> Result<Vec<SelectOption>, String> {
+        match self {
+            SelectOptions::Static(options) => Ok(options
+                .iter()
+                .map(|option| SelectOption {
+                    label: option.label.to_string(),
+                    value: option.value,
+                })
+                .collect()),
+            SelectOptions::Dynamic(loader) => loader(),
+        }
+    }
 }
 
 pub struct EffectMetadata {
