@@ -484,11 +484,13 @@
 .mode-tabs {
   position: relative;
   display: flex;
-  width: 100%;
   gap: 24px;
   border-bottom: 1px solid var(--border-strong);
   padding-bottom: 0;
   margin-bottom: 24px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .mode-tab-button {
@@ -502,6 +504,8 @@
   color: var(--text-secondary);
   font-weight: 400;
   outline: none;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .mode-tab-button-active {

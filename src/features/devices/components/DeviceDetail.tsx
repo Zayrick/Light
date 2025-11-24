@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  type ComponentType,
+  type WheelEvent,
+} from "react";
 import { motion } from "framer-motion";
 import FormControl from "@mui/material/FormControl";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
@@ -78,6 +85,19 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, number>>({});
   const [hasMounted, setHasMounted] = useState(false);
+
+  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const handleCategoryWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const container = categoryScrollRef.current;
+    if (!container) return;
+
+    // Translate vertical wheel scrolling into horizontal scrolling
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      container.scrollLeft += event.deltaY;
+      event.preventDefault();
+    }
+  };
 
   useEffect(() => {
     // Avoid underline "floating" on initial page enter; only animate on user interactions
@@ -267,10 +287,22 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
 
       <div style={{ display: 'flex', gap: '24px', flex: 1, minHeight: 0 }}>
         {/* Left Column: Modes */}
-        <div className="no-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', }}>
-          
-          {/* Categories */}
-          <div className="mode-tabs" style={{ marginTop: '0' }}>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            minWidth: 0,
+          }}
+        >
+          {/* Categories (Mode Groups) */}
+          <div
+            ref={categoryScrollRef}
+            className="mode-tabs no-scrollbar"
+            style={{ marginTop: "0" }}
+            onWheel={handleCategoryWheel}
+          >
             {categories.map((category) => {
               const isActive = selectedCategory === category;
               return (
@@ -299,61 +331,117 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
             })}
           </div>
 
-          {/* Modes Grid */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
-            gap: '8px',
-            paddingBottom: '20px'
-          }}>
-             {filteredModes.map(mode => {
-               const isSelected = selectedModeId === mode.id;
-               return (
-                <Card 
-                  key={mode.id} 
-                  hoverable
-                  className={`${isSelected ? 'active-mode-card' : ''}`}
-                  style={{ 
-                    border: isSelected ? '1px solid var(--accent-color)' : '1px solid transparent',
-                    backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
-                    transition: 'all 0.2s ease',
-                    padding: '12px'
-                  }}
-                  onClick={() => handleModeClick(mode.id)}
-                >
-                   <div style={{ 
-                     display: 'flex',
-                     flexDirection: 'column',
-                     alignItems: 'flex-start',
-                     gap: '10px'
-                   }}>
-                     <div style={{ 
-                       width: '32px', 
-                       height: '32px', 
-                       borderRadius: '8px',
-                       display: 'flex',
-                       alignItems: 'center',
-                       justifyContent: 'center',
-                       backgroundColor: isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.1)',
-                       color: isSelected ? 'var(--accent-text)' : 'var(--text-primary)',
-                       transition: 'all 0.2s ease',
-                       boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
-                     }}>
+          {/* Modes Grid (independent vertical scroll area) */}
+          <div
+            className="no-scrollbar"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                gap: "8px",
+                paddingBottom: "20px",
+              }}
+            >
+              {filteredModes.map((mode) => {
+                const isSelected = selectedModeId === mode.id;
+                return (
+                  <Card
+                    key={mode.id}
+                    hoverable
+                    className={`${isSelected ? "active-mode-card" : ""}`}
+                    style={{
+                      border: isSelected
+                        ? "1px solid var(--accent-color)"
+                        : "1px solid transparent",
+                      backgroundColor: isSelected
+                        ? "var(--bg-card-hover)"
+                        : undefined,
+                      transition: "all 0.2s ease",
+                      padding: "12px",
+                    }}
+                    onClick={() => handleModeClick(mode.id)}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: isSelected
+                            ? "var(--accent-color)"
+                            : "rgba(128, 128, 128, 0.1)",
+                          color: isSelected
+                            ? "var(--accent-text)"
+                            : "var(--text-primary)",
+                          transition: "all 0.2s ease",
+                          boxShadow: isSelected
+                            ? "0 2px 8px rgba(0,0,0,0.2)"
+                            : "none",
+                        }}
+                      >
                         <mode.icon size={18} />
-                     </div>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                       <div style={{ fontSize: '13px', fontWeight: 600 }}>{mode.name}</div>
-                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.3' }}>{mode.description}</div>
-                     </div>
-                   </div>
-                </Card>
-               );
-             })}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px",
+                        }}
+                      >
+                        <div
+                          style={{ fontSize: "13px", fontWeight: 600 }}
+                        >
+                          {mode.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "var(--text-secondary)",
+                            lineHeight: "1.3",
+                          }}
+                        >
+                          {mode.description}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Right Column: Configuration */}
-        <div className="no-scrollbar" style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0, overflowY: 'auto', paddingBottom: '20px' }}>
+        {/* Right Column: Configuration (fixed/preferred width) */}
+        <div
+          className="no-scrollbar"
+          style={{
+            width: "280px",
+            flex: "0 0 280px",
+            minWidth: "260px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+            minHeight: 0,
+            overflowY: "auto",
+            paddingBottom: "20px",
+          }}
+        >
           
           {/* Global Device Settings */}
           <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
