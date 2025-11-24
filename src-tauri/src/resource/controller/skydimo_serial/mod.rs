@@ -16,6 +16,8 @@ pub struct SkydimoSerialController {
     port: Box<dyn SerialPort>,
     zones: Vec<Zone>,
     led_count: usize,
+    buffer_cache: Vec<Color>,
+    packet_cache: Vec<u8>,
 }
 
 impl SkydimoSerialController {
@@ -28,7 +30,16 @@ impl SkydimoSerialController {
             (vec![Zone::linear("LED Strip", 0, 100)], 100)
         };
 
-        Self { port_name, model, id, port, zones, led_count }
+        Self { 
+            port_name, 
+            model, 
+            id, 
+            port, 
+            zones, 
+            led_count,
+            buffer_cache: Vec::with_capacity(led_count),
+            packet_cache: Vec::with_capacity(led_count * 3 + 10),
+        }
     }
 }
 
@@ -62,47 +73,55 @@ impl Controller for SkydimoSerialController {
     }
 
     fn update(&mut self, colors: &[Color]) -> Result<(), String> {
+        // Ensure buffer cache is sized correctly
+        if self.buffer_cache.len() != self.led_count {
+            self.buffer_cache.resize(self.led_count, Color::default());
+        }
+
         // If we have a matrix zone, map from virtual matrix buffer into the
         // physical LED order defined by the Skydimo configuration.
-        let mapped: Vec<Color> = if let Some(matrix_zone) = self
-            .zones
-            .iter()
-            .find(|z| z.matrix.is_some())
-        {
+        if let Some(matrix_zone) = self.zones.iter().find(|z| z.matrix.is_some()) {
             let matrix = matrix_zone.matrix.as_ref().unwrap();
             let expected = matrix.width.saturating_mul(matrix.height);
 
             if colors.len() != expected {
                 // Mismatched frame size – fall back to clamping on physical count.
-                let mut out = vec![Color::default(); self.led_count];
                 for (i, c) in colors.iter().take(self.led_count).enumerate() {
-                    out[i] = *c;
+                    self.buffer_cache[i] = *c;
                 }
-                out
             } else {
-                let mut out = vec![Color::default(); self.led_count];
+                // Clear buffer with black first if needed, but usually we overwrite.
+                // Since the mapping might be sparse (Option<usize>), we should clear or 
+                // assume unmapped LEDs are black.
+                // For performance, if we map *all* LEDs, we don't need to clear.
+                // But let's be safe and fill with default (black) if map is sparse.
+                // However, filling every frame is cost.
+                // Let's just overwrite mapped ones. If unmapped ones retain old color, that might be a glitch.
+                // Ideally we clear.
+                self.buffer_cache.fill(Color::default());
 
                 for (virtual_idx, opt_led) in matrix.map.iter().enumerate() {
                     if let Some(led_idx) = opt_led {
-                        if *led_idx < out.len() && virtual_idx < colors.len() {
-                            out[*led_idx] = colors[virtual_idx];
+                        if *led_idx < self.buffer_cache.len() && virtual_idx < colors.len() {
+                            self.buffer_cache[*led_idx] = colors[virtual_idx];
                         }
                     }
                 }
-
-                out
             }
         } else {
             // No matrix information – treat the buffer as physical order.
-            let mut out = vec![Color::default(); self.led_count];
-            for (i, c) in colors.iter().take(self.led_count).enumerate() {
-                out[i] = *c;
+            // Copy min(colors.len(), led_count)
+            let len = colors.len().min(self.led_count);
+            self.buffer_cache[..len].copy_from_slice(&colors[..len]);
+            
+            // If buffer is larger than input, zero out the rest?
+            if len < self.led_count {
+                 self.buffer_cache[len..].fill(Color::default());
             }
-            out
         };
 
-        let packet = SkydimoSerialProtocol::encode_frame(&mapped);
-        self.port.write_all(&packet).map_err(|e| e.to_string())?;
+        SkydimoSerialProtocol::encode_into(&self.buffer_cache, &mut self.packet_cache);
+        self.port.write_all(&self.packet_cache).map_err(|e| e.to_string())?;
         Ok(())
     }
 }
@@ -112,11 +131,13 @@ fn probe() -> Vec<Box<dyn Controller>> {
     let ports = serialport::available_ports().unwrap_or_default();
 
     for p in ports {
-        let is_usb = match &p.port_type {
-            SerialPortType::UsbPort(_) => true,
+        let is_valid = match &p.port_type {
+            SerialPortType::UsbPort(info) => {
+                info.vid == 0x1A86 && info.pid == 0x7523
+            },
             _ => false,
         };
-        if !is_usb { continue; }
+        if !is_valid { continue; }
 
         if let Ok(mut port) = serialport::new(&p.port_name, 115_200)
             .timeout(Duration::from_millis(200))

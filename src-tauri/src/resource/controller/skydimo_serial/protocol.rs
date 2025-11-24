@@ -6,21 +6,22 @@ use std::time::Duration;
 pub struct SkydimoSerialProtocol;
 
 impl SkydimoSerialProtocol {
-    pub fn encode_frame(colors: &[Color]) -> Vec<u8> {
+    pub fn encode_into(colors: &[Color], buffer: &mut Vec<u8>) {
         let count = colors.len();
-        let mut packet = Vec::with_capacity(6 + count * 3);
+        buffer.clear();
+        buffer.reserve(6 + count * 3);
+        
         // Header: Ada (0x41, 0x64, 0x61, 0x00)
-        packet.extend_from_slice(&[0x41, 0x64, 0x61, 0x00]);
+        buffer.extend_from_slice(&[0x41, 0x64, 0x61, 0x00]);
         // Count (High, Low)
-        packet.push(((count >> 8) & 0xFF) as u8);
-        packet.push((count & 0xFF) as u8);
+        buffer.push(((count >> 8) & 0xFF) as u8);
+        buffer.push((count & 0xFF) as u8);
 
         for color in colors {
-            packet.push(color.r);
-            packet.push(color.g);
-            packet.push(color.b);
+            buffer.push(color.r);
+            buffer.push(color.g);
+            buffer.push(color.b);
         }
-        packet
     }
 
     pub fn handshake(port: &mut Box<dyn SerialPort>) -> Result<(String, String), String> {
