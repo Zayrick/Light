@@ -19,6 +19,7 @@ const RAINBOW_PARAMS: [EffectParam; 1] = [EffectParam {
         step: 0.1,
         default: 2.5,
     },
+    dependency: None,
 }];
 
 impl Effect for RainbowEffect {

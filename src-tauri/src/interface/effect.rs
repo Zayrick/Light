@@ -12,10 +12,38 @@ pub trait Effect: Send {
     fn update_params(&mut self, _params: Value) {}
 }
 
+/// How the frontend should treat a parameter when its dependency condition is not met.
+#[derive(Clone, Copy, Debug)]
+pub enum DependencyBehavior {
+    /// Completely hide the parameter from the UI.
+    Hide,
+    /// Keep the parameter visible but disabled (read‑only).
+    Disable,
+}
+
+/// Declarative dependency between two parameters of the same effect.
+///
+/// This allows the backend to describe simple rules like:
+/// - Only show slider B when select A has a certain value
+/// - Disable advanced settings when a toggle is off
+#[derive(Clone, Copy, Debug)]
+pub struct EffectParamDependency {
+    /// Key of the parameter this one depends on.
+    pub key: &'static str,
+    /// Optional equality condition: dependency is met when `key` equals this value.
+    pub equals: Option<f64>,
+    /// Optional inequality condition: dependency is met when `key` does NOT equal this value.
+    pub not_equals: Option<f64>,
+    /// How the frontend should react when the dependency is not satisfied.
+    pub behavior: DependencyBehavior,
+}
+
 pub struct EffectParam {
     pub key: &'static str,
     pub label: &'static str,
     pub kind: EffectParamKind,
+    /// Optional dependency that describes when this parameter is active/visible.
+    pub dependency: Option<EffectParamDependency>,
 }
 
 pub enum EffectParamKind {

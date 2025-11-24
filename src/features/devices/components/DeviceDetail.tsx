@@ -4,7 +4,13 @@ import Slider from "@mui/material/Slider";
 import FormControl from "@mui/material/FormControl";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import { Device, EffectInfo, EffectParam, SliderParam } from "../../../types";
+import {
+  Device,
+  EffectInfo,
+  EffectParam,
+  ParamDependency,
+  SliderParam,
+} from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import {
@@ -149,6 +155,44 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   const getParamValue = (mode: DisplayMode, param: EffectParam) => {
     const key = `${mode.id}:${param.key}`;
     return paramValues[key] ?? param.default;
+  };
+
+  const isDependencySatisfied = (
+    mode: DisplayMode,
+    dependency?: ParamDependency
+  ): { visible: boolean; disabled: boolean } => {
+    if (!dependency) {
+      return { visible: true, disabled: false };
+    }
+
+    const controlling = mode.params?.find((p) => p.key === dependency.key);
+    if (!controlling) {
+      return { visible: true, disabled: false };
+    }
+
+    const controllingValue = getParamValue(mode, controlling);
+    let met = true;
+
+    if (dependency.equals !== undefined && controllingValue !== dependency.equals) {
+      met = false;
+    }
+    if (
+      dependency.notEquals !== undefined &&
+      controllingValue === dependency.notEquals
+    ) {
+      met = false;
+    }
+
+    if (met) {
+      return { visible: true, disabled: false };
+    }
+
+    if (dependency.behavior === "hide") {
+      return { visible: false, disabled: false };
+    }
+
+    // default: disable when unmet
+    return { visible: true, disabled: true };
   };
 
   const formatParamValue = (param: SliderParam, value: number) => {
@@ -344,6 +388,11 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                 {selectedMode.params?.map((param) => {
                   if (param.type === 'slider') {
                     const value = getParamValue(selectedMode, param);
+                    const { visible, disabled } = isDependencySatisfied(
+                      selectedMode,
+                      param.dependency
+                    );
+                    if (!visible) return null;
                     return (
                       <div key={param.key}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -355,6 +404,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           min={param.min}
                           max={param.max}
                           step={param.step}
+                          disabled={disabled}
                           onChange={(_, newValue) =>
                             handleParamChange(
                               selectedMode,
@@ -370,6 +420,11 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                     const value = getParamValue(selectedMode, param);
                     const hasOptions = param.options.length > 0;
                     const selectLabelId = `${selectedMode.id}-${param.key}-label`;
+                    const { visible, disabled } = isDependencySatisfied(
+                      selectedMode,
+                      param.dependency
+                    );
+                    if (!visible) return null;
                     return (
                       <div key={param.key}>
                         <div
@@ -396,6 +451,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                             <Select
                               labelId={selectLabelId}
                               value={String(value)}
+                              disabled={disabled}
                               onChange={(event: SelectChangeEvent<string>) =>
                                 handleParamChange(
                                   selectedMode,

@@ -40,10 +40,20 @@ export interface EffectInfo {
   params?: EffectParam[];
 }
 
+export type ParamDependencyBehavior = 'hide' | 'disable';
+
+export interface ParamDependency {
+  key: string;
+  equals?: number;
+  notEquals?: number;
+  behavior?: ParamDependencyBehavior;
+}
+
 interface EffectParamBase {
   key: string;
   label: string;
   default: number;
+  dependency?: ParamDependency;
 }
 
 export interface SliderParam extends EffectParamBase {
