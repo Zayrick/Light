@@ -1,5 +1,7 @@
 use crate::interface::controller::Color;
-use crate::interface::effect::{Effect, EffectMetadata, EffectParam};
+use crate::interface::effect::{
+    Effect, EffectMetadata, EffectParam, EffectParamKind, SelectOption, SelectOptions,
+};
 use crate::resource::screen::{ScreenCapturer, ScreenFrame};
 use inventory;
 use std::time::Duration;
@@ -10,13 +12,44 @@ use crate::resource::screen::DesktopDuplicator;
 #[cfg(not(target_os = "windows"))]
 use crate::resource::screen::windows::DesktopDuplicator;
 
-const NO_PARAMS: &[EffectParam] = &[];
+const SCREEN_PARAMS: [EffectParam; 1] = [EffectParam {
+    key: "displayIndex",
+    label: "屏幕来源",
+    kind: EffectParamKind::Select {
+        default: 0.0,
+        options: SelectOptions::Dynamic(screen_source_options),
+    },
+}];
+
+#[cfg(target_os = "windows")]
+fn screen_source_options() -> Result<Vec<SelectOption>, String> {
+    use crate::resource::screen::windows::list_displays;
+
+    list_displays()
+        .map(|displays| {
+            displays
+                .into_iter()
+                .map(|display| SelectOption {
+                    label: format!("{} ({}x{})", display.name, display.width, display.height),
+                    value: display.index as f64,
+                })
+                .collect()
+        })
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn screen_source_options() -> Result<Vec<SelectOption>, String> {
+    Ok(Vec::new())
+}
 
 pub struct ScreenMirrorEffect {
     width: usize,
     height: usize,
     #[cfg(target_os = "windows")]
     capturer: Option<DesktopDuplicator>,
+    #[cfg(target_os = "windows")]
+    display_index: usize,
 }
 
 impl ScreenMirrorEffect {
@@ -26,13 +59,32 @@ impl ScreenMirrorEffect {
             height: 0,
             #[cfg(target_os = "windows")]
             capturer: None,
+            #[cfg(target_os = "windows")]
+            display_index: 0,
         }
     }
 
     #[cfg(target_os = "windows")]
     fn ensure_capturer(&mut self) -> Option<&mut DesktopDuplicator> {
-        if self.capturer.is_none() {
-            match DesktopDuplicator::new() {
+        let mut needs_refresh = false;
+
+        if let Some(capturer) = self.capturer.as_mut() {
+            if capturer.output_index() != self.display_index {
+                if let Err(err) = capturer.set_output_index(self.display_index) {
+                    eprintln!(
+                        "[screen-mirror] Failed to switch display ({}): {}",
+                        self.display_index, err
+                    );
+                    self.capturer = None;
+                    needs_refresh = true;
+                }
+            }
+        } else {
+            needs_refresh = true;
+        }
+
+        if needs_refresh {
+            match DesktopDuplicator::with_output(self.display_index) {
                 Ok(c) => self.capturer = Some(c),
                 Err(err) => {
                     eprintln!("[screen-mirror] Failed to init capturer: {}", err);
@@ -101,7 +153,29 @@ impl Effect for ScreenMirrorEffect {
     }
 
     fn update_params(&mut self, _params: serde_json::Value) {
-        // No configurable parameters in the simplified mode.
+        #[cfg(not(target_os = "windows"))]
+        let _ = _params;
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(display_index_value) =
+                _params.get("displayIndex").and_then(|value| value.as_u64())
+            {
+                let idx = display_index_value as usize;
+                if idx != self.display_index {
+                    self.display_index = idx;
+                    if let Some(capturer) = self.capturer.as_mut() {
+                        if let Err(err) = capturer.set_output_index(idx) {
+                            eprintln!(
+                                "[screen-mirror] Failed to apply display selection ({}): {}",
+                                idx, err
+                            );
+                            self.capturer = None;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -189,7 +263,6 @@ inventory::submit!(EffectMetadata {
     name: "Screen Mirror",
     description: Some("Mirror the desktop colors onto matrices or strips"),
     group: Some("Screen Sync"),
-    params: NO_PARAMS,
+    params: &SCREEN_PARAMS,
     factory: factory,
 });
-

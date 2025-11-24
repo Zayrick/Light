@@ -5,6 +5,10 @@ pub mod resource;
 use crate::interface::effect::{EffectParam, EffectParamKind};
 use crate::manager::inventory::list_effects;
 use crate::manager::{Device, LightingManager};
+#[cfg(target_os = "windows")]
+use crate::resource::screen::windows::{
+    list_displays as list_windows_displays, DisplayInfo as WindowsDisplayInfo,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -26,19 +30,73 @@ enum EffectParamInfo {
         step: f64,
         default: f64,
     },
+    #[serde(rename = "select")]
+    Select {
+        key: &'static str,
+        label: &'static str,
+        default: f64,
+        options: Vec<SelectOptionInfo>,
+    },
+}
+
+#[derive(Serialize)]
+struct SelectOptionInfo {
+    label: String,
+    value: f64,
 }
 
 impl From<&'static EffectParam> for EffectParamInfo {
     fn from(param: &'static EffectParam) -> Self {
-        match param.kind {
-            EffectParamKind::Slider => EffectParamInfo::Slider {
+        match &param.kind {
+            EffectParamKind::Slider {
+                min,
+                max,
+                step,
+                default,
+            } => EffectParamInfo::Slider {
                 key: param.key,
                 label: param.label,
-                min: param.min,
-                max: param.max,
-                step: param.step,
-                default: param.default,
+                min: *min,
+                max: *max,
+                step: *step,
+                default: *default,
             },
+            EffectParamKind::Select { default, options } => {
+                let resolved = match options.resolve() {
+                    Ok(list) => list,
+                    Err(err) => {
+                        eprintln!(
+                            "[effects] Failed to resolve select options for '{}': {}",
+                            param.key, err
+                        );
+                        Vec::new()
+                    }
+                };
+
+                let mut default_value = *default;
+                if !resolved.is_empty()
+                    && !resolved
+                        .iter()
+                        .any(|option| (option.value - default_value).abs() < f64::EPSILON)
+                {
+                    default_value = resolved[0].value;
+                }
+
+                let options = resolved
+                    .into_iter()
+                    .map(|option| SelectOptionInfo {
+                        label: option.label,
+                        value: option.value,
+                    })
+                    .collect();
+
+                EffectParamInfo::Select {
+                    key: param.key,
+                    label: param.label,
+                    default: default_value,
+                    options,
+                }
+            }
         }
     }
 }
@@ -50,6 +108,18 @@ struct EffectInfo {
     description: Option<&'static str>,
     group: Option<&'static str>,
     params: Vec<EffectParamInfo>,
+}
+
+#[cfg(target_os = "windows")]
+type DisplayInfoResponse = WindowsDisplayInfo;
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Serialize)]
+struct DisplayInfoResponse {
+    index: usize,
+    name: String,
+    width: u32,
+    height: u32,
 }
 
 #[tauri::command]
@@ -64,6 +134,25 @@ fn get_effects() -> Vec<EffectInfo> {
             params: e.params.iter().map(EffectParamInfo::from).collect(),
         })
         .collect()
+}
+
+#[tauri::command]
+fn get_displays() -> Vec<DisplayInfoResponse> {
+    #[cfg(target_os = "windows")]
+    {
+        match list_windows_displays() {
+            Ok(displays) => displays,
+            Err(err) => {
+                eprintln!("[screen] Failed to enumerate displays: {}", err);
+                Vec::new()
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
 }
 
 #[tauri::command]
@@ -102,6 +191,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scan_devices,
             get_effects,
+            get_displays,
             set_effect,
             update_effect_params,
             set_brightness

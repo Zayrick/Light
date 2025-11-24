@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
-import { Device, EffectInfo, SliderParam } from "../../../types";
+import { Device, EffectInfo, EffectParam, SliderParam } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { 
   Palette, Zap, Waves, Sparkles, Monitor,
-  Sun, Gauge, Sliders
+  Sun, Gauge, Sliders, ListFilter
 } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
 
@@ -100,6 +100,9 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
     return [...ordered, ...remaining];
   }, [modes]);
 
+  const filteredModes = modes.filter((m) => m.category === selectedCategory);
+  const selectedMode = modes.find((m) => m.id === selectedModeId);
+
   // Keep selected category valid if effects list changes
   useEffect(() => {
     if (!categories.includes(selectedCategory) && categories.length > 0) {
@@ -112,9 +115,6 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
     setSelectedModeId(device.current_effect_id ?? null);
   }, [device.current_effect_id, device.port]);
 
-  const filteredModes = modes.filter((m) => m.category === selectedCategory);
-
-  const selectedMode = modes.find((m) => m.id === selectedModeId);
 
   // Ensure defaults exist for the selected mode so sliders have values
   useEffect(() => {
@@ -133,7 +133,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
     });
   }, [selectedMode]);
 
-  const getParamValue = (mode: DisplayMode, param: SliderParam) => {
+  const getParamValue = (mode: DisplayMode, param: EffectParam) => {
     const key = `${mode.id}:${param.key}`;
     return paramValues[key] ?? param.default;
   };
@@ -152,7 +152,11 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
     }
   };
 
-  const handleParamChange = (mode: DisplayMode, param: SliderParam, value: number) => {
+  const handleParamChange = (
+    mode: DisplayMode,
+    param: EffectParam,
+    value: number
+  ) => {
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
     pushParamsToBackend(mode, { [param.key]: value });
@@ -340,6 +344,59 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           onChange={(e) => handleParamChange(selectedMode, param, Number(e.target.value))}
                           style={{ width: '100%', accentColor: 'var(--accent-color)' }}
                         />
+                      </div>
+                    );
+                  } else if (param.type === 'select') {
+                    const value = getParamValue(selectedMode, param);
+                    const hasOptions = param.options.length > 0;
+                    return (
+                      <div key={param.key}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            marginBottom: '8px',
+                            fontSize: '12px',
+                            color: 'var(--text-secondary)',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <ListFilter size={12} /> {param.label}
+                          </span>
+                          {hasOptions && (
+                            <span style={{ opacity: 0.7 }}>
+                              {param.options.length} option{param.options.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        {hasOptions ? (
+                          <select
+                            value={String(value)}
+                            onChange={(e) =>
+                              handleParamChange(selectedMode, param, Number(e.target.value))
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              backgroundColor: 'rgba(255,255,255,0.03)',
+                              color: 'var(--text-primary)',
+                              fontSize: '13px',
+                            }}
+                          >
+                            {param.options.map((option) => (
+                              <option key={option.value} value={String(option.value)}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            No options available.
+                          </div>
+                        )}
                       </div>
                     );
                   }
