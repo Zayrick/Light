@@ -91,10 +91,18 @@ impl EffectRunner {
                 None => return,
             };
 
-            let led_count = {
+            let (virtual_width, virtual_height, virtual_len) = {
                 let c = ticker_controller.lock().unwrap();
-                c.length()
+                let (w, h) = c.virtual_layout();
+                let len = w
+                    .checked_mul(h)
+                    .unwrap_or(0)
+                    .max(1);
+                (w, h, len)
             };
+
+            // Inform effect of the current virtual layout
+            effect.resize(virtual_width, virtual_height);
 
             let (lock, cvar) = &*ticker_state;
             let start_time = Instant::now();
@@ -108,13 +116,13 @@ impl EffectRunner {
                 }
 
                 // 1. Get buffer (recycle or create)
-                let mut buffer = recycle_rx.try_recv().unwrap_or_else(|_| {
-                    vec![Color::default(); led_count]
-                });
+                let mut buffer = recycle_rx
+                    .try_recv()
+                    .unwrap_or_else(|_| vec![Color::default(); virtual_len]);
                 
-                // Ensure size is correct (in case led_count changed or new buffer)
-                if buffer.len() != led_count {
-                    buffer.resize(led_count, Color::default());
+                // Ensure size is correct (in case layout changed or new buffer)
+                if buffer.len() != virtual_len {
+                    buffer.resize(virtual_len, Color::default());
                 }
 
                 // 2. Tick Effect
@@ -122,10 +130,15 @@ impl EffectRunner {
                 effect.tick(now.duration_since(start_time), &mut buffer);
 
                 // Emit event to frontend
-                let _ = ticker_app_handle.emit("device-led-update", serde_json::json!({
-                    "port": ticker_port_name,
-                    "colors": buffer
-                }));
+                let _ = ticker_app_handle.emit(
+                    "device-led-update",
+                    serde_json::json!({
+                        "port": ticker_port_name,
+                        "width": virtual_width,
+                        "height": virtual_height,
+                        "colors": buffer,
+                    }),
+                );
 
                 // 3. Send to Writer (Overwrite existing)
                 {

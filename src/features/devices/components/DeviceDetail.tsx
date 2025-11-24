@@ -59,7 +59,7 @@ export function DeviceDetail({ device }: DeviceDetailProps) {
           </p>
         </div>
         <div style={{ flex: 1, height: '80px', minWidth: '200px', maxWidth: '600px' }}>
-          <DeviceLedVisualizer port={device.port} length={device.length} />
+          <DeviceLedVisualizer device={device} />
         </div>
       </header>
 
