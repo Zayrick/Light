@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "./features/layout/AppLayout";
 import { Sidebar } from "./features/layout/Sidebar";
 import { HomePage } from "./features/home/HomePage";
@@ -8,6 +9,26 @@ import { useDevices } from "./hooks/useDevices";
 import { useEffects } from "./hooks/useEffects";
 import "./styles/theme.css";
 import "./styles/layout.css";
+
+const variants = {
+  enter: (direction: number) => ({
+    y: direction > 0 ? 20 : -20,
+    opacity: 0,
+  }),
+  center: {
+    y: 0,
+    opacity: 1,
+  },
+  exit: (direction: number) => ({
+    y: direction > 0 ? -20 : 20,
+    opacity: 0,
+  }),
+};
+
+const ANIMATION_TRANSITION = {
+  duration: 0.3,
+  ease: [0.16, 1, 0.3, 1],
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
@@ -21,6 +42,25 @@ export default function App() {
   } = useDevices();
   
   const { effects, applyEffect } = useEffects();
+
+  // Calculate direction based on sidebar order
+  const getPageIndex = (tab: string, deviceId: string | undefined) => {
+    if (tab === "home") return 0;
+    if (tab === "settings") return 9999; // Always at bottom
+    if (tab === "device-detail" && deviceId) {
+      const idx = devices.findIndex(d => d.id === deviceId);
+      return idx >= 0 ? idx + 1 : 0;
+    }
+    return 0;
+  };
+
+  const currentIndex = getPageIndex(activeTab, selectedDevice?.id);
+  const prevIndexRef = useRef(currentIndex);
+  const direction = currentIndex > prevIndexRef.current ? 1 : -1;
+
+  useEffect(() => {
+    prevIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   const handleSetEffect = async (port: string, effectId: string) => {
     await applyEffect(port, effectId);
@@ -40,21 +80,58 @@ export default function App() {
         />
       }
     >
-      {activeTab === "home" && (
-        <HomePage
-          devices={devices}
-          effects={effects}
-          isScanning={isScanning}
-          onScan={scanDevices}
-          onSetEffect={handleSetEffect}
-        />
-      )}
+      <AnimatePresence mode="wait" custom={direction}>
+        {activeTab === "home" && (
+          <motion.div
+            key="home"
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={ANIMATION_TRANSITION}
+            style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
+          >
+            <HomePage
+              devices={devices}
+              effects={effects}
+              isScanning={isScanning}
+              onScan={scanDevices}
+              onSetEffect={handleSetEffect}
+            />
+          </motion.div>
+        )}
 
-      {activeTab === "device-detail" && selectedDevice && (
-        <DeviceDetail device={selectedDevice} />
-      )}
+        {activeTab === "device-detail" && selectedDevice && (
+          <motion.div
+            key={`device-detail-${selectedDevice.id}`}
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={ANIMATION_TRANSITION}
+            style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+          >
+            <DeviceDetail device={selectedDevice} />
+          </motion.div>
+        )}
 
-      {activeTab === "settings" && <SettingsPage />}
+        {activeTab === "settings" && (
+          <motion.div
+            key="settings"
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={ANIMATION_TRANSITION}
+            style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
+          >
+            <SettingsPage />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }
