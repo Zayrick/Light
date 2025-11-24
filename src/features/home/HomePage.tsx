@@ -9,7 +9,7 @@ interface HomePageProps {
   effects: EffectInfo[];
   isScanning: boolean;
   onScan: () => void;
-  onSetEffect: (port: string, effectId: string) => void;
+  onSetEffect: (port: string, effectId: string) => Promise<void>;
 }
 
 export function HomePage({

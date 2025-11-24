@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/Button";
 interface DeviceCardProps {
   device: Device;
   effects: EffectInfo[];
-  onSetEffect: (port: string, effectId: string) => void;
+  onSetEffect: (port: string, effectId: string) => Promise<void>;
 }
 
 export function DeviceCard({ device, effects, onSetEffect }: DeviceCardProps) {
@@ -38,7 +38,7 @@ export function DeviceCard({ device, effects, onSetEffect }: DeviceCardProps) {
         {effects.map((effect) => (
           <Button
             key={effect.id}
-            variant="secondary"
+            variant={device.current_effect_id === effect.id ? "primary" : "secondary"}
             style={{ fontSize: 11, padding: "4px 8px" }}
             onClick={(e) => {
               e.stopPropagation();

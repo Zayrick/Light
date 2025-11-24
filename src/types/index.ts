@@ -29,6 +29,7 @@ export interface Device {
   zones: Zone[];
   virtual_layout: [number, number]; // Tuple [width, height]
   brightness: number;
+  current_effect_id?: string;
 }
 
 export interface EffectInfo {

@@ -20,12 +20,14 @@ pub struct Device {
     pub zones: Vec<Zone>,
     pub virtual_layout: (usize, usize),
     pub brightness: u8,
+    pub current_effect_id: Option<String>,
 }
 
 pub struct LightingManager {
     controllers: Mutex<HashMap<String, Arc<Mutex<Box<dyn Controller>>>>>,
     active_effects: Mutex<HashMap<String, EffectRunner>>,
     device_brightness: Mutex<HashMap<String, u8>>,
+    active_effect_ids: Mutex<HashMap<String, String>>,
 }
 
 impl LightingManager {
@@ -34,6 +36,7 @@ impl LightingManager {
             controllers: Mutex::new(HashMap::new()),
             active_effects: Mutex::new(HashMap::new()),
             device_brightness: Mutex::new(HashMap::new()),
+            active_effect_ids: Mutex::new(HashMap::new()),
         }
     }
 
@@ -51,10 +54,12 @@ impl LightingManager {
 
         let mut devices = Vec::new();
         let brightness_map = self.device_brightness.lock().unwrap();
+        let effect_map = self.active_effect_ids.lock().unwrap();
 
         for (port, c_arc) in state_controllers.iter() {
             let c = c_arc.lock().unwrap();
             let brightness = *brightness_map.get(port).unwrap_or(&100);
+            let current_effect_id = effect_map.get(port).cloned();
             
             devices.push(Device {
                 port: port.clone(),
@@ -65,6 +70,7 @@ impl LightingManager {
                 zones: c.zones(),
                 virtual_layout: c.virtual_layout(),
                 brightness,
+                current_effect_id,
             });
         }
         devices
@@ -93,6 +99,12 @@ impl LightingManager {
 
         let mut active = self.active_effects.lock().unwrap();
         active.insert(port.to_string(), runner);
+
+        // Track the active effect id for this device
+        {
+            let mut ids = self.active_effect_ids.lock().unwrap();
+            ids.insert(port.to_string(), effect_id.to_string());
+        }
 
         Ok(())
     }
@@ -127,5 +139,9 @@ impl LightingManager {
         if let Some(runner) = active.remove(port) {
             runner.stop();
         }
+
+        // Clear stored active effect id for this device
+        let mut ids = self.active_effect_ids.lock().unwrap();
+        ids.remove(port);
     }
 }
