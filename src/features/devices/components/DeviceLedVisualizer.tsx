@@ -135,7 +135,6 @@ export function DeviceLedVisualizer({ device }: DeviceLedVisualizerProps) {
 
     const defaultFill = 'rgba(128, 128, 128, 0.2)';
     const emptyCellFill = 'rgba(255, 255, 255, 0.06)';
-    const enableGlow = !isDefault && totalVirtualLeds <= 200;
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -161,19 +160,8 @@ export function DeviceLedVisualizer({ device }: DeviceLedVisualizerProps) {
           ? defaultFill
           : `rgb(${c.r ?? 0}, ${c.g ?? 0}, ${c.b ?? 0})`;
 
-        if (enableGlow) {
-          ctx.save();
-          ctx.shadowColor = colorStr;
-          ctx.shadowBlur = size / 2;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
-          ctx.fillStyle = colorStr;
-          drawRoundedRect(x, y, size, size, radius);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = colorStr;
-          drawRoundedRect(x, y, size, size, radius);
-        }
+        ctx.fillStyle = colorStr;
+        drawRoundedRect(x, y, size, size, radius);
       }
     }
   }, [
