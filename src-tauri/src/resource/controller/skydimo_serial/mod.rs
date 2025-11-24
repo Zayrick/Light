@@ -6,8 +6,8 @@ use inventory;
 
 mod protocol;
 use protocol::SkydimoSerialProtocol;
-mod device_config;
-use device_config::build_layout_from_device_name;
+mod config;
+use config::build_layout_from_device_name;
 
 pub struct SkydimoSerialController {
     pub port_name: String, 
