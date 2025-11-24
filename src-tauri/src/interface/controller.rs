@@ -136,10 +136,7 @@ pub trait Controller: Send {
 
     fn clear(&mut self) -> Result<(), String> {
         let (w, h) = self.virtual_layout();
-        let len = w
-            .checked_mul(h)
-            .unwrap_or(0)
-            .max(1);
+        let len = w.checked_mul(h).unwrap_or(0).max(1);
         let black = vec![Color::default(); len];
         self.update(&black)
     }

@@ -1,14 +1,14 @@
 pub mod inventory;
 pub mod runner;
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use serde_json::Value;
 use tauri::AppHandle;
 
-use crate::interface::controller::{Controller, Zone};
 use self::inventory::scan_controllers;
 use self::runner::EffectRunner;
+use crate::interface::controller::{Controller, Zone};
 
 #[derive(serde::Serialize, Clone)]
 pub struct Device {
@@ -42,7 +42,7 @@ impl LightingManager {
 
     pub fn scan_devices(&self) -> Vec<Device> {
         let found_controllers = scan_controllers();
-        
+
         let mut state_controllers = self.controllers.lock().unwrap();
         for controller in found_controllers {
             let port = controller.port_name();
@@ -60,7 +60,7 @@ impl LightingManager {
             let c = c_arc.lock().unwrap();
             let brightness = *brightness_map.get(port).unwrap_or(&100);
             let current_effect_id = effect_map.get(port).cloned();
-            
+
             devices.push(Device {
                 port: port.clone(),
                 model: c.model(),
@@ -76,7 +76,12 @@ impl LightingManager {
         devices
     }
 
-    pub fn start_effect(&self, port: &str, effect_id: &str, app_handle: AppHandle) -> Result<(), String> {
+    pub fn start_effect(
+        &self,
+        port: &str,
+        effect_id: &str,
+        app_handle: AppHandle,
+    ) -> Result<(), String> {
         let controller_arc = {
             let controllers = self.controllers.lock().unwrap();
             controllers.get(port).cloned()

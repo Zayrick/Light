@@ -1,7 +1,7 @@
-use crate::interface::effect::{Effect, EffectMetadata};
 use crate::interface::controller::Color;
-use std::time::Duration;
+use crate::interface::effect::{Effect, EffectMetadata};
 use inventory;
+use std::time::Duration;
 
 /// Very visible matrix test pattern:
 /// - Fills four quadrants with red/green/blue/white blocks
@@ -51,7 +51,11 @@ impl Effect for MatrixTestEffect {
                     Color { r: 0, g: 0, b: 255 }
                 } else {
                     // Bottom-right: White
-                    Color { r: 255, g: 255, b: 255 }
+                    Color {
+                        r: 255,
+                        g: 255,
+                        b: 255,
+                    }
                 };
 
                 buffer[idx] = color;
@@ -68,7 +72,11 @@ impl Effect for MatrixTestEffect {
                 if idx >= len {
                     break;
                 }
-                buffer[idx] = Color { r: 255, g: 255, b: 255 };
+                buffer[idx] = Color {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                };
             }
         }
     }
@@ -80,7 +88,10 @@ impl Effect for MatrixTestEffect {
 }
 
 fn factory() -> Box<dyn Effect> {
-    Box::new(MatrixTestEffect { width: 0, height: 0 })
+    Box::new(MatrixTestEffect {
+        width: 0,
+        height: 0,
+    })
 }
 
 inventory::submit!(EffectMetadata {
@@ -91,4 +102,3 @@ inventory::submit!(EffectMetadata {
     params: &[],
     factory: factory,
 });
-

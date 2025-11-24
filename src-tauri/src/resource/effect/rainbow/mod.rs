@@ -1,8 +1,8 @@
-use crate::interface::effect::{Effect, EffectMetadata, EffectParam, EffectParamKind};
 use crate::interface::controller::Color;
-use std::time::Duration;
-use serde_json::Value;
+use crate::interface::effect::{Effect, EffectMetadata, EffectParam, EffectParamKind};
 use inventory;
+use serde_json::Value;
+use std::time::Duration;
 
 pub struct RainbowEffect {
     speed: f32,
@@ -36,7 +36,11 @@ impl Effect for RainbowEffect {
         }
 
         // Use stored layout if available; fall back to a 1D line.
-        let width = if self.width == 0 { led_count } else { self.width };
+        let width = if self.width == 0 {
+            led_count
+        } else {
+            self.width
+        };
         let height = if self.height == 0 { 1 } else { self.height };
 
         // Simple animation logic: horizontal rainbow that scrolls over time,

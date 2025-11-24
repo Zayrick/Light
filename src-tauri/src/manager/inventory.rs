@@ -26,4 +26,3 @@ pub fn create_effect(id: &str) -> Option<Box<dyn Effect>> {
     }
     None
 }
-

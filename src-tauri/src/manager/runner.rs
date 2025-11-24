@@ -1,12 +1,12 @@
-use std::sync::{Arc, Mutex, Condvar};
+use serde_json::Value;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use std::sync::mpsc::{self, Sender};
-use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
-use crate::interface::controller::{Controller, Color};
+use crate::interface::controller::{Color, Controller};
 use crate::manager::inventory::create_effect;
 
 pub struct EffectRunner {
@@ -39,7 +39,7 @@ impl EffectRunner {
         let brightness = Arc::new(AtomicU8::new(initial_brightness));
         let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
         let (param_tx, param_rx) = mpsc::channel();
-        
+
         // Channel for recycling buffers to avoid allocation
         let (recycle_tx, recycle_rx) = mpsc::channel();
 
@@ -56,7 +56,7 @@ impl EffectRunner {
 
             loop {
                 let mut frame_guard = lock.lock().unwrap();
-                
+
                 // Wait for data or stop signal
                 while frame_guard.is_none() && writer_running.load(Ordering::Relaxed) {
                     frame_guard = cvar.wait(frame_guard).unwrap();
@@ -73,7 +73,7 @@ impl EffectRunner {
 
                 if let Some(colors) = frame {
                     let b_val = writer_brightness.load(Ordering::Relaxed);
-                    
+
                     // Apply brightness if needed
                     let target_slice = if b_val >= 100 {
                         &colors[..]
@@ -120,10 +120,7 @@ impl EffectRunner {
             let (virtual_width, virtual_height, virtual_len) = {
                 let c = ticker_controller.lock().unwrap();
                 let (w, h) = c.virtual_layout();
-                let len = w
-                    .checked_mul(h)
-                    .unwrap_or(0)
-                    .max(1);
+                let len = w.checked_mul(h).unwrap_or(0).max(1);
                 (w, h, len)
             };
 
@@ -145,7 +142,7 @@ impl EffectRunner {
                 let mut buffer = recycle_rx
                     .try_recv()
                     .unwrap_or_else(|_| vec![Color::default(); virtual_len]);
-                
+
                 // Ensure size is correct (in case layout changed or new buffer)
                 if buffer.len() != virtual_len {
                     buffer.resize(virtual_len, Color::default());
@@ -169,12 +166,12 @@ impl EffectRunner {
                 // 3. Send to Writer (Overwrite existing)
                 {
                     let mut frame_guard = lock.lock().unwrap();
-                    
+
                     // If there was an unconsumed frame, recycle it
                     if let Some(dropped_frame) = frame_guard.take() {
                         let _ = ticker_recycle_tx.send(dropped_frame);
                     }
-                    
+
                     *frame_guard = Some(buffer);
                     cvar.notify_one();
                 }
@@ -187,17 +184,17 @@ impl EffectRunner {
                     thread::sleep(next_frame_time - now_after);
                 } else {
                     // Running behind: reset schedule to prevent catch-up bursts
-                    next_frame_time = now_after; 
+                    next_frame_time = now_after;
                     thread::yield_now();
                 }
             }
-            
+
             // Ensure Writer wakes up to see running=false
             let (_lock, cvar) = &*ticker_state;
             cvar.notify_all();
         });
 
-        Ok(Self { 
+        Ok(Self {
             running,
             ticker_thread: Some(ticker_thread),
             writer_thread: Some(writer_thread),
@@ -217,7 +214,7 @@ impl EffectRunner {
 
     pub fn stop(mut self) {
         self.running.store(false, Ordering::Relaxed);
-        
+
         // Wake up writer in case it's waiting
         {
             let (_lock, cvar) = &*self.shared_state;
