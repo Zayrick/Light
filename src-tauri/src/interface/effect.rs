@@ -100,6 +100,7 @@ pub struct EffectMetadata {
     pub name: &'static str,
     pub description: Option<&'static str>,
     pub group: Option<&'static str>,
+    pub icon: Option<&'static str>,
     pub params: &'static [EffectParam],
     pub factory: fn() -> Box<dyn Effect>,
 }

@@ -171,6 +171,7 @@ struct EffectInfo {
     name: &'static str,
     description: Option<&'static str>,
     group: Option<&'static str>,
+    icon: Option<&'static str>,
     params: Vec<EffectParamInfo>,
 }
 
@@ -195,6 +196,7 @@ fn get_effects() -> Vec<EffectInfo> {
             name: e.name,
             description: e.description,
             group: e.group,
+            icon: e.icon,
             params: e.params.iter().map(EffectParamInfo::from).collect(),
         })
         .collect()

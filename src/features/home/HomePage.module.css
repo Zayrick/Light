@@ -1,0 +1,68 @@
+.emptyStateContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-secondary);
+  background-color: var(--bg-card);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border-subtle);
+}
+
+.emptyStateIcon {
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+
+.deviceInfoTitle {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.deviceInfoSubtitle {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.deviceActiveStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deviceActiveText {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.blogPost {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.blogMeta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.blogTitle {
+  margin-bottom: 4px;
+}
+
+.pluginItem {
+  padding: 16px;
+}
+
+.pluginButton {
+  padding: 4px 12px;
+  font-size: 11px;
+  height: 28px;
+}
+
