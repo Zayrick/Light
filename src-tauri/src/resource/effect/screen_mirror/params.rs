@@ -3,17 +3,6 @@ use crate::interface::effect::{
     SelectOptions, StaticSelectOption,
 };
 
-const AUTO_CROP_OPTIONS: [StaticSelectOption; 2] = [
-    StaticSelectOption {
-        label: "禁用",
-        value: 0.0,
-    },
-    StaticSelectOption {
-        label: "自动黑边裁剪",
-        value: 1.0,
-    },
-];
-
 const BLACK_BORDER_MODE_OPTIONS: [StaticSelectOption; 4] = [
     StaticSelectOption {
         label: "默认模式",
@@ -79,9 +68,8 @@ pub const SCREEN_PARAMS: [EffectParam; 9] = [
     EffectParam {
         key: "autoCrop",
         label: "黑边裁剪",
-        kind: EffectParamKind::Select {
-            default: 1.0,
-            options: SelectOptions::Static(&AUTO_CROP_OPTIONS),
+        kind: EffectParamKind::Toggle {
+            default: true,
         },
         dependency: None,
     },

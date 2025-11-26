@@ -75,6 +75,14 @@ pub enum EffectParamInfo {
         #[serde(skip_serializing_if = "Option::is_none")]
         dependency: Option<ParamDependencyInfo>,
     },
+    #[serde(rename = "toggle")]
+    Toggle {
+        key: &'static str,
+        label: &'static str,
+        default: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dependency: Option<ParamDependencyInfo>,
+    },
 }
 
 #[derive(Serialize)]
@@ -139,6 +147,12 @@ impl From<&'static EffectParam> for EffectParamInfo {
                     dependency,
                 }
             }
+            EffectParamKind::Toggle { default } => EffectParamInfo::Toggle {
+                key: param.key,
+                label: param.label,
+                default: *default,
+                dependency,
+            },
         }
     }
 }

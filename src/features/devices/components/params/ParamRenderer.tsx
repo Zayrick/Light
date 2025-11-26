@@ -1,14 +1,15 @@
 import { EffectParam } from "../../../../types";
 import { SelectRenderer } from "./SelectRenderer";
 import { SliderRenderer } from "./SliderRenderer";
+import { ToggleRenderer } from "./ToggleRenderer";
 
 interface ParamRendererProps {
   param: EffectParam;
   modeId: string;
-  value: number;
+  value: number | boolean;
   disabled: boolean;
-  onChange: (value: number) => void;
-  onCommit: (value: number) => void;
+  onChange: (value: number | boolean) => void;
+  onCommit: (value: number | boolean) => void;
 }
 
 /**
@@ -16,13 +17,39 @@ interface ParamRendererProps {
  * This implements the Strategy pattern for UI rendering.
  */
 export function ParamRenderer(props: ParamRendererProps) {
-  const { param } = props;
+  const { param, value, onChange, onCommit } = props;
 
   switch (param.type) {
     case "slider":
-      return <SliderRenderer {...props} param={param} />;
+      return (
+        <SliderRenderer
+          {...props}
+          param={param}
+          value={value as number}
+          onChange={onChange as (v: number) => void}
+          onCommit={onCommit as (v: number) => void}
+        />
+      );
     case "select":
-      return <SelectRenderer {...props} param={param} />;
+      return (
+        <SelectRenderer
+          {...props}
+          param={param}
+          value={value as number}
+          onChange={onChange as (v: number) => void}
+          onCommit={onCommit as (v: number) => void}
+        />
+      );
+    case "toggle":
+      return (
+        <ToggleRenderer
+          {...props}
+          param={param}
+          value={value as boolean}
+          onChange={onChange as (v: boolean) => void}
+          onCommit={onCommit as (v: boolean) => void}
+        />
+      );
     default:
       console.warn(`No renderer found for param type: ${(param as any).type}`);
       return null;

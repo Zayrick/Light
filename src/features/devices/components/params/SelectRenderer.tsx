@@ -36,13 +36,13 @@ export function SelectRenderer({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          fontSize: "11px",
+          fontSize: "13px",
           color: "var(--text-secondary)",
           alignItems: "center",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <ListFilter size={11} /> {param.label}
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <ListFilter size={16} /> {param.label}
         </span>
         {hasOptions && (
           <span style={{ opacity: 0.7 }}>

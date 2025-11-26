@@ -60,6 +60,9 @@ pub enum EffectParamKind {
         default: f64,
         options: SelectOptions,
     },
+    Toggle {
+        default: bool,
+    },
 }
 
 pub enum SelectOptions {

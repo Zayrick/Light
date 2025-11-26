@@ -13,7 +13,7 @@ interface EffectMode {
 export function checkDependency(
   mode: EffectMode,
   dependency: ParamDependency | undefined,
-  currentValues: Record<string, number>
+  currentValues: Record<string, number | boolean>
 ): { visible: boolean; disabled: boolean } {
   if (!dependency) {
     return { visible: true, disabled: false };
@@ -39,17 +39,25 @@ export function checkDependency(
   const storageKey = `${mode.id}:${controlling.key}`;
   const controllingValue = currentValues[storageKey] ?? controlling.default;
 
+  // Normalize value for comparison (handle boolean -> number)
+  let val: number;
+  if (typeof controllingValue === 'boolean') {
+    val = controllingValue ? 1.0 : 0.0;
+  } else {
+    val = controllingValue;
+  }
+
   let met = true;
 
   if (
     dependency.equals !== undefined &&
-    controllingValue !== dependency.equals
+    Math.abs(val - dependency.equals) > Number.EPSILON
   ) {
     met = false;
   }
   if (
     dependency.notEquals !== undefined &&
-    controllingValue === dependency.notEquals
+    Math.abs(val - dependency.notEquals) < Number.EPSILON
   ) {
     met = false;
   }
@@ -65,4 +73,3 @@ export function checkDependency(
   // default: disable when unmet
   return { visible: true, disabled: true };
 }
-

@@ -162,8 +162,8 @@ impl Effect for ScreenMirrorEffect {
             self.smoothness = smoothness.clamp(0.0, 100.0) as u32;
         }
 
-        if let Some(auto_crop) = _params.get("autoCrop").and_then(|v| v.as_f64()) {
-            self.auto_crop_enabled = auto_crop >= 0.5;
+        if let Some(auto_crop) = _params.get("autoCrop").and_then(|v| v.as_bool()) {
+            self.auto_crop_enabled = auto_crop;
             #[cfg(target_os = "windows")]
             {
                 self.black_border
