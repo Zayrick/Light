@@ -54,7 +54,7 @@ export function DeviceDetail({
 
   // Mock settings states
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
-  const [paramValues, setParamValues] = useState<Record<string, number>>({});
+  const [paramValues, setParamValues] = useState<Record<string, number | boolean>>({});
   const [hasMounted, setHasMounted] = useState(false);
 
   const categoryScrollRef = useRef<HTMLDivElement | null>(null);
@@ -138,7 +138,7 @@ export function DeviceDetail({
 
   const pushParamsToBackend = async (
     mode: DisplayMode,
-    payload: Record<string, number>
+    payload: Record<string, number | boolean>
   ) => {
     if (!mode.params || mode.params.length === 0) return;
     try {
@@ -151,7 +151,7 @@ export function DeviceDetail({
   const handleParamChange = (
     mode: DisplayMode,
     param: EffectParam,
-    value: number
+    value: number | boolean
   ) => {
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
@@ -160,7 +160,7 @@ export function DeviceDetail({
   const handleParamCommit = (
     mode: DisplayMode,
     param: EffectParam,
-    value: number
+    value: number | boolean
   ) => {
     pushParamsToBackend(mode, { [param.key]: value });
   };
@@ -172,7 +172,7 @@ export function DeviceDetail({
 
       const mode = modes.find((m) => m.id === modeId);
       if (mode?.params?.length) {
-        const payload: Record<string, number> = {};
+        const payload: Record<string, number | boolean> = {};
         mode.params.forEach((p) => {
           payload[p.key] = getParamValue(mode, p);
         });
@@ -388,27 +388,27 @@ export function DeviceDetail({
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Sliders size={16} />
-              <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 600 }}>
+              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>
                 Device Settings
               </h3>
             </div>
 
             {/* Brightness Control */}
             <div
-              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
             >
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  fontSize: "11px",
+                  fontSize: "13px",
                   color: "var(--text-secondary)",
                 }}
               >
                 <span
-                  style={{ display: "flex", alignItems: "center", gap: "4px" }}
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
                 >
-                  <Sun size={11} /> Brightness
+                  <Sun size={16} /> Brightness
                 </span>
                 <span>{brightness}%</span>
               </div>

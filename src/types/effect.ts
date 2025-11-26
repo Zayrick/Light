@@ -10,12 +10,13 @@ export interface ParamDependency {
 interface EffectParamBase {
   key: string;
   label: string;
-  default: number;
+  default: number | boolean;
   dependency?: ParamDependency;
 }
 
 export interface SliderParam extends EffectParamBase {
   type: 'slider';
+  default: number;
   min: number;
   max: number;
   step: number;
@@ -28,10 +29,16 @@ export interface SelectOption {
 
 export interface SelectParam extends EffectParamBase {
   type: 'select';
+  default: number;
   options: SelectOption[];
 }
 
-export type EffectParam = SliderParam | SelectParam;
+export interface ToggleParam extends EffectParamBase {
+  type: 'toggle';
+  default: boolean;
+}
+
+export type EffectParam = SliderParam | SelectParam | ToggleParam;
 
 export interface EffectInfo {
   id: string;
@@ -41,4 +48,3 @@ export interface EffectInfo {
   icon?: string;
   params?: EffectParam[];
 }
-

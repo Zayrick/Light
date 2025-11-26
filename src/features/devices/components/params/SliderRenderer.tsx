@@ -23,17 +23,17 @@ export function SliderRenderer({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          fontSize: "11px",
+          fontSize: "13px",
           color: "var(--text-secondary)",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <Gauge size={11} /> {param.label}
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Gauge size={16} /> {param.label}
         </span>
         <span>{formatParamValue(param, value)}</span>
       </div>
