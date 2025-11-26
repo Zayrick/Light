@@ -115,6 +115,7 @@ inventory::submit!(EffectMetadata {
     name: "Rainbow",
     description: Some("Cycling rainbow colors"),
     group: Some("Dynamic"),
+    icon: Some("Waves"),
     params: &RAINBOW_PARAMS,
     factory: factory,
 });

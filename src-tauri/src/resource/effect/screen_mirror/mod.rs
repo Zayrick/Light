@@ -242,6 +242,7 @@ inventory::submit!(EffectMetadata {
     name: "Screen Mirror",
     description: Some("Mirror the desktop colors onto matrices or strips"),
     group: Some("Screen Sync"),
+    icon: Some("Monitor"),
     params: &SCREEN_PARAMS,
     factory: factory,
 });

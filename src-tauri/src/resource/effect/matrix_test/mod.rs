@@ -99,6 +99,7 @@ inventory::submit!(EffectMetadata {
     name: "Matrix Test",
     description: Some("Matrix alignment test pattern"),
     group: Some("Test"),
+    icon: Some("LayoutGrid"),
     params: &[],
     factory: factory,
 });

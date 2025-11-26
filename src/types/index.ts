@@ -37,6 +37,7 @@ export interface EffectInfo {
   name: string;
   description?: string;
   group?: string;
+  icon?: string;
   params?: EffectParam[];
 }
 

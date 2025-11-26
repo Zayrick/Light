@@ -3,35 +3,18 @@ import {
   useMemo,
   useState,
   useRef,
-  type ComponentType,
   type WheelEvent,
 } from "react";
 import { motion } from "framer-motion";
-import FormControl from "@mui/material/FormControl";
-import Select, { SelectChangeEvent } from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import {
-  Device,
-  EffectInfo,
-  EffectParam,
-  ParamDependency,
-  SliderParam,
-} from "../../../types";
+import { Device, EffectInfo, EffectParam } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
-import {
-  Palette,
-  Zap,
-  Waves,
-  Sparkles,
-  Monitor,
-  Sun,
-  Gauge,
-  Sliders,
-  ListFilter,
-} from "lucide-react";
+import { Sun, Sliders } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
 import { Slider } from "../../../components/ui/Slider";
+import { ParamRenderer } from "./params/ParamRenderer";
+import { checkDependency } from "../../../utils/effectUtils";
+import { DynamicIcon } from "../../../components/DynamicIcon";
 
 interface DeviceDetailProps {
   device: Device;
@@ -46,41 +29,29 @@ const CATEGORY_TRANSITION = {
   ease: [0.16, 1, 0.3, 1] as const,
 };
 
-// Icon mapping helpers so visual style stays nice while data is real
-const EFFECT_ICON_MAP: Record<string, ComponentType<{ size?: number }>> = {
-  rainbow: Waves,
-  matrix_test: Monitor,
-  turn_off: Sun,
-};
-
-const GROUP_ICON_MAP: Record<string, ComponentType<{ size?: number }>> = {
-  Basic: Palette,
-  Dynamic: Waves,
-  Test: Sparkles,
-};
-
-const DEFAULT_ICON = Zap;
-
 interface DisplayMode extends EffectInfo {
   category: ModeCategory;
-  icon: ComponentType<{ size?: number }>;
 }
 
-export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps) {
+export function DeviceDetail({
+  device,
+  effects,
+  onSetEffect,
+}: DeviceDetailProps) {
   const [selectedCategory, setSelectedCategory] = useState<ModeCategory>(() => {
-    const initialEffect = effects.find((e) => e.id === device.current_effect_id);
-    if (initialEffect?.group) return initialEffect.group;
-    const groups = Array.from(
-      new Set(effects.map((e) => e.group ?? "Other"))
+    const initialEffect = effects.find(
+      (e) => e.id === device.current_effect_id
     );
-    const preferredOrder = ["Basic", "Dynamic", "Music", "Screen", "Test", "Other"];
-    for (const g of preferredOrder) {
-      if (groups.includes(g)) return g;
-    }
-    return groups[0] ?? "Other";
+    if (initialEffect?.group) return initialEffect.group;
+
+    // Default to the first available group from the backend data
+    const firstGroup = effects.find((e) => e.group)?.group;
+    return firstGroup ?? "Other";
   });
-  const [selectedModeId, setSelectedModeId] = useState<string | null>(device.current_effect_id ?? null);
-  
+  const [selectedModeId, setSelectedModeId] = useState<string | null>(
+    device.current_effect_id ?? null
+  );
+
   // Mock settings states
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, number>>({});
@@ -112,28 +83,20 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   const modes: DisplayMode[] = useMemo(() => {
     return effects.map((effect) => {
       const category: ModeCategory = effect.group ?? "Other";
-      const icon =
-        EFFECT_ICON_MAP[effect.id] ??
-        (effect.group ? GROUP_ICON_MAP[effect.group] : undefined) ??
-        DEFAULT_ICON;
 
       return {
         ...effect,
         category,
-        icon,
       };
     });
   }, [effects]);
 
   // Compute available categories dynamically from backend groups
+  // The order relies on the order of effects returned by the backend
   const categories: ModeCategory[] = useMemo(() => {
     const set = new Set<ModeCategory>();
     modes.forEach((m) => set.add(m.category));
-    const available = Array.from(set);
-    const preferredOrder = ["Basic", "Dynamic", "Music", "Screen", "Test", "Other"];
-    const ordered = preferredOrder.filter((c) => available.includes(c));
-    const remaining = available.filter((c) => !preferredOrder.includes(c));
-    return [...ordered, ...remaining];
+    return Array.from(set);
   }, [modes]);
 
   const filteredModes = modes.filter((m) => m.category === selectedCategory);
@@ -150,7 +113,6 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   useEffect(() => {
     setSelectedModeId(device.current_effect_id ?? null);
   }, [device.current_effect_id, device.port]);
-
 
   // Ensure defaults exist for the selected mode so sliders have values
   useEffect(() => {
@@ -174,59 +136,10 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
     return paramValues[key] ?? param.default;
   };
 
-  const isDependencySatisfied = (
+  const pushParamsToBackend = async (
     mode: DisplayMode,
-    dependency?: ParamDependency
-  ): { visible: boolean; disabled: boolean } => {
-    if (!dependency) {
-      return { visible: true, disabled: false };
-    }
-
-    if (!dependency.key) {
-      if (dependency.behavior === "hide") {
-        return { visible: false, disabled: false };
-      } else if (dependency.behavior === "disable") {
-        return { visible: true, disabled: true };
-      }
-      return { visible: true, disabled: false };
-    }
-
-    const controlling = mode.params?.find((p) => p.key === dependency.key);
-    if (!controlling) {
-      return { visible: true, disabled: false };
-    }
-
-    const controllingValue = getParamValue(mode, controlling);
-    let met = true;
-
-    if (dependency.equals !== undefined && controllingValue !== dependency.equals) {
-      met = false;
-    }
-    if (
-      dependency.notEquals !== undefined &&
-      controllingValue === dependency.notEquals
-    ) {
-      met = false;
-    }
-
-    if (met) {
-      return { visible: true, disabled: false };
-    }
-
-    if (dependency.behavior === "hide") {
-      return { visible: false, disabled: false };
-    }
-
-    // default: disable when unmet
-    return { visible: true, disabled: true };
-  };
-
-  const formatParamValue = (param: SliderParam, value: number) => {
-    if (param.step < 1) return value.toFixed(1);
-    return Math.round(value).toString();
-  };
-
-  const pushParamsToBackend = async (mode: DisplayMode, payload: Record<string, number>) => {
+    payload: Record<string, number>
+  ) => {
     if (!mode.params || mode.params.length === 0) return;
     try {
       await api.updateEffectParams(device.port, payload);
@@ -271,21 +184,41 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <header
+        className="page-header"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "16px",
+        }}
+      >
         <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>{device.model}</h1>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>
+            {device.model}
+          </h1>
           <p className="page-subtitle">{device.description}</p>
-          <p className="page-subtitle" style={{ fontSize: '12px', opacity: 0.7 }}>
+          <p
+            className="page-subtitle"
+            style={{ fontSize: "12px", opacity: 0.7 }}
+          >
             SN: {device.id}
           </p>
         </div>
-        <div style={{ flex: 1, height: '80px', minWidth: '200px', maxWidth: '600px' }}>
+        <div
+          style={{
+            flex: 1,
+            height: "80px",
+            minWidth: "200px",
+            maxWidth: "600px",
+          }}
+        >
           <DeviceLedVisualizer device={device} />
         </div>
       </header>
 
-      <div style={{ display: 'flex', gap: '24px', flex: 1, minHeight: 0 }}>
+      <div style={{ display: "flex", gap: "24px", flex: 1, minHeight: 0 }}>
         {/* Left Column: Modes */}
         <div
           style={{
@@ -310,7 +243,9 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                   key={category}
                   type="button"
                   onClick={() => setSelectedCategory(category)}
-                  className={`mode-tab-button ${isActive ? "mode-tab-button-active" : ""}`}
+                  className={`mode-tab-button ${
+                    isActive ? "mode-tab-button-active" : ""
+                  }`}
                   animate={{
                     opacity: isActive ? 1 : 0.6,
                     scale: isActive ? 1 : 0.98,
@@ -322,7 +257,9 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                     <motion.div
                       layoutId={`mode-category-underline-${device.id}`}
                       className="mode-tab-underline"
-                      transition={hasMounted ? CATEGORY_TRANSITION : { duration: 0 }}
+                      transition={
+                        hasMounted ? CATEGORY_TRANSITION : { duration: 0 }
+                      }
                     />
                   )}
                   <span className="mode-tab-label">{category}</span>
@@ -395,7 +332,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                             : "none",
                         }}
                       >
-                        <mode.icon size={18} />
+                        <DynamicIcon name={mode.icon || "Component"} size={18} />
                       </div>
                       <div
                         style={{
@@ -404,9 +341,7 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
                           gap: "2px",
                         }}
                       >
-                        <div
-                          style={{ fontSize: "13px", fontWeight: 600 }}
-                        >
+                        <div style={{ fontSize: "13px", fontWeight: 600 }}>
                           {mode.name}
                         </div>
                         <div
@@ -442,18 +377,39 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
             paddingBottom: "20px",
           }}
         >
-          
           {/* Global Device Settings */}
-          <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Card
+            style={{
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Sliders size={16} />
-              <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Device Settings</h3>
+              <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 600 }}>
+                Device Settings
+              </h3>
             </div>
-            
+
             {/* Brightness Control */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Sun size={11} /> Brightness</span>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "11px",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <span
+                  style={{ display: "flex", alignItems: "center", gap: "4px" }}
+                >
+                  <Sun size={11} /> Brightness
+                </span>
                 <span>{brightness}%</span>
               </div>
               <Slider
@@ -468,151 +424,53 @@ export function DeviceDetail({ device, effects, onSetEffect }: DeviceDetailProps
           </Card>
 
           {/* Current Mode Settings */}
-          {selectedMode && selectedMode.params && selectedMode.params.length > 0 && (
-            <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {selectedMode.params?.map((param) => {
-                  if (param.type === 'slider') {
+          {selectedMode &&
+            selectedMode.params &&
+            selectedMode.params.length > 0 && (
+              <Card
+                style={{
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  {selectedMode.params.map((param) => {
                     const value = getParamValue(selectedMode, param);
-                    const { visible, disabled } = isDependencySatisfied(
+                    const { visible, disabled } = checkDependency(
                       selectedMode,
-                      param.dependency
+                      param.dependency,
+                      paramValues
                     );
-                    if (!visible) return null;
-                    return (
-                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Gauge size={11} /> {param.label}</span>
-                          <span>{formatParamValue(param, value)}</span>
-                        </div>
-                        <Slider
-                          value={value}
-                          min={param.min}
-                          max={param.max}
-                          step={param.step}
-                          disabled={disabled}
-                          onChange={(newValue) =>
-                            handleParamChange(selectedMode, param, newValue)
-                          }
-                          onCommit={(newValue) =>
-                            handleParamCommit(selectedMode, param, newValue)
-                          }
-                        />
-                      </div>
-                    );
-                  } else if (param.type === 'select') {
-                    const value = getParamValue(selectedMode, param);
-                    const hasOptions = param.options.length > 0;
-                    const selectLabelId = `${selectedMode.id}-${param.key}-label`;
-                    const { visible, disabled } = isDependencySatisfied(
-                      selectedMode,
-                      param.dependency
-                    );
-                    if (!visible) return null;
-                    return (
-                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <ListFilter size={11} /> {param.label}
-                          </span>
-                          {hasOptions && (
-                            <span style={{ opacity: 0.7 }}>
-                              {param.options.length} option{param.options.length > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                        {hasOptions ? (
-                          <FormControl fullWidth size="small" variant="outlined">
-                            <Select
-                              labelId={selectLabelId}
-                              value={String(value)}
-                              disabled={disabled}
-                              onChange={(event: SelectChangeEvent<string>) => {
-                                const val = Number(event.target.value);
-                                handleParamChange(selectedMode, param, val);
-                                handleParamCommit(selectedMode, param, val);
-                              }}
-                              MenuProps={{
-                                PaperProps: {
-                                  sx: {
-                                    maxHeight: 280,
-                                    backgroundColor: "var(--bg-card)",
-                                    backdropFilter: "blur(20px)",
-                                    color: "var(--text-primary)",
-                                    borderRadius: "var(--radius-m)",
-                                    border: "1px solid var(--border-subtle)",
-                                    "& .MuiMenuItem-root": {
-                                      "&.Mui-selected": {
-                                        backgroundColor: "var(--accent-color)",
-                                        color: "var(--accent-text)",
-                                        "&:hover": {
-                                          backgroundColor: "var(--accent-hover)",
-                                        },
-                                      },
-                                      "&:hover": {
-                                        backgroundColor: "var(--bg-card-hover)",
-                                      },
-                                      fontSize: '13px', // Compact menu items
-                                      minHeight: '32px',
-                                    },
-                                  },
-                                },
-                              }}
-                              sx={{
-                                color: "var(--text-primary)",
-                                borderRadius: "var(--radius-m)",
-                                fontSize: "13px", // Smaller text
-                                height: "32px",   // Reduced height
-                                ".MuiOutlinedInput-notchedOutline": {
-                                  borderColor: "var(--border-subtle)",
-                                },
-                                "&:hover .MuiOutlinedInput-notchedOutline": {
-                                  borderColor: "var(--text-secondary)",
-                                },
-                                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                                  borderColor: "var(--accent-color)",
-                                },
-                                ".MuiSvgIcon-root": {
-                                  color: "var(--text-secondary)",
-                                },
-                                ".MuiSelect-select": {
-                                  display: "flex",
-                                  alignItems: "center",
-                                  paddingTop: "4px",
-                                  paddingBottom: "4px",
-                                },
-                              }}
-                            >
-                              {param.options.map((option) => (
-                                <MenuItem key={option.value} value={String(option.value)}>
-                                  {option.label}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        ) : (
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                            No options available.
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            </Card>
-          )}
 
+                    if (!visible) return null;
+
+                    return (
+                      <ParamRenderer
+                        key={param.key}
+                        param={param}
+                        modeId={selectedMode.id}
+                        value={value}
+                        disabled={disabled}
+                        onChange={(val) =>
+                          handleParamChange(selectedMode, param, val)
+                        }
+                        onCommit={(val) =>
+                          handleParamCommit(selectedMode, param, val)
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
         </div>
       </div>
     </div>

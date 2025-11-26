@@ -1,59 +1,18 @@
-import { Monitor, RefreshCw, Zap, Music, Cast, Bell, BookOpen, Puzzle, ArrowRight } from "lucide-react";
+import { Monitor, RefreshCw, Zap, ArrowRight, BookOpen, Puzzle } from "lucide-react";
 import clsx from "clsx";
 import { Device, EffectInfo } from "../../types";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { BLOG_POSTS, PLUGINS } from "../../data/mockData";
+import styles from "./HomePage.module.css";
 
 interface HomePageProps {
   devices: Device[];
   effects: EffectInfo[];
   isScanning: boolean;
   onScan: () => void;
-  onSetEffect: (port: string, effectId: string) => Promise<void>;
   onNavigate: (deviceId: string) => void;
 }
-
-const BLOG_POSTS = [
-  {
-    id: 1,
-    title: "Getting Started with Light",
-    summary: "Learn how to set up your first device and configure basic effects.",
-    date: "Oct 24, 2023",
-  },
-  {
-    id: 2,
-    title: "Advanced Effect Creator",
-    summary: "Deep dive into creating custom matrix animations.",
-    date: "Nov 02, 2023",
-  },
-  {
-    id: 3,
-    title: "Community Showcase",
-    summary: "Check out the most popular setups from our community this week.",
-    date: "Nov 15, 2023",
-  },
-];
-
-const PLUGINS = [
-  {
-    id: 1,
-    name: "Audio Visualizer",
-    description: "Sync lights with music beat",
-    icon: <Music size={18} />,
-  },
-  {
-    id: 2,
-    name: "Screen Mirror",
-    description: "Extend screen colors to lights",
-    icon: <Cast size={18} />,
-  },
-  {
-    id: 3,
-    name: "Notifications",
-    description: "Flash on new messages",
-    icon: <Bell size={18} />,
-  },
-];
 
 export function HomePage({
   devices,
@@ -80,20 +39,8 @@ export function HomePage({
         </div>
 
         {devices.length === 0 && !isScanning ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "300px",
-              color: "var(--text-secondary)",
-              backgroundColor: "var(--bg-card)",
-              borderRadius: "var(--radius-m)",
-              border: "1px solid var(--border-subtle)",
-            }}
-          >
-            <Monitor size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+          <div className={styles.emptyStateContainer}>
+            <Monitor size={48} className={styles.emptyStateIcon} />
             <p>No devices connected</p>
             <Button variant="secondary" style={{ marginTop: 16 }} onClick={onScan}>
               Try Again
@@ -113,10 +60,10 @@ export function HomePage({
                     <Zap size={20} />
                   </div>
                   <div>
-                    <h3 style={{ margin: "0 0 4px 0", fontSize: 15, fontWeight: 600 }}>
+                    <h3 className={styles.deviceInfoTitle}>
                       {device.model}
                     </h3>
-                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--text-secondary)" }}>
+                    <div className={styles.deviceInfoSubtitle}>
                       <span>{device.port}</span>
                       {device.current_effect_id && (
                         <>
@@ -132,9 +79,9 @@ export function HomePage({
                 
                 <div className="simplified-device-footer">
                   {device.current_effect_id ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className={styles.deviceActiveStatus}>
                       <div className="device-status-dot" />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>
+                      <span className={styles.deviceActiveText}>
                         Active
                       </span>
                     </div>
@@ -169,15 +116,15 @@ export function HomePage({
             </Button>
           </div>
           <Card style={{ padding: "16px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div className={styles.blogPost}>
               {BLOG_POSTS.map((blog) => (
                 <div key={blog.id} className="blog-card">
                   <div className="blog-image" />
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <div className={styles.blogMeta}>
                       <span className="blog-date">{blog.date}</span>
                     </div>
-                    <h4 className="blog-title" style={{ marginBottom: 4 }}>{blog.title}</h4>
+                    <h4 className={`blog-title ${styles.blogTitle}`}>{blog.title}</h4>
                     <p className="blog-summary">{blog.summary}</p>
                   </div>
                 </div>
@@ -197,7 +144,7 @@ export function HomePage({
           <Card style={{ padding: 0 }}>
             <div style={{ display: "flex", flexDirection: "column" }}>
               {PLUGINS.map((plugin) => (
-                <div key={plugin.id} className="plugin-item" style={{ padding: "16px" }}>
+                <div key={plugin.id} className={`plugin-item ${styles.pluginItem}`}>
                   <div className="plugin-icon">
                     {plugin.icon}
                   </div>
@@ -205,7 +152,7 @@ export function HomePage({
                     <h4 className="plugin-name">{plugin.name}</h4>
                     <p className="plugin-desc">{plugin.description}</p>
                   </div>
-                  <Button variant="secondary" style={{ padding: "4px 12px", fontSize: 11, height: 28 }}>
+                  <Button variant="secondary" className={styles.pluginButton}>
                     Get
                   </Button>
                 </div>

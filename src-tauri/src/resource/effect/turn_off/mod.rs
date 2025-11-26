@@ -28,6 +28,7 @@ inventory::submit!(EffectMetadata {
     name: "Turn Off",
     description: Some("Turn off all LEDs"),
     group: Some("Basic"),
+    icon: Some("Power"),
     params: &[],
     factory: factory,
 });
