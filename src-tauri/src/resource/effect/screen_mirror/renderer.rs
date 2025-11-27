@@ -16,11 +16,15 @@ pub fn render_frame(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
+    hdr_enabled: bool,
+    brightness: f32,
+    saturation: f32,
+    gamma: f32,
 ) {
     if layout.1 <= 1 {
-        render_linear(frame, buffer, previous_buffer, smoothness, crop);
+        render_linear(frame, buffer, previous_buffer, smoothness, crop, hdr_enabled, brightness, saturation, gamma);
     } else {
-        render_matrix(layout, frame, buffer, previous_buffer, smoothness, crop);
+        render_matrix(layout, frame, buffer, previous_buffer, smoothness, crop, hdr_enabled, brightness, saturation, gamma);
     }
 }
 
@@ -50,6 +54,10 @@ fn render_linear(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
+    hdr_enabled: bool,
+    brightness: f32,
+    saturation: f32,
+    gamma: f32,
 ) {
     let leds = buffer.len();
     if leds == 0 {
@@ -62,7 +70,7 @@ fn render_linear(
         } else {
             (index as f32 + 0.5) / leds as f32
         };
-        let target = sample_pixel(frame, ratio_x, 0.5, crop);
+        let target = sample_pixel(frame, ratio_x, 0.5, crop, hdr_enabled, brightness, saturation, gamma);
 
         if index < previous_buffer.len() {
             let prev = previous_buffer[index];
@@ -82,6 +90,10 @@ fn render_matrix(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
+    hdr_enabled: bool,
+    brightness: f32,
+    saturation: f32,
+    gamma: f32,
 ) {
     let width = layout.0.max(1);
     let height = layout.1.max(1);
@@ -106,7 +118,7 @@ fn render_matrix(
                 (y as f32 + 0.5) / height as f32
             };
 
-            let target = sample_pixel(frame, ratio_x, ratio_y, crop);
+            let target = sample_pixel(frame, ratio_x, ratio_y, crop, hdr_enabled, brightness, saturation, gamma);
 
             if idx < previous_buffer.len() {
                 let prev = previous_buffer[idx];
@@ -120,7 +132,16 @@ fn render_matrix(
     }
 }
 
-fn sample_pixel(frame: &ScreenFrame<'_>, ratio_x: f32, ratio_y: f32, crop: &CropRegion) -> Color {
+fn sample_pixel(
+    frame: &ScreenFrame<'_>,
+    ratio_x: f32,
+    ratio_y: f32,
+    crop: &CropRegion,
+    hdr_enabled: bool,
+    brightness: f32,
+    saturation: f32,
+    gamma: f32,
+) -> Color {
     let width = frame.width.max(1);
     let height = frame.height.max(1);
 
@@ -146,10 +167,48 @@ fn sample_pixel(frame: &ScreenFrame<'_>, ratio_x: f32, ratio_y: f32, crop: &Crop
         return Color::default();
     }
 
-    Color {
-        r: frame.pixels[offset + 2],
-        g: frame.pixels[offset + 1],
-        b: frame.pixels[offset],
+    let mut r = frame.pixels[offset + 2];
+    let mut g = frame.pixels[offset + 1];
+    let mut b = frame.pixels[offset];
+
+    if hdr_enabled {
+        if let Some(lut) = crate::resource::lut::get_hdr_lut() {
+            let (r2, g2, b2) = crate::resource::lut::apply_lut(r, g, b, lut);
+            r = r2;
+            g = g2;
+            b = b2;
+        }
     }
+
+    // Apply Saturation
+    if (saturation - 1.0).abs() > 0.01 {
+        // Simplified saturation logic
+        let gray = r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114;
+        let sat_r = gray + (r as f32 - gray) * saturation;
+        let sat_g = gray + (g as f32 - gray) * saturation;
+        let sat_b = gray + (b as f32 - gray) * saturation;
+        
+        r = sat_r.clamp(0.0, 255.0) as u8;
+        g = sat_g.clamp(0.0, 255.0) as u8;
+        b = sat_b.clamp(0.0, 255.0) as u8;
+    }
+
+    // Apply Brightness
+    if (brightness - 1.0).abs() > 0.01 {
+         r = (r as f32 * brightness).clamp(0.0, 255.0) as u8;
+         g = (g as f32 * brightness).clamp(0.0, 255.0) as u8;
+         b = (b as f32 * brightness).clamp(0.0, 255.0) as u8;
+    }
+
+    // Apply Gamma
+    if (gamma - 1.0).abs() > 0.01 {
+        // let inv_gamma = 1.0 / gamma; // Not used currently, assuming direct power mapping
+        
+        r = (255.0 * (r as f32 / 255.0).powf(gamma)).clamp(0.0, 255.0) as u8;
+        g = (255.0 * (g as f32 / 255.0).powf(gamma)).clamp(0.0, 255.0) as u8;
+        b = (255.0 * (b as f32 / 255.0).powf(gamma)).clamp(0.0, 255.0) as u8;
+    }
+
+    Color { r, g, b }
 }
 

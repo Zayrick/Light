@@ -22,6 +22,10 @@ pub struct ScreenMirrorEffect {
     display_index: usize,
     smoothness: u32,
     auto_crop_enabled: bool,
+    hdr_enabled: bool,
+    brightness: f32,
+    saturation: f32,
+    gamma: f32,
     black_border: RefCell<BlackBorderProcessor>,
     previous_buffer: Vec<Color>,
 }
@@ -37,6 +41,10 @@ impl ScreenMirrorEffect {
             display_index: 0,
             smoothness: 80,
             auto_crop_enabled: true,
+            hdr_enabled: false,
+            brightness: 1.0,
+            saturation: 1.0,
+            gamma: 1.0,
             black_border: RefCell::new(BlackBorderProcessor::new()),
             previous_buffer: Vec::new(),
         }
@@ -100,7 +108,18 @@ impl ScreenMirrorEffect {
                         CropRegion::default()
                     };
 
-                    render_frame(layout, frame, buffer, prev, smoothness, &crop)
+                    render_frame(
+                        layout,
+                        frame,
+                        buffer,
+                        prev,
+                        smoothness,
+                        &crop,
+                        self.hdr_enabled,
+                        self.brightness,
+                        self.saturation,
+                        self.gamma,
+                    )
                 }) {
                     Ok(true) => {
                         return true;
@@ -170,6 +189,20 @@ impl Effect for ScreenMirrorEffect {
                     .borrow_mut()
                     .set_enabled(self.auto_crop_enabled);
             }
+        }
+
+        if let Some(hdr_mode) = _params.get("hdrMode").and_then(|v| v.as_bool()) {
+            self.hdr_enabled = hdr_mode;
+        }
+
+        if let Some(val) = _params.get("brightness").and_then(|v| v.as_f64()) {
+            self.brightness = val as f32;
+        }
+        if let Some(val) = _params.get("saturation").and_then(|v| v.as_f64()) {
+            self.saturation = val as f32;
+        }
+        if let Some(val) = _params.get("gamma").and_then(|v| v.as_f64()) {
+            self.gamma = val as f32;
         }
 
         #[cfg(target_os = "windows")]
