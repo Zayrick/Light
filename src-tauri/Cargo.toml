@@ -34,4 +34,7 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
 ] }
+cpal = "0.16.0"
+spectrum-analyzer = "1.7.0"
+once_cell = "1.21.3"
 
