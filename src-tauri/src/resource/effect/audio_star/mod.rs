@@ -16,11 +16,13 @@ use spectrum_analyzer::windows::hann_window;
 use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use std::time::Duration;
 
-/// Number of FFT bins for frequency analysis.
 const FFT_SIZE: usize = 1024;
 
-/// Number of filtered FFT bins we'll work with.
+/// Number of filtered FFT bins we'll work with (matches C++ 256 bins).
 const FFT_BINS: usize = 256;
+
+/// Target FPS for decay calculation.
+const TARGET_FPS: f32 = 60.0;
 
 pub struct AudioStarEffect {
     // Layout dimensions.
@@ -35,6 +37,11 @@ pub struct AudioStarEffect {
     audio_device_index: Option<usize>,
     avg_size: usize,
 
+    // AGC (Auto Gain Control) settings - matches C++ AudioSettingsStruct.
+    amplitude: f32,          // Gain multiplier (default 100)
+    decay: f32,              // Decay rate percentage (default 80)
+    filter_constant: f32,    // Low-pass filter constant (default 1.0)
+
     // Edge beat settings.
     edge_beat_enabled: bool,
     edge_beat_hue: u16,
@@ -42,8 +49,9 @@ pub struct AudioStarEffect {
     edge_beat_sensitivity: f32,
 
     // FFT processing buffers.
-    fft_buffer: Vec<f32>,
-    fft_filtered: Vec<f32>,
+    fft_buffer: Vec<f32>,     // Raw FFT magnitude (with peak-hold and decay)
+    fft_nrml: Vec<f32>,       // Normalization array (frequency compensation)
+    fft_filtered: Vec<f32>,   // Final filtered FFT output
 
     // Audio sample buffer.
     audio_samples: Vec<f32>,
@@ -51,32 +59,57 @@ pub struct AudioStarEffect {
 
 impl AudioStarEffect {
     pub fn new() -> Self {
+        // Default AGC settings matching C++ AudioSettingsStruct.
+        // nrml_ofst = 0.04, nrml_scl = 0.5
+        // Initialize normalization array (frequency compensation).
+        // Higher frequencies get more gain to compensate for typical audio spectrum roll-off.
+        let fft_nrml: Vec<f32> = (0..FFT_BINS)
+            .map(|i| 0.04 + (0.5 * (i as f32 / FFT_BINS as f32)))
+            .collect();
+
         Self {
             width: 0,
             height: 0,
             time: 0.0,
             speed: 50.0,
             audio_device_index: None,
-            avg_size: 4,
+            avg_size: 8, // C++ default is 8
+            amplitude: 100.0,
+            decay: 80.0,
+            filter_constant: 1.0,
             edge_beat_enabled: false,
             edge_beat_hue: 0,
             edge_beat_saturation: 0,
             edge_beat_sensitivity: 100.0,
             fft_buffer: vec![0.0; FFT_BINS],
+            fft_nrml,
             fft_filtered: vec![0.0; FFT_BINS],
             audio_samples: vec![0.0; FFT_SIZE],
         }
     }
 
     /// Process audio samples and update FFT data.
+    /// Matches the C++ AudioSignalProcessor::Process() implementation.
     fn process_audio(&mut self) {
         let manager = AudioManager::get();
 
         // Read raw audio samples.
         manager.read_samples(&mut self.audio_samples);
 
-        // Apply Hann window.
-        let windowed = hann_window(&self.audio_samples);
+        // Apply amplitude gain (AGC) - matches C++ fft_tmp[i] *= settings->amplitude.
+        let amplified_samples: Vec<f32> = self.audio_samples.iter()
+            .map(|&s| s * self.amplitude)
+            .collect();
+
+        // Apply decay to previous FFT values.
+        // C++: data.fft[i] = data.fft[i] * ((float(settings->decay) / 100.0f / (60 / FPS)));
+        let decay_factor = (self.decay / 100.0) / (60.0 / TARGET_FPS);
+        for i in 0..FFT_BINS {
+            self.fft_buffer[i] *= decay_factor;
+        }
+
+        // Apply Hann window (C++ window_mode == 1).
+        let windowed = hann_window(&amplified_samples);
 
         // Compute FFT.
         if let Ok(spectrum) = samples_fft_to_spectrum(
@@ -92,15 +125,79 @@ impl AudioStarEffect {
             let step = freq_data.len().max(1) as f32 / FFT_BINS as f32;
             for i in 0..FFT_BINS {
                 let idx = (i as f32 * step) as usize;
-                let value = freq_data.get(idx).copied().unwrap_or(0.0);
-                self.fft_buffer[i] = value;
+                let raw_mag = freq_data.get(idx).copied().unwrap_or(0.0);
+
+                // Apply normalization (frequency compensation).
+                // C++: apply_window(fft_tmp, data.fft_nrml, 256);
+                let normalized_mag = raw_mag * self.fft_nrml[i];
+
+                // Apply logarithmic filter to minimize noise from very low amplitude frequencies.
+                // C++: fftmag = (0.5f * log10(1.1f * fftmag)) + (0.9f * fftmag);
+                let fftmag = if normalized_mag > 0.0 {
+                    (0.5 * (1.1 * normalized_mag).log10()) + (0.9 * normalized_mag)
+                } else {
+                    0.0
+                };
+
+                // Clamp to [0, 1] range.
+                // C++: if (fftmag > 1.0f) fftmag = 1.0f;
+                let fftmag = fftmag.clamp(0.0, 1.0);
+
+                // Peak-hold behavior: only update if new value is greater.
+                // C++: if (fftmag > data.fft[i*2]) data.fft[i*2] = fftmag;
+                if fftmag > self.fft_buffer[i] {
+                    self.fft_buffer[i] = fftmag;
+                }
             }
         }
 
-        // Apply smoothing/decay to filtered FFT.
-        let decay = 0.85_f32;
+        // Apply averaging over avg_size (C++ avg_mode == 0, binning mode).
+        self.apply_binning_average();
+
+        // Apply low-pass filter to get final filtered FFT.
+        // C++: data.fft_fltr[i] = equalizer[i/16] * (data.fft_fltr[i] + (filter_constant * (data.fft[i] - data.fft_fltr[i])));
         for i in 0..FFT_BINS {
-            self.fft_filtered[i] = self.fft_filtered[i] * decay + self.fft_buffer[i] * (1.0 - decay);
+            self.fft_filtered[i] = self.fft_filtered[i] + 
+                (self.filter_constant * (self.fft_buffer[i] - self.fft_filtered[i]));
+        }
+    }
+
+    /// Apply binning average (C++ avg_mode == 0).
+    fn apply_binning_average(&mut self) {
+        if self.avg_size <= 1 {
+            return;
+        }
+
+        // Average start bins.
+        let mut sum1: f32 = 0.0;
+        let mut sum2: f32 = 0.0;
+        for k in 0..self.avg_size.min(FFT_BINS) {
+            sum1 += self.fft_buffer[k];
+            sum2 += self.fft_buffer[FFT_BINS - 1 - k];
+        }
+        let avg1 = sum1 / self.avg_size as f32;
+        let avg2 = sum2 / self.avg_size as f32;
+        for k in 0..self.avg_size.min(FFT_BINS) {
+            self.fft_buffer[k] = avg1;
+            self.fft_buffer[FFT_BINS - 1 - k] = avg2;
+        }
+
+        // Average middle bins.
+        let mut i = 0;
+        while i < FFT_BINS.saturating_sub(self.avg_size) {
+            let mut sum: f32 = 0.0;
+            for j in 0..self.avg_size {
+                if i + j < FFT_BINS {
+                    sum += self.fft_buffer[i + j];
+                }
+            }
+            let avg = sum / self.avg_size as f32;
+            for j in 0..self.avg_size {
+                if i + j < FFT_BINS {
+                    self.fft_buffer[i + j] = avg;
+                }
+            }
+            i += self.avg_size;
         }
     }
 
@@ -247,6 +344,7 @@ impl Effect for AudioStarEffect {
             self.avg_size = (avg_size as usize).max(1);
         }
 
+        // Edge beat parameters.
         if let Some(enabled) = params.get("edgeBeat").and_then(|v| v.as_bool()) {
             self.edge_beat_enabled = enabled;
         }
@@ -355,7 +453,7 @@ const AUDIO_STAR_PARAMS: [EffectParam; 8] = [
             min: 1.0,
             max: 16.0,
             step: 1.0,
-            default: 4.0,
+            default: 8.0,
         },
         dependency: None,
     },
