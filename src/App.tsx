@@ -109,7 +109,6 @@ export default function App() {
               effects={effects}
               isScanning={isScanning}
               onScan={scanDevices}
-              onSetEffect={handleSetEffect}
               onNavigate={handleNavigate}
             />
           </motion.div>
