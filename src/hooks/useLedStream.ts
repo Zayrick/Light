@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { LedColor as LedColorType } from "../types";
 
@@ -64,9 +64,46 @@ export function getLatestColors(port: string): LedColor[] | null {
   return latestByPort.get(port) ?? null;
 }
 
-// Convenience hook for components
+// Throttle interval in ms - limits React state updates to ~30fps
+// The backend can still send updates faster, but we only re-render at this rate
+const THROTTLE_MS = 33;
+
+// Convenience hook for components with built-in throttling
 export function useLedColors(port: string, length: number) {
   const [colors, setColors] = useState<LedColor[] | null>(() => getLatestColors(port));
+  
+  // Refs for throttling
+  const pendingColorsRef = useRef<LedColor[] | null>(null);
+  const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastUpdateRef = useRef<number>(0);
+
+  // Throttled setter
+  const throttledSetColors = useCallback((newColors: LedColor[]) => {
+    pendingColorsRef.current = newColors;
+    
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateRef.current;
+    
+    // If enough time has passed, update immediately
+    if (timeSinceLastUpdate >= THROTTLE_MS) {
+      lastUpdateRef.current = now;
+      setColors(newColors);
+      pendingColorsRef.current = null;
+      return;
+    }
+    
+    // Otherwise, schedule an update if not already scheduled
+    if (!throttleTimeoutRef.current) {
+      throttleTimeoutRef.current = setTimeout(() => {
+        if (pendingColorsRef.current) {
+          lastUpdateRef.current = Date.now();
+          setColors(pendingColorsRef.current);
+          pendingColorsRef.current = null;
+        }
+        throttleTimeoutRef.current = null;
+      }, THROTTLE_MS - timeSinceLastUpdate);
+    }
+  }, []);
 
   // Keep default gray placeholders when no data yet
   const displayColors = useMemo(() => {
@@ -87,7 +124,9 @@ export function useLedColors(port: string, length: number) {
       if (cached) setColors(cached);
 
       unsubLocal = subscribeToLedPort(port, (next) => {
-        setColors(next);
+        if (mounted) {
+          throttledSetColors(next);
+        }
       });
     };
 
@@ -96,10 +135,13 @@ export function useLedColors(port: string, length: number) {
     return () => {
       mounted = false;
       if (unsubLocal) unsubLocal();
+      // Clear any pending throttle timeout
+      if (throttleTimeoutRef.current) {
+        clearTimeout(throttleTimeoutRef.current);
+        throttleTimeoutRef.current = null;
+      }
     };
-  }, [port]);
+  }, [port, throttledSetColors]);
 
   return { colors: displayColors, isDefault: !colors || colors.length === 0 };
 }
-
-

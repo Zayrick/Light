@@ -1,6 +1,55 @@
 import { ComponentType, useMemo } from 'react';
-import * as Icons from 'lucide-react';
-import { LucideProps } from 'lucide-react';
+import {
+  // Used by effects (from backend)
+  AudioLines,
+  Monitor,
+  Power,
+  Waves,
+  LayoutGrid,
+  // Fallback
+  Component,
+  // Other commonly used icons in the app
+  Sun,
+  Sliders,
+  RefreshCw,
+  Zap,
+  ArrowRight,
+  BookOpen,
+  Puzzle,
+  Music,
+  Cast,
+  Bell,
+  ListFilter,
+  Settings,
+  Home,
+  type LucideProps,
+} from 'lucide-react';
+
+// Explicit icon registry - only includes icons actually used in the app
+// Add new icons here when needed by backend effects
+const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
+  // Effect icons (from backend)
+  AudioLines,
+  Monitor,
+  Power,
+  Waves,
+  LayoutGrid,
+  // UI icons
+  Component,
+  Sun,
+  Sliders,
+  RefreshCw,
+  Zap,
+  ArrowRight,
+  BookOpen,
+  Puzzle,
+  Music,
+  Cast,
+  Bell,
+  ListFilter,
+  Settings,
+  Home,
+};
 
 interface DynamicIconProps extends LucideProps {
   name: string;
@@ -8,20 +57,15 @@ interface DynamicIconProps extends LucideProps {
 
 export function DynamicIcon({ name, ...props }: DynamicIconProps) {
   const Icon = useMemo(() => {
-    // The backend should send the exact export name from lucide-react (PascalCase)
-    // e.g. "Waves", "Monitor", "LayoutGrid"
-    const iconName = name as keyof typeof Icons;
-    const IconComponent = Icons[iconName];
+    const IconComponent = ICON_MAP[name];
     
     if (!IconComponent) {
-        console.warn(`Icon "${name}" not found in lucide-react`);
-        return Icons.Component; // Fallback icon
+      console.warn(`Icon "${name}" not found in ICON_MAP. Add it to DynamicIcon.tsx`);
+      return Component; // Fallback icon
     }
     
-    // We cast to specific type because keyof typeof Icons includes non-component exports if any (though usually it's just icons + createLucideIcon)
-    return IconComponent as ComponentType<LucideProps>;
+    return IconComponent;
   }, [name]);
 
   return <Icon {...props} />;
 }
-
