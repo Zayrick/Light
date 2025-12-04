@@ -1,8 +1,6 @@
-import FormControl from "@mui/material/FormControl";
-import Select, { SelectChangeEvent } from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
 import { ListFilter } from "lucide-react";
 import { SelectParam } from "../../../../types";
+import "./SelectRenderer.css";
 
 interface SelectRendererProps {
   param: SelectParam;
@@ -22,105 +20,45 @@ export function SelectRenderer({
   onCommit,
 }: SelectRendererProps) {
   const hasOptions = param.options.length > 0;
-  const selectLabelId = `${modeId}-${param.key}-label`;
+  const selectId = `${modeId}-${param.key}`;
 
-  const handleChange = (event: SelectChangeEvent<string>) => {
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const val = Number(event.target.value);
     onChange(val);
     onCommit(val);
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: "13px",
-          color: "var(--text-secondary)",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+    <div className="select-renderer">
+      <div className="select-renderer-header">
+        <span className="select-renderer-label">
           <ListFilter size={16} /> {param.label}
         </span>
         {hasOptions && (
-          <span style={{ opacity: 0.7 }}>
+          <span className="select-renderer-count">
             {param.options.length} option{param.options.length > 1 ? "s" : ""}
           </span>
         )}
       </div>
       {hasOptions ? (
-        <FormControl fullWidth size="small" variant="outlined">
-          <Select
-            labelId={selectLabelId}
-            value={String(value)}
-            disabled={disabled}
-            onChange={handleChange}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  maxHeight: 280,
-                  backgroundColor: "var(--bg-card)",
-                  backdropFilter: "blur(20px)",
-                  color: "var(--text-primary)",
-                  borderRadius: "var(--radius-m)",
-                  border: "1px solid var(--border-subtle)",
-                  "& .MuiMenuItem-root": {
-                    "&.Mui-selected": {
-                      backgroundColor: "var(--accent-color)",
-                      color: "var(--accent-text)",
-                      "&:hover": {
-                        backgroundColor: "var(--accent-hover)",
-                      },
-                    },
-                    "&:hover": {
-                      backgroundColor: "var(--bg-card-hover)",
-                    },
-                    fontSize: "13px",
-                    minHeight: "32px",
-                  },
-                },
-              },
-            }}
-            sx={{
-              color: "var(--text-primary)",
-              borderRadius: "var(--radius-m)",
-              fontSize: "13px",
-              height: "32px",
-              ".MuiOutlinedInput-notchedOutline": {
-                borderColor: "var(--border-subtle)",
-              },
-              "&:hover .MuiOutlinedInput-notchedOutline": {
-                borderColor: "var(--text-secondary)",
-              },
-              "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                borderColor: "var(--accent-color)",
-              },
-              ".MuiSvgIcon-root": {
-                color: "var(--text-secondary)",
-              },
-              ".MuiSelect-select": {
-                display: "flex",
-                alignItems: "center",
-                paddingTop: "4px",
-                paddingBottom: "4px",
-              },
-            }}
-          >
-            {param.options.map((option) => (
-              <MenuItem key={option.value} value={String(option.value)}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <select
+          id={selectId}
+          value={value}
+          disabled={disabled}
+          onChange={handleChange}
+          className="select-renderer-input"
+        >
+          {param.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       ) : (
-        <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+        <div className="select-renderer-empty">
           No options available.
         </div>
       )}
     </div>
   );
 }
-
