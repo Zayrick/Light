@@ -16,15 +16,14 @@ pub fn render_frame(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
-    hdr_enabled: bool,
     brightness: f32,
     saturation: f32,
     gamma: f32,
 ) {
     if layout.1 <= 1 {
-        render_linear(frame, buffer, previous_buffer, smoothness, crop, hdr_enabled, brightness, saturation, gamma);
+        render_linear(frame, buffer, previous_buffer, smoothness, crop, brightness, saturation, gamma);
     } else {
-        render_matrix(layout, frame, buffer, previous_buffer, smoothness, crop, hdr_enabled, brightness, saturation, gamma);
+        render_matrix(layout, frame, buffer, previous_buffer, smoothness, crop, brightness, saturation, gamma);
     }
 }
 
@@ -54,7 +53,6 @@ fn render_linear(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
-    hdr_enabled: bool,
     brightness: f32,
     saturation: f32,
     gamma: f32,
@@ -70,7 +68,7 @@ fn render_linear(
         } else {
             (index as f32 + 0.5) / leds as f32
         };
-        let target = sample_pixel(frame, ratio_x, 0.5, crop, hdr_enabled, brightness, saturation, gamma);
+        let target = sample_pixel(frame, ratio_x, 0.5, crop, brightness, saturation, gamma);
 
         if index < previous_buffer.len() {
             let prev = previous_buffer[index];
@@ -90,7 +88,6 @@ fn render_matrix(
     previous_buffer: &mut [Color],
     smoothness: u32,
     crop: &CropRegion,
-    hdr_enabled: bool,
     brightness: f32,
     saturation: f32,
     gamma: f32,
@@ -118,7 +115,7 @@ fn render_matrix(
                 (y as f32 + 0.5) / height as f32
             };
 
-            let target = sample_pixel(frame, ratio_x, ratio_y, crop, hdr_enabled, brightness, saturation, gamma);
+            let target = sample_pixel(frame, ratio_x, ratio_y, crop, brightness, saturation, gamma);
 
             if idx < previous_buffer.len() {
                 let prev = previous_buffer[idx];
@@ -137,7 +134,6 @@ fn sample_pixel(
     ratio_x: f32,
     ratio_y: f32,
     crop: &CropRegion,
-    hdr_enabled: bool,
     brightness: f32,
     saturation: f32,
     gamma: f32,
@@ -170,15 +166,6 @@ fn sample_pixel(
     let mut r = frame.pixels[offset + 2];
     let mut g = frame.pixels[offset + 1];
     let mut b = frame.pixels[offset];
-
-    if hdr_enabled {
-        if let Some(lut) = crate::resource::lut::get_hdr_lut() {
-            let (r2, g2, b2) = crate::resource::lut::apply_lut(r, g, b, lut);
-            r = r2;
-            g = g2;
-            b = b2;
-        }
-    }
 
     // Apply Saturation
     if (saturation - 1.0).abs() > 0.01 {
