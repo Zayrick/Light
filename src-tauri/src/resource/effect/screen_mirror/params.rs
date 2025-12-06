@@ -44,7 +44,7 @@ fn screen_source_options() -> Result<Vec<SelectOption>, String> {
     Ok(Vec::new())
 }
 
-pub const SCREEN_PARAMS: [EffectParam; 13] = [
+pub const SCREEN_PARAMS: [EffectParam; 12] = [
     EffectParam {
         key: "displayIndex",
         label: "屏幕来源",
@@ -95,14 +95,6 @@ pub const SCREEN_PARAMS: [EffectParam; 13] = [
             max: 4.0,
             step: 0.1,
             default: 1.0,
-        },
-        dependency: None,
-    },
-    EffectParam {
-        key: "hdrMode",
-        label: "HDR 优化",
-        kind: EffectParamKind::Toggle {
-            default: false,
         },
         dependency: None,
     },
