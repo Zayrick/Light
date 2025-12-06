@@ -118,3 +118,5 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 3.  **类型安全与代码组织**：
     -   确保 `src/types/` 下的定义严格匹配后端 `dto.rs` 和序列化的 Rust 结构体。
     -   保持入口文件（`lib.rs`, `index.ts`）简洁，将具体实现拆分到模块中（如 `api/commands.rs`, `api/dto.rs`）。
+4.  **依赖管理**：
+    -   安装外部库时候，请使用命令安装最新版本而不是直接修改package.json或者src-tauri\Cargo.toml文件。
