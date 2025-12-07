@@ -21,7 +21,9 @@ pub fn run() {
             commands::set_capture_scale,
             commands::get_capture_scale,
             commands::set_capture_fps,
-            commands::get_capture_fps
+            commands::get_capture_fps,
+            commands::set_capture_method,
+            commands::get_capture_method
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
