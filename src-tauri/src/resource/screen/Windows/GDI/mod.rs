@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use windows::Win32::Foundation::{GetLastError, HWND};
+use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ERROR_NOT_FOUND};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
@@ -39,6 +40,7 @@ pub struct GdiCapturer {
     bitmap: HBITMAP,
     old_bitmap: HGDIOBJ,
     region: CaptureRegion,
+    output_index: usize,
     stride: usize,
     buffer: Vec<u8>,
     bitmap_info: BITMAPINFO,
@@ -54,6 +56,10 @@ pub struct GdiCapturer {
 
 impl GdiCapturer {
     pub fn new() -> Result<Self, ScreenCaptureError> {
+        Self::with_output(0)
+    }
+
+    pub fn with_output(output_index: usize) -> Result<Self, ScreenCaptureError> {
         unsafe {
             let desktop_hwnd = GetDesktopWindow();
             let screen_dc = get_dc_checked(desktop_hwnd)?;
@@ -66,7 +72,7 @@ impl GdiCapturer {
                 });
             }
 
-            let region = detect_virtual_region();
+            let region = detect_region(output_index);
             let bitmap = CreateCompatibleBitmap(screen_dc, region.width, region.height);
             if bitmap.0.is_null() {
                 let _ = DeleteDC(memory_dc);
@@ -121,6 +127,7 @@ impl GdiCapturer {
                 bitmap,
                 old_bitmap,
                 region,
+                output_index,
                 stride,
                 buffer: vec![0u8; buffer_len],
                 bitmap_info,
@@ -132,6 +139,10 @@ impl GdiCapturer {
                 has_frame: false,
             })
         }
+    }
+
+    pub fn output_index(&self) -> usize {
+        self.output_index
     }
 
     fn capture_internal(&mut self) -> Result<(), ScreenCaptureError> {
@@ -276,6 +287,47 @@ fn detect_virtual_region() -> CaptureRegion {
             height: height.max(1),
         }
     }
+}
+
+fn detect_region(output_index: usize) -> CaptureRegion {
+    if let Ok(factory) = unsafe { CreateDXGIFactory1::<IDXGIFactory1>() } {
+        let mut current_index = 0usize;
+        for adapter_index in 0.. {
+            let adapter = match unsafe { factory.EnumAdapters1(adapter_index) } {
+                Ok(adapter) => adapter,
+                Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                Err(_) => break,
+            };
+
+            for output_idx in 0.. {
+                let output = match unsafe { adapter.EnumOutputs(output_idx) } {
+                    Ok(output) => output,
+                    Err(err) if err.code() == DXGI_ERROR_NOT_FOUND => break,
+                    Err(_) => break,
+                };
+
+                let Ok(desc) = (unsafe { output.GetDesc() }) else { continue };
+                if !desc.AttachedToDesktop.as_bool() {
+                    continue;
+                }
+
+                if current_index == output_index {
+                    let width = (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left).max(1);
+                    let height = (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top).max(1);
+                    return CaptureRegion {
+                        origin_x: desc.DesktopCoordinates.left,
+                        origin_y: desc.DesktopCoordinates.top,
+                        width,
+                        height,
+                    };
+                }
+
+                current_index += 1;
+            }
+        }
+    }
+
+    detect_virtual_region()
 }
 
 unsafe fn get_dc_checked(hwnd: HWND) -> Result<HDC, ScreenCaptureError> {
