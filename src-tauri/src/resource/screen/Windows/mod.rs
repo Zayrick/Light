@@ -237,28 +237,25 @@ impl DesktopDuplicator {
                     Err(err) => {
                         // Try to fall back to GDI if DXGI fails
                         eprintln!("[screen] DXGI failed, falling back to GDI: {}", err);
-                        Ok(Self::Gdi(GdiCapturer::new()?))
+                        Ok(Self::Gdi(GdiCapturer::with_output(output_index)?))
                     }
                 }
             }
-            CaptureMethod::Gdi => Ok(Self::Gdi(GdiCapturer::new()?)),
+            CaptureMethod::Gdi => Ok(Self::Gdi(GdiCapturer::with_output(output_index)?)),
         }
     }
 
     pub fn set_output_index(&mut self, output_index: usize) -> Result<(), ScreenCaptureError> {
         match self {
             Self::Dxgi(capturer) => capturer.set_output_index(output_index),
-            Self::Gdi(_) => {
-                // GDI captures the entire virtual screen, output_index is ignored
-                Ok(())
-            }
+            Self::Gdi(capturer) => GdiCapturer::with_output(output_index).map(|c| *capturer = c),
         }
     }
 
     pub fn output_index(&self) -> usize {
         match self {
             Self::Dxgi(capturer) => capturer.output_index(),
-            Self::Gdi(_) => 0, // GDI always captures virtual screen
+            Self::Gdi(capturer) => capturer.output_index(),
         }
     }
 }
