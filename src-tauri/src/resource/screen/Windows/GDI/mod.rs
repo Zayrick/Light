@@ -1,5 +1,12 @@
+//! Windows screen capture using GDI (Graphics Device Interface).
+//!
+//! This module provides a fallback screen capture implementation using GDI,
+//! which has better compatibility with older systems and certain display configurations.
+
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use windows::Win32::Foundation::{GetLastError, HWND};
 use windows::Win32::Graphics::Gdi::{
@@ -12,7 +19,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
-use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use crate::resource::screen::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use super::{CAPTURE_FPS, CAPTURE_SCALE_PERCENT};
+
+const BYTES_PER_PIXEL: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
 struct CaptureRegion {
@@ -22,7 +32,7 @@ struct CaptureRegion {
     height: i32,
 }
 
-pub struct DesktopDuplicator {
+pub struct GdiCapturer {
     desktop_hwnd: HWND,
     screen_dc: HDC,
     memory_dc: HDC,
@@ -32,14 +42,22 @@ pub struct DesktopDuplicator {
     stride: usize,
     buffer: Vec<u8>,
     bitmap_info: BITMAPINFO,
+    // Scaled buffer and dimensions
+    scaled_buffer: Vec<u8>,
+    scaled_width: u32,
+    scaled_height: u32,
+    scaled_stride: usize,
+    // Frame rate control
+    last_capture_time: Option<Instant>,
+    has_frame: bool,
 }
 
-impl DesktopDuplicator {
+impl GdiCapturer {
     pub fn new() -> Result<Self, ScreenCaptureError> {
         unsafe {
             let desktop_hwnd = GetDesktopWindow();
             let screen_dc = get_dc_checked(desktop_hwnd)?;
-            let memory_dc = CreateCompatibleDC(screen_dc);
+            let memory_dc = CreateCompatibleDC(Some(screen_dc));
             if memory_dc.0.is_null() {
                 release_dc_checked(desktop_hwnd, screen_dc);
                 return Err(ScreenCaptureError::OsError {
@@ -62,7 +80,7 @@ impl DesktopDuplicator {
             let bitmap_obj = HGDIOBJ(bitmap.0);
             let old_bitmap = SelectObject(memory_dc, bitmap_obj);
             if old_bitmap.0.is_null() {
-                let _ = DeleteObject(bitmap);
+                let _ = DeleteObject(bitmap.into());
                 let _ = DeleteDC(memory_dc);
                 release_dc_checked(desktop_hwnd, screen_dc);
                 return Err(ScreenCaptureError::OsError {
@@ -90,6 +108,12 @@ impl DesktopDuplicator {
                 bmiColors: [RGBQUAD::default(); 1],
             };
 
+            // Calculate scaled dimensions
+            let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as u32;
+            let scaled_width = (region.width as u32 * scale_percent / 100).max(1);
+            let scaled_height = (region.height as u32 * scale_percent / 100).max(1);
+            let scaled_stride = scaled_width as usize * BYTES_PER_PIXEL;
+
             Ok(Self {
                 desktop_hwnd,
                 screen_dc,
@@ -100,6 +124,12 @@ impl DesktopDuplicator {
                 stride,
                 buffer: vec![0u8; buffer_len],
                 bitmap_info,
+                scaled_buffer: vec![0u8; scaled_stride * scaled_height as usize],
+                scaled_width,
+                scaled_height,
+                scaled_stride,
+                last_capture_time: None,
+                has_frame: false,
             })
         }
     }
@@ -112,7 +142,7 @@ impl DesktopDuplicator {
                 0,
                 self.region.width,
                 self.region.height,
-                self.screen_dc,
+                Some(self.screen_dc),
                 self.region.origin_x,
                 self.region.origin_y,
                 SRCCOPY,
@@ -137,38 +167,81 @@ impl DesktopDuplicator {
                     code: GetLastError().0,
                 });
             }
+
+            // Downsample if needed
+            self.downsample();
         }
         Ok(())
     }
+
+    fn downsample(&mut self) {
+        let src_width = self.region.width as usize;
+        let src_height = self.region.height as usize;
+        let dst_width = self.scaled_width as usize;
+        let dst_height = self.scaled_height as usize;
+
+        // If no scaling needed, just copy
+        if src_width == dst_width && src_height == dst_height {
+            self.scaled_buffer.copy_from_slice(&self.buffer);
+            return;
+        }
+
+        // Simple nearest-neighbor downsampling
+        for y in 0..dst_height {
+            let src_y = y * src_height / dst_height;
+            let dst_row_start = y * self.scaled_stride;
+            let src_row_start = src_y * self.stride;
+
+            for x in 0..dst_width {
+                let src_x = x * src_width / dst_width;
+                let src_idx = src_row_start + src_x * BYTES_PER_PIXEL;
+                let dst_idx = dst_row_start + x * BYTES_PER_PIXEL;
+
+                self.scaled_buffer[dst_idx..dst_idx + BYTES_PER_PIXEL]
+                    .copy_from_slice(&self.buffer[src_idx..src_idx + BYTES_PER_PIXEL]);
+            }
+        }
+    }
 }
 
-impl ScreenCapturer for DesktopDuplicator {
+impl ScreenCapturer for GdiCapturer {
     fn capture(&mut self) -> Result<ScreenFrame<'_>, ScreenCaptureError> {
-        self.capture_internal()?;
+        let fps = CAPTURE_FPS.load(Ordering::Relaxed).clamp(1, 60) as u64;
+        let interval = std::time::Duration::from_micros(1_000_000u64 / fps.max(1));
+        let now = Instant::now();
+
+        let should_capture = match self.last_capture_time {
+            Some(last) => now.duration_since(last) >= interval,
+            None => true,
+        };
+
+        if should_capture || !self.has_frame {
+            self.capture_internal()?;
+            self.last_capture_time = Some(now);
+            self.has_frame = true;
+        }
+
         Ok(ScreenFrame {
-            width: self.region.width as u32,
-            height: self.region.height as u32,
-            stride: self.stride,
-            pixels: &self.buffer,
+            width: self.scaled_width,
+            height: self.scaled_height,
+            stride: self.scaled_stride,
+            pixels: &self.scaled_buffer,
         })
     }
 
     fn size(&self) -> (u32, u32) {
-        (
-            self.region.width as u32,
-            self.region.height as u32,
-        )
+        (self.scaled_width, self.scaled_height)
     }
 }
 
-impl Drop for DesktopDuplicator {
+impl Drop for GdiCapturer {
     fn drop(&mut self) {
         unsafe {
             if !self.old_bitmap.0.is_null() {
                 SelectObject(self.memory_dc, self.old_bitmap);
             }
             if !self.bitmap.0.is_null() {
-                let _ = DeleteObject(self.bitmap);
+                let _ = DeleteObject(self.bitmap.into());
             }
             if !self.memory_dc.0.is_null() {
                 let _ = DeleteDC(self.memory_dc);
@@ -180,7 +253,7 @@ impl Drop for DesktopDuplicator {
     }
 }
 
-unsafe impl Send for DesktopDuplicator {}
+unsafe impl Send for GdiCapturer {}
 
 fn detect_virtual_region() -> CaptureRegion {
     unsafe {
@@ -206,7 +279,7 @@ fn detect_virtual_region() -> CaptureRegion {
 }
 
 unsafe fn get_dc_checked(hwnd: HWND) -> Result<HDC, ScreenCaptureError> {
-    let dc = GetDC(hwnd);
+    let dc = GetDC(Some(hwnd));
     if dc.0.is_null() {
         Err(ScreenCaptureError::OsError {
             context: "GetDC",
@@ -218,6 +291,5 @@ unsafe fn get_dc_checked(hwnd: HWND) -> Result<HDC, ScreenCaptureError> {
 }
 
 unsafe fn release_dc_checked(hwnd: HWND, dc: HDC) {
-    let _ = ReleaseDC(hwnd, dc);
+    let _ = ReleaseDC(Some(hwnd), dc);
 }
-

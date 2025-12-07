@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Device, EffectInfo } from "../types";
 
+export type CaptureMethod = "dxgi" | "gdi";
+
 export const api = {
   scanDevices: async (): Promise<Device[]> => {
     return await invoke<Device[]>("scan_devices");
@@ -36,5 +38,13 @@ export const api = {
 
   setCaptureFps: async (fps: number): Promise<void> => {
     return await invoke("set_capture_fps", { fps });
+  },
+
+  getCaptureMethod: async (): Promise<CaptureMethod> => {
+    return await invoke<CaptureMethod>("get_capture_method");
+  },
+
+  setCaptureMethod: async (method: CaptureMethod): Promise<void> => {
+    return await invoke("set_capture_method", { method });
   },
 };

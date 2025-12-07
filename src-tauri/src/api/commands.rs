@@ -6,10 +6,13 @@ use crate::api::dto::{EffectInfo, EffectParamInfo};
 #[cfg(target_os = "windows")]
 use crate::resource::screen::windows::{
     get_capture_fps as get_windows_capture_fps,
+    get_capture_method as get_windows_capture_method,
     get_capture_scale_percent,
     list_displays as list_windows_displays,
     set_capture_fps as set_windows_capture_fps,
+    set_capture_method as set_windows_capture_method,
     set_capture_scale_percent,
+    CaptureMethod,
     DisplayInfo as WindowsDisplayInfo,
 };
 
@@ -112,4 +115,22 @@ pub fn get_capture_fps() -> u8 {
     return get_windows_capture_fps();
     #[cfg(not(target_os = "windows"))]
     30
+}
+
+#[tauri::command]
+pub fn set_capture_method(method: String) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(m) = method.parse::<CaptureMethod>() {
+            set_windows_capture_method(m);
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_capture_method() -> String {
+    #[cfg(target_os = "windows")]
+    return get_windows_capture_method().to_string();
+    #[cfg(not(target_os = "windows"))]
+    "dxgi".to_string()
 }

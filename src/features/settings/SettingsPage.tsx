@@ -1,20 +1,38 @@
 import { useEffect, useState } from "react";
 import { Card } from "../../components/ui/Card";
 import { Slider } from "../../components/ui/Slider";
-import { api } from "../../services/api";
+import { Select, SelectOption } from "../../components/ui/Select";
+import { api, CaptureMethod } from "../../services/api";
+
+const captureMethodOptions: SelectOption[] = [
+  { value: "dxgi", label: "DXGI (Desktop Duplication)" },
+  { value: "gdi", label: "GDI (Legacy)" },
+];
 
 export function SettingsPage() {
   const [captureScale, setCaptureScale] = useState<number>(5);
   const [captureFps, setCaptureFps] = useState<number>(30);
+  const [captureMethod, setCaptureMethod] = useState<CaptureMethod>("dxgi");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.getCaptureScale(), api.getCaptureFps()]).then(([scale, fps]) => {
+    Promise.all([
+      api.getCaptureScale(),
+      api.getCaptureFps(),
+      api.getCaptureMethod(),
+    ]).then(([scale, fps, method]) => {
       setCaptureScale(scale);
       setCaptureFps(fps);
+      setCaptureMethod(method);
       setLoading(false);
     });
   }, []);
+
+  const handleMethodChange = (value: string) => {
+    const method = value as CaptureMethod;
+    setCaptureMethod(method);
+    api.setCaptureMethod(method);
+  };
 
   return (
     <>
@@ -27,6 +45,24 @@ export function SettingsPage() {
       <div style={{ padding: "20px" }}>
         <Card style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
           <h3>Screen Capture Quality</h3>
+          
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <label htmlFor="capture-method">Capture Method</label>
+              <Select
+                id="capture-method"
+                value={captureMethod}
+                options={captureMethodOptions}
+                onChange={handleMethodChange}
+                disabled={loading}
+              />
+            </div>
+            <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "5px" }}>
+              DXGI offers better performance with GPU acceleration and HDR support.
+              GDI provides better compatibility with older systems.
+            </p>
+          </div>
+
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
               <label htmlFor="capture-scale">Resolution Scale</label>
