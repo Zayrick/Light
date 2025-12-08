@@ -3,29 +3,29 @@ use crate::interface::controller::{
 };
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod protocol;
-use protocol::LedMatrixProtocol;
+use protocol::{LedMatrixProtocol, PROTOCOL_VERSION};
 
-/// mDNS服务类型
-const SERVICE_TYPE: &str = "_ledmatrix._udp.local.";
+/// mDNS服务类型（与虚拟LED矩阵保持一致）
+const SERVICE_TYPE: &str = "_testdevice._udp.local.";
 
-/// 发现的LED矩阵设备信息
+/// 发现的LED矩阵设备信息（仅基于mDNS）
 #[derive(Clone, Debug)]
 pub struct DiscoveredDevice {
     pub name: String,
     pub ip: String,
     pub port: u16,
-    pub width: usize,
-    pub height: usize,
 }
 
 /// LED矩阵UDP控制器
 pub struct LedMatrixUdpController {
     device_name: String,
+    protocol_version: u8,
     addr: SocketAddr,
     socket: UdpSocket,
     width: usize,
@@ -46,8 +46,34 @@ impl LedMatrixUdpController {
         socket
             .set_nonblocking(false)
             .map_err(|e| format!("Failed to set socket mode: {}", e))?;
+        socket
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .map_err(|e| format!("Failed to set socket timeout: {}", e))?;
 
-        let led_count = device.width * device.height;
+        // 查询设备详细信息（必须成功，否则报错）
+        let info = Self::fetch_device_info(&socket, addr)?;
+
+        if info.version != PROTOCOL_VERSION {
+            return Err(format!(
+                "Protocol version mismatch: device={}, expected={}",
+                info.version, PROTOCOL_VERSION
+            ));
+        }
+
+        let protocol_version = info.version;
+        let device_name = info.name.clone();
+        let width = info.width as usize;
+        let height = info.height as usize;
+
+        let led_count = width * height;
+
+        if led_count > u16::MAX as usize {
+            return Err(format!(
+                "LED count {} exceeds protocol index limit {}",
+                led_count,
+                u16::MAX
+            ));
+        }
 
         // 创建矩阵映射 - 行优先顺序
         let mut map = Vec::with_capacity(led_count);
@@ -56,26 +82,53 @@ impl LedMatrixUdpController {
         }
 
         let matrix_map = MatrixMap {
-            width: device.width,
-            height: device.height,
+            width,
+            height,
             map,
         };
 
         let zones = vec![Zone::matrix("LED Matrix", matrix_map, led_count)];
 
-        // 预分配帧缓冲区 (1字节命令 + width * height * 3字节颜色)
-        let frame_buffer = Vec::with_capacity(1 + led_count * 3);
+        // 预分配帧缓冲区 (1字节命令 + 2字节数量 + width * height * (2字节索引 + 3字节颜色))
+        let frame_buffer = Vec::with_capacity(1 + 2 + led_count * 5);
 
         Ok(Self {
-            device_name: device.name,
+            device_name,
+            protocol_version,
             addr,
             socket,
-            width: device.width,
-            height: device.height,
+            width,
+            height,
             led_count,
             zones,
             frame_buffer,
         })
+    }
+
+    /// 查询设备信息（必须成功）
+    fn fetch_device_info(socket: &UdpSocket, addr: SocketAddr) -> Result<protocol::QueryInfo, String> {
+        let payload = LedMatrixProtocol::encode_query_info();
+        let mut buf = [0u8; 512];
+
+        for _ in 0..3 {
+            socket
+                .send_to(&payload, addr)
+                .map_err(|e| format!("Failed to send query info: {}", e))?;
+
+            match socket.recv_from(&mut buf) {
+                Ok((len, _)) => {
+                    if let Some(info) = LedMatrixProtocol::decode_query_response(&buf[..len]) {
+                        return Ok(info);
+                    }
+                }
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+                    continue;
+                }
+                Err(e) => return Err(format!("Failed to receive query info: {}", e)),
+            }
+        }
+
+        Err("No query info response from device".to_string())
     }
 
     /// 发送UDP数据包
@@ -98,8 +151,8 @@ impl Controller for LedMatrixUdpController {
 
     fn description(&self) -> String {
         format!(
-            "UDP LED Matrix Display ({}x{}) - {}",
-            self.width, self.height, self.device_name
+            "UDP LED Matrix Display ({}x{}) [v{}] - {}",
+            self.width, self.height, self.protocol_version, self.device_name
         )
     }
 
@@ -133,19 +186,18 @@ impl Controller for LedMatrixUdpController {
             ));
         }
 
-        // 使用全量帧更新协议，一次性发送所有数据并自动刷新
-        LedMatrixProtocol::encode_full_frame_into(colors, true, &mut self.frame_buffer);
+        // 使用新的索引化批量更新协议
+        LedMatrixProtocol::encode_update_pixels_into(colors, &mut self.frame_buffer)?;
         self.send(&self.frame_buffer)?;
 
         Ok(())
     }
 
     fn clear(&mut self) -> Result<(), String> {
-        let packet = LedMatrixProtocol::encode_fill_screen(Color { r: 0, g: 0, b: 0 });
-        self.send(&packet)?;
-        let refresh = LedMatrixProtocol::encode_refresh();
-        self.send(&refresh)?;
-        Ok(())
+        // 发送全黑帧
+        let black = vec![Color { r: 0, g: 0, b: 0 }; self.led_count];
+        LedMatrixProtocol::encode_update_pixels_into(&black, &mut self.frame_buffer)?;
+        self.send(&self.frame_buffer)
     }
 
     fn disconnect(&mut self) -> Result<(), String> {
@@ -186,7 +238,12 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => match event {
                 ServiceEvent::ServiceResolved(info) => {
-                    let name = info.get_fullname().to_string();
+                    let properties = info.get_properties();
+
+                    let name = properties
+                        .get_property_val_str("name")
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| info.get_fullname().to_string());
 
                     // 获取IP地址
                     let addresses: Vec<_> = info.get_addresses().iter().collect();
@@ -196,29 +253,13 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
                     let ip = addresses[0].to_string();
                     let port = info.get_port();
 
-                    // 从TXT记录获取分辨率
-                    let properties = info.get_properties();
-                    let width: usize = properties
-                        .get_property_val_str("width")
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(192);
-                    let height: usize = properties
-                        .get_property_val_str("height")
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(108);
-
                     let device = DiscoveredDevice {
                         name: name.clone(),
                         ip,
                         port,
-                        width,
-                        height,
                     };
 
-                    println!(
-                        "Discovered LED Matrix: {} at {}:{} ({}x{})",
-                        name, device.ip, port, width, height
-                    );
+                    println!("Discovered LED Matrix: {} at {}:{}", name, device.ip, port);
 
                     if let Ok(mut devices) = devices_clone.lock() {
                         devices.insert(name, device);
@@ -258,10 +299,7 @@ fn probe() -> Vec<Box<dyn Controller>> {
     for device in devices {
         match LedMatrixUdpController::new(device.clone()) {
             Ok(controller) => {
-                println!(
-                    "Connected to LED Matrix: {} ({}x{})",
-                    device.name, device.width, device.height
-                );
+                println!("Connected to LED Matrix: {}", device.name);
                 controllers.push(Box::new(controller));
             }
             Err(e) => {
