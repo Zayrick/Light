@@ -131,7 +131,12 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             step: 50.0,
             default: 600.0,
         },
-        dependency: Some(EffectParamDependency::Always(DependencyBehavior::Hide)),
+        dependency: Some(EffectParamDependency::Dependency {
+            key: "autoCrop",
+            equals: Some(1.0),
+            not_equals: None,
+            behavior: DependencyBehavior::Disable,
+        }),
     },
     EffectParam {
         key: "bbBorderFrameCnt",
@@ -142,7 +147,12 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             step: 1.0,
             default: 50.0,
         },
-        dependency: Some(EffectParamDependency::Always(DependencyBehavior::Hide)),
+        dependency: Some(EffectParamDependency::Dependency {
+            key: "autoCrop",
+            equals: Some(1.0),
+            not_equals: None,
+            behavior: DependencyBehavior::Disable,
+        }),
     },
     EffectParam {
         key: "bbMaxInconsistentCnt",
@@ -153,7 +163,12 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             step: 1.0,
             default: 10.0,
         },
-        dependency: Some(EffectParamDependency::Always(DependencyBehavior::Hide)),
+        dependency: Some(EffectParamDependency::Dependency {
+            key: "autoCrop",
+            equals: Some(1.0),
+            not_equals: None,
+            behavior: DependencyBehavior::Disable,
+        }),
     },
     EffectParam {
         key: "bbBlurRemoveCnt",
@@ -164,7 +179,12 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             step: 1.0,
             default: 1.0,
         },
-        dependency: Some(EffectParamDependency::Always(DependencyBehavior::Hide)),
+        dependency: Some(EffectParamDependency::Dependency {
+            key: "autoCrop",
+            equals: Some(1.0),
+            not_equals: None,
+            behavior: DependencyBehavior::Disable,
+        }),
     },
     EffectParam {
         key: "bbMode",
