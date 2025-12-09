@@ -10,6 +10,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@ark-ui/react": "^5.29.1",
+    "@heroui/react": "^2.8.5",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "clsx": "^2.1.1",

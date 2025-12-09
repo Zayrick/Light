@@ -1,0 +1,120 @@
+/* Ark UI Select Component Styles */
+
+/* Header Layout */
+.ark-select-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ark-select-value-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Root */
+[data-scope="select"][data-part="root"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+[data-scope="select"][data-part="label"] {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Control & Trigger */
+[data-scope="select"][data-part="control"] {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+[data-scope="select"][data-part="trigger"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-scope="select"][data-part="trigger"]:hover:not([data-disabled]) {
+  border-color: var(--text-secondary);
+}
+
+[data-scope="select"][data-part="trigger"]:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(96, 205, 255, 0.2);
+}
+
+[data-scope="select"][data-part="trigger"][data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dropdown Content */
+[data-scope="select"][data-part="content"] {
+  background-color: #2d2d2d;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  animation: ark-select-fadeIn 0.15s ease;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-scope="select"][data-part="content"] {
+    background-color: #ffffff;
+  }
+}
+
+/* Items */
+[data-scope="select"][data-part="item"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: background-color 0.1s ease;
+}
+
+[data-scope="select"][data-part="item"]:hover,
+[data-scope="select"][data-part="item"][data-highlighted] {
+  background-color: var(--bg-card-hover);
+}
+
+[data-scope="select"][data-part="item"][data-state="checked"] {
+  color: var(--accent-color);
+}
+
+[data-scope="select"][data-part="item-indicator"] {
+  color: var(--accent-color);
+}
+
+@keyframes ark-select-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

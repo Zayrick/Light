@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Card } from "../../components/ui/Card";
+import { Select } from "../../components/ui/Select";
 import { Slider } from "../../components/ui/Slider";
-import { Select, SelectOption } from "../../components/ui/Select";
 import { api, CaptureMethod } from "../../services/api";
+import "./settings.css";
 
-const captureMethodOptions: SelectOption[] = [
-  { value: "dxgi", label: "DXGI (Desktop Duplication)" },
-  { value: "gdi", label: "GDI (Legacy)" },
+const captureMethodOptions = [
+  { value: "dxgi" as const, label: "DXGI (Desktop Duplication)" },
+  { value: "gdi" as const, label: "GDI (Legacy)" },
 ];
 
 export function SettingsPage() {
@@ -28,10 +29,25 @@ export function SettingsPage() {
     });
   }, []);
 
-  const handleMethodChange = (value: string) => {
-    const method = value as CaptureMethod;
-    setCaptureMethod(method);
-    api.setCaptureMethod(method);
+  const handleMethodChange = (value: CaptureMethod) => {
+    setCaptureMethod(value);
+    api.setCaptureMethod(value);
+  };
+
+  const handleScaleChange = (value: number) => {
+    setCaptureScale(value);
+  };
+
+  const handleScaleCommit = (value: number) => {
+    api.setCaptureScale(value);
+  };
+
+  const handleFpsChange = (value: number) => {
+    setCaptureFps(value);
+  };
+
+  const handleFpsCommit = (value: number) => {
+    api.setCaptureFps(value);
   };
 
   return (
@@ -42,62 +58,57 @@ export function SettingsPage() {
           <p className="page-subtitle">Configure application settings</p>
         </div>
       </header>
-      <div style={{ padding: "20px" }}>
-        <Card style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div className="settings-container">
+        <Card className="settings-card">
           <h3>Screen Capture Quality</h3>
-          
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <label htmlFor="capture-method">Capture Method</label>
-              <Select
-                id="capture-method"
-                value={captureMethod}
-                options={captureMethodOptions}
-                onChange={handleMethodChange}
-                disabled={loading}
-              />
-            </div>
-            <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "5px" }}>
+
+          {/* Capture Method Select */}
+          <div className="setting-section">
+            <Select
+              value={captureMethod}
+              options={captureMethodOptions}
+              onChange={handleMethodChange}
+              disabled={loading}
+              label="Capture Method"
+              valueText="2 options"
+            />
+            <p>
               DXGI offers better performance with GPU acceleration and HDR support.
               GDI provides better compatibility with older systems.
             </p>
           </div>
 
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-              <label htmlFor="capture-scale">Resolution Scale</label>
-              <span>{captureScale}% {captureScale === 100 && "(Original)"}</span>
-            </div>
+          {/* Resolution Scale Slider */}
+          <div className="setting-section">
             <Slider
-              id="capture-scale"
               min={1}
               max={100}
               value={captureScale}
-              onChange={setCaptureScale}
-              onCommit={(val) => api.setCaptureScale(val)}
+              onChange={handleScaleChange}
+              onCommit={handleScaleCommit}
               disabled={loading}
+              label="Resolution Scale"
+              valueText={`${captureScale}%${captureScale === 100 ? " (Original)" : ""}`}
             />
-            <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
+            <p>
               Adjust the capture resolution. 100% maintains original quality (may affect performance).
               Lower values improve performance.
             </p>
           </div>
 
-          <div style={{ marginTop: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-              <label htmlFor="capture-fps">Sampling Frame Rate</label>
-              <span>{captureFps} FPS</span>
-            </div>
+          {/* Frame Rate Slider */}
+          <div className="setting-section">
             <Slider
-              id="capture-fps"
               min={1}
               max={60}
               value={captureFps}
-              onChange={setCaptureFps}
-              onCommit={(val) => api.setCaptureFps(val)}
+              onChange={handleFpsChange}
+              onCommit={handleFpsCommit}
               disabled={loading}
+              label="Sampling Frame Rate"
+              valueText={`${captureFps} FPS`}
             />
-            <p style={{ fontSize: "0.9em", color: "var(--text-secondary)", marginTop: "10px" }}>
+            <p>
               Control how often the screen is sampled per second. Lower FPS reduces CPU/GPU usage but may look less smooth.
             </p>
           </div>
