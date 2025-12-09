@@ -1,11 +1,10 @@
 import { ListFilter } from "lucide-react";
+import { Select } from "../../../../components/ui/Select";
 import { SelectParam } from "../../../../types";
-import "./SelectRenderer.css";
 
 interface SelectRendererProps {
   param: SelectParam;
   value: number;
-  modeId: string;
   disabled: boolean;
   onChange: (value: number) => void;
   onCommit: (value: number) => void;
@@ -14,51 +13,37 @@ interface SelectRendererProps {
 export function SelectRenderer({
   param,
   value,
-  modeId,
   disabled,
   onChange,
   onCommit,
 }: SelectRendererProps) {
   const hasOptions = param.options.length > 0;
-  const selectId = `${modeId}-${param.key}`;
 
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = Number(event.target.value);
+  const handleChange = (val: number) => {
     onChange(val);
     onCommit(val);
   };
 
+  if (!hasOptions) {
+    return (
+      <div className="select-renderer-empty">
+        No options available.
+      </div>
+    );
+  }
+
   return (
-    <div className="select-renderer">
-      <div className="select-renderer-header">
-        <span className="select-renderer-label">
+    <Select
+      value={value}
+      options={param.options}
+      onChange={handleChange}
+      disabled={disabled}
+      label={
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <ListFilter size={16} /> {param.label}
         </span>
-        {hasOptions && (
-          <span className="select-renderer-count">
-            {param.options.length} option{param.options.length > 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
-      {hasOptions ? (
-        <select
-          id={selectId}
-          value={value}
-          disabled={disabled}
-          onChange={handleChange}
-          className="select-renderer-input"
-        >
-          {param.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className="select-renderer-empty">
-          No options available.
-        </div>
-      )}
-    </div>
+      }
+      valueText={`${param.options.length} option${param.options.length > 1 ? "s" : ""}`}
+    />
   );
 }

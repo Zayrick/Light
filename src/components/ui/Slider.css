@@ -1,0 +1,81 @@
+/* Ark UI Slider Component Styles */
+
+[data-scope="slider"][data-part="root"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+[data-scope="slider"][data-part="label"] {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+[data-scope="slider"][data-part="control"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+[data-scope="slider"][data-part="track"] {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background-color: var(--border-strong);
+  border-radius: 2px;
+}
+
+[data-scope="slider"][data-part="range"] {
+  position: absolute;
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 2px;
+}
+
+[data-scope="slider"][data-part="thumb"] {
+  width: 18px;
+  height: 18px;
+  background-color: var(--accent-color);
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  cursor: grab;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+[data-scope="slider"][data-part="thumb"]:hover {
+  transform: scale(1.1);
+}
+
+[data-scope="slider"][data-part="thumb"]:active,
+[data-scope="slider"][data-part="thumb"][data-dragging] {
+  cursor: grabbing;
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-scope="slider"][data-part="thumb"][data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-scope="slider"][data-part="thumb"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(96, 205, 255, 0.3);
+}
+
+/* Slider Header Layout */
+.ark-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ark-slider-value {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}

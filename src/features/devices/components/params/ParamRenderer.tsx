@@ -5,7 +5,6 @@ import { ToggleRenderer } from "./ToggleRenderer";
 
 interface ParamRendererProps {
   param: EffectParam;
-  modeId: string;
   value: number | boolean;
   disabled: boolean;
   onChange: (value: number | boolean) => void;
@@ -17,15 +16,15 @@ interface ParamRendererProps {
  * This implements the Strategy pattern for UI rendering.
  */
 export function ParamRenderer(props: ParamRendererProps) {
-  const { param, value, onChange, onCommit } = props;
+  const { param, value, onChange, onCommit, disabled } = props;
 
   switch (param.type) {
     case "slider":
       return (
         <SliderRenderer
-          {...props}
           param={param}
           value={value as number}
+          disabled={disabled}
           onChange={onChange as (v: number) => void}
           onCommit={onCommit as (v: number) => void}
         />
@@ -33,9 +32,9 @@ export function ParamRenderer(props: ParamRendererProps) {
     case "select":
       return (
         <SelectRenderer
-          {...props}
           param={param}
           value={value as number}
+          disabled={disabled}
           onChange={onChange as (v: number) => void}
           onCommit={onCommit as (v: number) => void}
         />
@@ -43,9 +42,9 @@ export function ParamRenderer(props: ParamRendererProps) {
     case "toggle":
       return (
         <ToggleRenderer
-          {...props}
           param={param}
           value={value as boolean}
+          disabled={disabled}
           onChange={onChange as (v: boolean) => void}
           onCommit={onCommit as (v: boolean) => void}
         />

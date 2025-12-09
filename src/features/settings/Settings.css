@@ -1,0 +1,33 @@
+/* Settings Page Styles */
+
+.settings-container {
+  padding: 20px;
+}
+
+.settings-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Setting Section */
+.setting-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setting-section p {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}

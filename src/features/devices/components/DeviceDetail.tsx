@@ -456,7 +456,6 @@ export function DeviceDetail({
                       <ParamRenderer
                         key={param.key}
                         param={param}
-                        modeId={selectedMode.id}
                         value={value}
                         disabled={disabled}
                         onChange={(val) =>
