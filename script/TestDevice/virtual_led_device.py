@@ -12,8 +12,8 @@ import pygame
 from zeroconf import ServiceInfo, Zeroconf
 
 # 设备配置
-MATRIX_WIDTH = 192
-MATRIX_HEIGHT = 108
+MATRIX_WIDTH = 48
+MATRIX_HEIGHT = 27
 PIXEL_SIZE = 6  # 每个像素在窗口中的显示大小
 UDP_PORT = 9999
 DEVICE_NAME = "TestMatrix"
