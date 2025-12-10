@@ -120,3 +120,6 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
     -   保持入口文件（`lib.rs`, `index.ts`）简洁，将具体实现拆分到模块中（如 `api/commands.rs`, `api/dto.rs`）。
 4.  **依赖管理**：
     -   安装外部库时候，请使用命令安装最新版本而不是直接修改package.json或者src-tauri\Cargo.toml文件。
+5.  **样式与主题 (Styling & Theming)**：
+    -   **统一颜色管理**：所有的颜色必须从 `src/styles/theme.css` 中定义的 CSS 变量获取，以确保统一的视觉风格。
+    -   **双模适配**：禁止在组件代码中硬编码颜色值（Hex/RGB）。若需使用新颜色，必须先在 `theme.css` 中定义，并确保其在 **深色 (Dark)** 和 **浅色 (Light)** 模式下均有良好的视觉表现。
