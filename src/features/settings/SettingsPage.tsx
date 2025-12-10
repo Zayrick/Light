@@ -27,6 +27,8 @@ const buildMipScalePoints = () => {
 const formatPercent = (value: number) =>
   Number.isInteger(value) ? value.toString() : value.toFixed(1);
 
+const LIVE_SYNC_INTERVAL = 90; // ms throttle for live capture scale sync
+
 export function SettingsPage() {
   const [captureScale, setCaptureScale] = useState<number>(5);
   const [captureFps, setCaptureFps] = useState<number>(30);
@@ -51,6 +53,9 @@ export function SettingsPage() {
   const animationFromRef = useRef<number>(0);
   const animationToRef = useRef<number>(0);
   const animationDuration = 220; // ms
+  const liveSyncTimerRef = useRef<number | null>(null);
+  const pendingLiveScaleRef = useRef<number | null>(null);
+  const lastSyncedScaleRef = useRef<number | null>(null);
 
   const cancelAnimation = () => {
     if (animationFrameRef.current !== null) {
@@ -59,13 +64,54 @@ export function SettingsPage() {
     }
   };
 
+  const cancelLiveSync = () => {
+    if (liveSyncTimerRef.current !== null) {
+      window.clearTimeout(liveSyncTimerRef.current);
+      liveSyncTimerRef.current = null;
+    }
+    pendingLiveScaleRef.current = null;
+  };
+
   const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+  const syncLiveScale = useCallback(
+    (value: number, options?: { force?: boolean }) => {
+      const target = isDxgi ? snapToMipScale(value) : value;
+      pendingLiveScaleRef.current = target;
+
+      if (options?.force) {
+        cancelLiveSync();
+        if (lastSyncedScaleRef.current !== target) {
+          lastSyncedScaleRef.current = target;
+          api.setCaptureScale(target);
+        }
+        return;
+      }
+
+      if (liveSyncTimerRef.current !== null) {
+        return;
+      }
+
+      liveSyncTimerRef.current = window.setTimeout(() => {
+        liveSyncTimerRef.current = null;
+        const next = pendingLiveScaleRef.current;
+        pendingLiveScaleRef.current = null;
+        if (next === null || next === lastSyncedScaleRef.current) {
+          return;
+        }
+        lastSyncedScaleRef.current = next;
+        api.setCaptureScale(next);
+      }, LIVE_SYNC_INTERVAL);
+    },
+    [isDxgi, snapToMipScale],
+  );
 
   // 吸附到最近有效点并同步后端（无动画，用于初始化/切换模式）
   const alignToMipScale = useCallback(
     (value: number) => {
       const snapped = snapToMipScale(value);
       setCaptureScale(snapped);
+      lastSyncedScaleRef.current = snapped;
       if (snapped !== value) {
         api.setCaptureScale(snapped);
       }
@@ -81,6 +127,7 @@ export function SettingsPage() {
       // 已经在有效点上
       if (Math.abs(snapped - from) < 0.01) {
         setCaptureScale(snapped);
+        lastSyncedScaleRef.current = snapped;
         api.setCaptureScale(snapped);
         return;
       }
@@ -104,6 +151,7 @@ export function SettingsPage() {
         } else {
           animationFrameRef.current = null;
           setCaptureScale(animationToRef.current);
+          lastSyncedScaleRef.current = animationToRef.current;
           api.setCaptureScale(animationToRef.current);
         }
       };
@@ -127,16 +175,21 @@ export function SettingsPage() {
         alignToMipScale(scale);
       } else {
         setCaptureScale(scale);
+        lastSyncedScaleRef.current = scale;
       }
 
       setLoading(false);
     });
-    return () => cancelAnimation();
+    return () => {
+      cancelAnimation();
+      cancelLiveSync();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleMethodChange = (value: CaptureMethod) => {
     cancelAnimation();
+    cancelLiveSync();
     setCaptureMethod(value);
     api.setCaptureMethod(value);
 
@@ -148,14 +201,16 @@ export function SettingsPage() {
 
   const handleScaleChange = (value: number) => {
     setCaptureScale(value);
+    syncLiveScale(value);
   };
 
   const handleScaleCommit = (value: number) => {
+    syncLiveScale(value, { force: true });
+
     // GDI 无 mipmap 约束，直接提交
     if (!isDxgi) {
       cancelAnimation();
       setCaptureScale(value);
-      api.setCaptureScale(value);
       return;
     }
 
