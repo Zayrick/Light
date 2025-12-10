@@ -2,11 +2,13 @@
 
 /// 查询设备信息
 pub const CMD_QUERY_INFO: u8 = 0x10;
-/// 批量更新像素（线性索引 + RGB）
-pub const CMD_UPDATE_PIXELS: u8 = 0x11;
+/// 分片帧数据（唯一支持的写入命令）
+pub const CMD_FRAGMENT_PIXELS: u8 = 0x12;
 
 /// 当前协议版本
 pub const PROTOCOL_VERSION: u8 = 3;
+/// 推荐的最大UDP负载（字节），与虚拟设备保持一致
+pub const MAX_UDP_PAYLOAD: usize = 1400;
 
 use crate::interface::controller::Color;
 
@@ -59,37 +61,63 @@ impl LedMatrixProtocol {
         })
     }
 
-    /// 编码批量更新像素命令（写入已有缓冲区以减少分配）
-    /// 格式: [cmd, count_lo, count_hi, (index_lo, index_hi, r, g, b) * count]
-    pub fn encode_update_pixels_into(
+    /// 计算单个分片最多可携带的像素数量
+    /// header = cmd(1) + frame_id(1) + total_fragments(1) + fragment_index(1) + count(2) = 6
+    #[inline]
+    pub fn max_pixels_per_fragment(max_payload: usize) -> Result<usize, String> {
+        if max_payload <= 6 {
+            return Err("Max UDP payload is too small for fragment header".to_string());
+        }
+        Ok((max_payload - 6) / 5)
+    }
+
+    /// 计算总分片数，限制在协议约定的 u8 范围内
+    #[inline]
+    pub fn calc_total_fragments(color_count: usize, max_pixels_per_fragment: usize) -> Result<u8, String> {
+        if max_pixels_per_fragment == 0 {
+            return Err("max_pixels_per_fragment cannot be zero".to_string());
+        }
+        let total = (color_count + max_pixels_per_fragment - 1) / max_pixels_per_fragment;
+        u8::try_from(total).map_err(|_| "Fragment count exceeds protocol limit (<=255)".to_string())
+    }
+
+    /// 编码单个分片命令到缓冲区
+    /// 格式: [cmd, frame_id, total_fragments, fragment_index, count_lo, count_hi, (index_lo, index_hi, r, g, b) * count]
+    pub fn encode_fragment_into(
+        frame_id: u8,
+        total_fragments: u8,
+        fragment_index: u8,
+        start_index: usize,
         colors: &[Color],
         buffer: &mut Vec<u8>,
     ) -> Result<(), String> {
-        let count = colors.len();
+        if colors.is_empty() {
+            return Ok(());
+        }
 
-        if count > u16::MAX as usize {
-            return Err(format!(
-                "Color count {} exceeds protocol limit {}",
-                count,
-                u16::MAX
-            ));
+        if colors.len() > u16::MAX as usize {
+            return Err("Fragment pixel count exceeds protocol limit".to_string());
         }
 
         buffer.clear();
-        buffer.reserve(1 + 2 + count * 5);
+        buffer.reserve(1 + 5 + colors.len() * 5);
 
-        buffer.push(CMD_UPDATE_PIXELS);
-        buffer.extend_from_slice(&(count as u16).to_le_bytes());
+        buffer.push(CMD_FRAGMENT_PIXELS);
+        buffer.push(frame_id);
+        buffer.push(total_fragments);
+        buffer.push(fragment_index);
+        buffer.extend_from_slice(&(colors.len() as u16).to_le_bytes());
 
-        for (idx, color) in colors.iter().enumerate() {
-            let index: u16 = idx
+        let mut index = start_index;
+        for color in colors {
+            let idx: u16 = index
                 .try_into()
                 .map_err(|_| "LED index exceeds u16 range for protocol".to_string())?;
-
-            buffer.extend_from_slice(&index.to_le_bytes());
+            buffer.extend_from_slice(&idx.to_le_bytes());
             buffer.push(color.r);
             buffer.push(color.g);
             buffer.push(color.b);
+            index += 1;
         }
 
         Ok(())
