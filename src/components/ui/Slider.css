@@ -35,6 +35,29 @@
   border-radius: 2px;
 }
 
+[data-scope="slider"][data-part="marker-group"] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+[data-scope="slider"][data-part="marker"] {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 12px;
+  background-color: var(--border-strong);
+  transform: translateX(-50%);
+  border-radius: 2px;
+  opacity: 0.75;
+}
+
+[data-scope="slider"][data-part="marker"][data-state="active"] {
+  background-color: var(--accent-color);
+  opacity: 1;
+  height: 14px;
+}
+
 [data-scope="slider"][data-part="thumb"] {
   width: 14px;
   height: 14px;
