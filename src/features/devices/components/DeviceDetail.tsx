@@ -1,17 +1,11 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  useRef,
-  type WheelEvent,
-} from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
 import { Device, EffectInfo, EffectParam } from "../../../types";
 import { api } from "../../../services/api";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { Sun, Sliders } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
 import { Slider } from "../../../components/ui/Slider";
+import { Tabs } from "../../../components/ui/Tabs";
 import { ParamRenderer } from "./params/ParamRenderer";
 import { checkDependency } from "../../../utils/effectUtils";
 import { DynamicIcon } from "../../../components/DynamicIcon";
@@ -23,11 +17,6 @@ interface DeviceDetailProps {
 }
 
 type ModeCategory = string;
-
-const CATEGORY_TRANSITION = {
-  duration: 0.25,
-  ease: [0.16, 1, 0.3, 1] as const,
-};
 
 interface DisplayMode extends EffectInfo {
   category: ModeCategory;
@@ -55,25 +44,6 @@ export function DeviceDetail({
   // Mock settings states
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, number | boolean>>({});
-  const [hasMounted, setHasMounted] = useState(false);
-
-  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
-
-  const handleCategoryWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const container = categoryScrollRef.current;
-    if (!container) return;
-
-    // Translate vertical wheel scrolling into horizontal scrolling
-    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-      container.scrollLeft += event.deltaY;
-      event.preventDefault();
-    }
-  };
-
-  useEffect(() => {
-    // Avoid underline "floating" on initial page enter; only animate on user interactions
-    setHasMounted(true);
-  }, []);
 
   const commitBrightness = (value: number) => {
     api.setBrightness(device.port, value).catch(console.error);
@@ -99,7 +69,15 @@ export function DeviceDetail({
     return Array.from(set);
   }, [modes]);
 
-  const filteredModes = modes.filter((m) => m.category === selectedCategory);
+  const modesByCategory = useMemo(() => {
+    const map = new Map<ModeCategory, DisplayMode[]>();
+    modes.forEach((mode) => {
+      const list = map.get(mode.category) ?? [];
+      list.push(mode);
+      map.set(mode.category, list);
+    });
+    return map;
+  }, [modes]);
   const selectedMode = modes.find((m) => m.id === selectedModeId);
 
   // Keep selected category valid if effects list changes
@@ -230,136 +208,133 @@ export function DeviceDetail({
           }}
         >
           {/* Categories (Mode Groups) */}
-          <div
-            ref={categoryScrollRef}
-            className="mode-tabs no-scrollbar"
-            style={{ marginTop: "0" }}
-            onWheel={handleCategoryWheel}
-          >
-            {categories.map((category) => {
-              const isActive = selectedCategory === category;
-              return (
-                <motion.button
-                  key={category}
-                  type="button"
-                  onClick={() => setSelectedCategory(category)}
-                  className={`mode-tab-button ${
-                    isActive ? "mode-tab-button-active" : ""
-                  }`}
-                  animate={{
-                    opacity: isActive ? 1 : 0.6,
-                    scale: isActive ? 1 : 0.98,
-                  }}
-                  whileHover={{ opacity: 1 }}
-                  transition={CATEGORY_TRANSITION}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId={`mode-category-underline-${device.id}`}
-                      className="mode-tab-underline"
-                      transition={
-                        hasMounted ? CATEGORY_TRANSITION : { duration: 0 }
-                      }
-                    />
-                  )}
-                  <span className="mode-tab-label">{category}</span>
-                </motion.button>
-              );
-            })}
-          </div>
+        <Tabs.Root
+          value={selectedCategory}
+          onValueChange={(details) => setSelectedCategory(details.value)}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          <Tabs.List>
+            {categories.map((category) => (
+              <Tabs.Trigger key={category} value={category}>
+                {category}
+              </Tabs.Trigger>
+            ))}
+            <Tabs.Indicator />
+          </Tabs.List>
 
-          {/* Modes Grid (independent vertical scroll area) */}
-          <div
-            className="no-scrollbar"
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: "auto",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                gap: "8px",
-                paddingBottom: "20px",
-              }}
-            >
-              {filteredModes.map((mode) => {
-                const isSelected = selectedModeId === mode.id;
-                return (
-                  <Card
-                    key={mode.id}
-                    hoverable
-                    className={`${isSelected ? "active-mode-card" : ""}`}
+          {categories.map((category) => {
+            const categoryModes = modesByCategory.get(category) ?? [];
+            return (
+              <Tabs.Content key={category} value={category} style={{ minHeight: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flex: 1,
+                    minHeight: 0,
+                  }}
+                >
+                  <div
+                    className="no-scrollbar"
                     style={{
-                      border: isSelected
-                        ? "1px solid var(--accent-color)"
-                        : "1px solid transparent",
-                      backgroundColor: isSelected
-                        ? "var(--bg-card-hover)"
-                        : undefined,
-                      transition: "all 0.2s ease",
-                      padding: "12px",
+                      flex: 1,
+                      minHeight: 0,
+                      overflowY: "auto",
                     }}
-                    onClick={() => handleModeClick(mode.id)}
                   >
                     <div
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: "10px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                        gap: "8px",
+                        paddingBottom: "20px",
                       }}
                     >
-                      <div
-                        style={{
-                          width: "32px",
-                          height: "32px",
-                          borderRadius: "8px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          backgroundColor: isSelected
-                            ? "var(--accent-color)"
-                            : "rgba(128, 128, 128, 0.1)",
-                          color: isSelected
-                            ? "var(--accent-text)"
-                            : "var(--text-primary)",
-                          transition: "all 0.2s ease",
-                          boxShadow: isSelected
-                            ? "0 2px 8px rgba(0,0,0,0.2)"
-                            : "none",
-                        }}
-                      >
-                        <DynamicIcon name={mode.icon || "Component"} size={18} />
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "2px",
-                        }}
-                      >
-                        <div style={{ fontSize: "13px", fontWeight: 600 }}>
-                          {mode.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "var(--text-secondary)",
-                            lineHeight: "1.3",
-                          }}
-                        >
-                          {mode.description}
-                        </div>
-                      </div>
+                      {categoryModes.map((mode) => {
+                        const isSelected = selectedModeId === mode.id;
+                        return (
+                          <Card
+                            key={mode.id}
+                            hoverable
+                            className={`${isSelected ? "active-mode-card" : ""}`}
+                            style={{
+                              border: isSelected
+                                ? "1px solid var(--accent-color)"
+                                : "1px solid transparent",
+                              backgroundColor: isSelected
+                                ? "var(--bg-card-hover)"
+                                : undefined,
+                              transition: "all 0.2s ease",
+                              padding: "12px",
+                            }}
+                            onClick={() => handleModeClick(mode.id)}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "flex-start",
+                                gap: "10px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: "32px",
+                                  height: "32px",
+                                  borderRadius: "8px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  backgroundColor: isSelected
+                                    ? "var(--accent-color)"
+                                    : "rgba(128, 128, 128, 0.1)",
+                                  color: isSelected
+                                    ? "var(--accent-text)"
+                                    : "var(--text-primary)",
+                                  transition: "all 0.2s ease",
+                                  boxShadow: isSelected
+                                    ? "0 2px 8px rgba(0,0,0,0.2)"
+                                    : "none",
+                                }}
+                              >
+                                <DynamicIcon name={mode.icon || "Component"} size={18} />
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                }}
+                              >
+                                <div style={{ fontSize: "13px", fontWeight: 600 }}>
+                                  {mode.name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "var(--text-secondary)",
+                                    lineHeight: "1.3",
+                                  }}
+                                >
+                                  {mode.description}
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
                     </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
+                  </div>
+                </div>
+              </Tabs.Content>
+            );
+          })}
+        </Tabs.Root>
         </div>
 
         {/* Right Column: Configuration (fixed/preferred width) */}
