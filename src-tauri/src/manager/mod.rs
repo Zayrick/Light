@@ -1,12 +1,12 @@
 pub mod inventory;
 pub mod runner;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 
-use self::inventory::scan_controllers;
+use self::inventory::{default_params_for_effect, scan_controllers};
 use self::runner::EffectRunner;
 use crate::interface::controller::{Controller, Zone};
 
@@ -21,6 +21,7 @@ pub struct Device {
     pub virtual_layout: (usize, usize),
     pub brightness: u8,
     pub current_effect_id: Option<String>,
+    pub current_effect_params: Option<Map<String, Value>>,
 }
 
 pub struct LightingManager {
@@ -28,6 +29,7 @@ pub struct LightingManager {
     active_effects: Mutex<HashMap<String, EffectRunner>>,
     device_brightness: Mutex<HashMap<String, u8>>,
     active_effect_ids: Mutex<HashMap<String, String>>,
+    active_effect_params: Mutex<HashMap<String, Map<String, Value>>>,
 }
 
 impl LightingManager {
@@ -37,6 +39,7 @@ impl LightingManager {
             active_effects: Mutex::new(HashMap::new()),
             device_brightness: Mutex::new(HashMap::new()),
             active_effect_ids: Mutex::new(HashMap::new()),
+            active_effect_params: Mutex::new(HashMap::new()),
         }
     }
 
@@ -55,6 +58,7 @@ impl LightingManager {
         let mut devices = Vec::new();
         let brightness_map = self.device_brightness.lock().unwrap();
         let effect_map = self.active_effect_ids.lock().unwrap();
+        let params_map = self.active_effect_params.lock().unwrap();
 
         for (port, c_arc) in state_controllers.iter() {
             let c = c_arc.lock().unwrap();
@@ -71,6 +75,7 @@ impl LightingManager {
                 virtual_layout: c.virtual_layout(),
                 brightness,
                 current_effect_id,
+                current_effect_params: params_map.get(port).cloned(),
             });
         }
         devices
@@ -100,7 +105,12 @@ impl LightingManager {
             *map.get(port).unwrap_or(&100)
         };
 
+        let default_params = default_params_for_effect(effect_id);
         let runner = EffectRunner::start(effect_id, controller_arc, app_handle, brightness)?;
+
+        if let Some(defaults) = default_params.clone() {
+            runner.update_params(Value::Object(defaults));
+        }
 
         let mut active = self.active_effects.lock().unwrap();
         active.insert(port.to_string(), runner);
@@ -111,17 +121,39 @@ impl LightingManager {
             ids.insert(port.to_string(), effect_id.to_string());
         }
 
+        // Track default params for the active effect
+        {
+            let mut params = self.active_effect_params.lock().unwrap();
+            if let Some(defaults) = default_params {
+                params.insert(port.to_string(), defaults);
+            } else {
+                params.remove(port);
+            }
+        }
+
         Ok(())
     }
 
     pub fn update_effect_params(&self, port: &str, params: Value) -> Result<(), String> {
         let active = self.active_effects.lock().unwrap();
         if let Some(runner) = active.get(port) {
-            runner.update_params(params);
-            Ok(())
+            runner.update_params(params.clone());
         } else {
-            Err("No active effect on this device".to_string())
+            return Err("No active effect on this device".to_string());
         }
+
+        drop(active);
+
+        if let Some(obj) = params.as_object() {
+            let mut stored = self.active_effect_params.lock().unwrap();
+            let entry = stored
+                .entry(port.to_string())
+                .or_insert_with(Map::new);
+            for (key, value) in obj {
+                entry.insert(key.clone(), value.clone());
+            }
+        }
+        Ok(())
     }
 
     pub fn set_brightness(&self, port: &str, brightness: u8) -> Result<(), String> {
@@ -148,5 +180,8 @@ impl LightingManager {
         // Clear stored active effect id for this device
         let mut ids = self.active_effect_ids.lock().unwrap();
         ids.remove(port);
+
+        let mut params = self.active_effect_params.lock().unwrap();
+        params.remove(port);
     }
 }

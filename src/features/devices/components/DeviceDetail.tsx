@@ -14,6 +14,8 @@ interface DeviceDetailProps {
   device: Device;
   effects: EffectInfo[];
   onSetEffect: (port: string, effectId: string) => Promise<void>;
+  onUpdateParams: (port: string, params: Record<string, number | boolean>) => void;
+  onUpdateBrightness: (port: string, brightness: number) => void;
 }
 
 type ModeCategory = string;
@@ -26,6 +28,8 @@ export function DeviceDetail({
   device,
   effects,
   onSetEffect,
+  onUpdateParams,
+  onUpdateBrightness,
 }: DeviceDetailProps) {
   const [selectedCategory, setSelectedCategory] = useState<ModeCategory>(() => {
     const initialEffect = effects.find(
@@ -41,12 +45,30 @@ export function DeviceDetail({
     device.current_effect_id ?? null
   );
 
-  // Mock settings states
-  const [brightness, setBrightness] = useState(device.brightness ?? 100);
-  const [paramValues, setParamValues] = useState<Record<string, number | boolean>>({});
+  const buildParamStateFromDevice = (target: Device) => {
+    const initial: Record<string, number | boolean> = {};
+    if (target.current_effect_id && target.current_effect_params) {
+      Object.entries(target.current_effect_params).forEach(([key, value]) => {
+        if (typeof value === "number" || typeof value === "boolean") {
+          initial[`${target.current_effect_id}:${key}`] = value;
+        }
+      });
+    }
+    return initial;
+  };
 
-  const commitBrightness = (value: number) => {
-    api.setBrightness(device.port, value).catch(console.error);
+  const [brightness, setBrightness] = useState(device.brightness ?? 100);
+  const [paramValues, setParamValues] = useState<Record<string, number | boolean>>(
+    () => buildParamStateFromDevice(device)
+  );
+
+  const commitBrightness = async (value: number) => {
+    try {
+      await api.setBrightness(device.port, value);
+      onUpdateBrightness(device.port, value);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleBrightnessChange = (value: number) => {
@@ -85,6 +107,18 @@ export function DeviceDetail({
   }, [modes]);
   const selectedMode = modes.find((m) => m.id === selectedModeId);
 
+  // Keep selected category valid if effects list changes or device switches
+  useEffect(() => {
+    const initialEffect = effects.find((e) => e.id === device.current_effect_id);
+    if (initialEffect?.group) {
+      setSelectedCategory(initialEffect.group);
+      return;
+    }
+
+    const firstGroup = effects.find((e) => e.group)?.group ?? "Other";
+    setSelectedCategory(firstGroup);
+  }, [device.current_effect_id, device.port, effects]);
+
   // Keep selected category valid if effects list changes
   useEffect(() => {
     if (!categories.includes(selectedCategory) && categories.length > 0) {
@@ -96,6 +130,16 @@ export function DeviceDetail({
   useEffect(() => {
     setSelectedModeId(device.current_effect_id ?? null);
   }, [device.current_effect_id, device.port]);
+
+  // Sync brightness from backend-provided device state
+  useEffect(() => {
+    setBrightness(device.brightness ?? 100);
+  }, [device.brightness, device.port]);
+
+  // Hydrate params from backend-provided device state when device or effect changes
+  useEffect(() => {
+    setParamValues(buildParamStateFromDevice(device));
+  }, [device.port, device.current_effect_id, device.current_effect_params]);
 
   // Ensure defaults exist for the selected mode so sliders have values
   useEffect(() => {
@@ -122,12 +166,14 @@ export function DeviceDetail({
   const pushParamsToBackend = async (
     mode: DisplayMode,
     payload: Record<string, number | boolean>
-  ) => {
-    if (!mode.params || mode.params.length === 0) return;
+  ): Promise<boolean> => {
+    if (!mode.params || mode.params.length === 0) return true;
     try {
       await api.updateEffectParams(device.port, payload);
+      return true;
     } catch (err) {
       console.error("Failed to update params:", err);
+      return false;
     }
   };
 
@@ -140,12 +186,16 @@ export function DeviceDetail({
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
   };
 
-  const handleParamCommit = (
+  const handleParamCommit = async (
     mode: DisplayMode,
     param: EffectParam,
     value: number | boolean
   ) => {
-    pushParamsToBackend(mode, { [param.key]: value });
+    const payload = { [param.key]: value };
+    const ok = await pushParamsToBackend(mode, payload);
+    if (ok) {
+      onUpdateParams(device.port, payload);
+    }
   };
 
   const handleModeClick = async (modeId: string) => {
@@ -159,7 +209,10 @@ export function DeviceDetail({
         mode.params.forEach((p) => {
           payload[p.key] = getParamValue(mode, p);
         });
-        await pushParamsToBackend(mode, payload);
+        const ok = await pushParamsToBackend(mode, payload);
+        if (ok) {
+          onUpdateParams(device.port, payload);
+        }
       }
     } catch (err) {
       console.error("Failed to set effect:", err);
