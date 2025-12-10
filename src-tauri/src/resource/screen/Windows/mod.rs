@@ -105,7 +105,18 @@ pub struct DisplayInfo {
 // ============================================================================
 
 pub fn set_capture_scale_percent(percent: u8) {
-    CAPTURE_SCALE_PERCENT.store(percent.clamp(1, 100), Ordering::Relaxed);
+    let clamped = percent.clamp(1, 100);
+    let previous = CAPTURE_SCALE_PERCENT.swap(clamped, Ordering::Relaxed);
+
+    // Only rebuild capture pipelines when the effective value changes.
+    if previous != clamped {
+        if let Ok(mut manager) = global_manager().lock() {
+            manager.clear();
+        }
+        // Bump generation so existing subscriptions will re-acquire a fresh duplicator
+        // with the new resolution scale applied.
+        CAPTURE_GEN.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 pub fn get_capture_scale_percent() -> u8 {
