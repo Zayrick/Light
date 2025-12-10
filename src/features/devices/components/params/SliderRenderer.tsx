@@ -17,6 +17,11 @@ export function SliderRenderer({
   onChange,
   onCommit,
 }: SliderRendererProps) {
+  const handleChange = (nextValue: number) => {
+    onChange(nextValue);
+    onCommit(nextValue);
+  };
+
   const formatParamValue = (param: SliderParam, value: number) => {
     if (param.step < 1) return value.toFixed(1);
     return Math.round(value).toString();
@@ -29,8 +34,7 @@ export function SliderRenderer({
       max={param.max}
       step={param.step}
       disabled={disabled}
-      onChange={onChange}
-      onCommit={onCommit}
+      onChange={handleChange}
       label={
         <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <Gauge size={16} /> {param.label}

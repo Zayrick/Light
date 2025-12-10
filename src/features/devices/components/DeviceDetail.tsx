@@ -49,6 +49,11 @@ export function DeviceDetail({
     api.setBrightness(device.port, value).catch(console.error);
   };
 
+  const handleBrightnessChange = (value: number) => {
+    setBrightness(value);
+    commitBrightness(value);
+  };
+
   // Adapt raw backend effects into display modes with categories and icons
   const modes: DisplayMode[] = useMemo(() => {
     return effects.map((effect) => {
@@ -392,8 +397,7 @@ export function DeviceDetail({
                 min={0}
                 max={100}
                 step={1}
-                onChange={setBrightness}
-                onCommit={commitBrightness}
+                onChange={handleBrightnessChange}
               />
             </div>
           </Card>
