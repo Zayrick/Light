@@ -12,11 +12,13 @@
   "dependencies": {
     "@ark-ui/react": "^5.29.1",
     "@heroui/react": "^2.8.5",
+    "@pixi/react": "^8.0.5",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.554.0",
+    "pixi.js": "^8.14.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-use-measure": "^2.1.7"
