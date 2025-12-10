@@ -87,7 +87,7 @@ impl ScreenMirrorEffect {
 
             let prev = &mut self.previous_buffer;
             let smoothness = self.smoothness;
-            if let Some(subscription) = &self.screen {
+            if let Some(subscription) = self.screen.as_mut() {
                 let auto_crop_enabled = self.auto_crop_enabled;
                 let black_border = &self.black_border;
 
@@ -96,7 +96,7 @@ impl ScreenMirrorEffect {
                     black_border.borrow_mut().set_enabled(false);
                 }
 
-                match subscription.capture_with(|frame| {
+                match ScreenSubscription::capture_with(subscription, |frame| {
                     let crop = if auto_crop_enabled {
                         let mut processor = black_border.borrow_mut();
                         processor.set_enabled(true);

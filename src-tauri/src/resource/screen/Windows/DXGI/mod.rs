@@ -124,6 +124,10 @@ impl DxgiCapturer {
             r @ (DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270) => r,
             _ => desc.Rotation,
         };
+        let rotation_requires_cpu = !matches!(
+            rotation,
+            DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED
+        );
 
         // Calculate actual capture dimensions after rotation
         let (actual_width, actual_height) = rotated_dimensions(width, height, rotation);
@@ -159,8 +163,10 @@ impl DxgiCapturer {
             staging.unwrap()
         };
 
-        // Create GPU pipeline if hardware acceleration is enabled or HDR is active
-        let gpu_pipeline = if hardware {
+        // Create GPU pipeline only when rotation doesn't need a transform.
+        // If the display is rotated (portrait, 180, etc.), fall back to CPU path
+        // to avoid orientation mismatches.
+        let gpu_pipeline = if hardware && !rotation_requires_cpu {
             Some(create_gpu_pipeline(
                 &device,
                 &device_context,
