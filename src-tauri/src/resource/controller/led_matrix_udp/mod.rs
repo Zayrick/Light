@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod protocol;
-use protocol::{LedMatrixProtocol, PROTOCOL_VERSION};
+use protocol::{LedMatrixProtocol, PROTOCOL_VERSION, MAX_UDP_PAYLOAD};
 
 /// mDNS服务类型（与虚拟LED矩阵保持一致）
 const SERVICE_TYPE: &str = "_testdevice._udp.local.";
@@ -34,6 +34,10 @@ pub struct LedMatrixUdpController {
     zones: Vec<Zone>,
     /// 帧缓冲区，用于全量更新
     frame_buffer: Vec<u8>,
+    /// 单个分片最多包含的像素数量
+    max_pixels_per_fragment: usize,
+    /// 当前帧ID（0-255循环）
+    frame_id: u8,
 }
 
 impl LedMatrixUdpController {
@@ -89,8 +93,12 @@ impl LedMatrixUdpController {
 
         let zones = vec![Zone::matrix("LED Matrix", matrix_map, led_count)];
 
-        // 预分配帧缓冲区 (1字节命令 + 2字节数量 + width * height * (2字节索引 + 3字节颜色))
-        let frame_buffer = Vec::with_capacity(1 + 2 + led_count * 5);
+        // 分片参数与缓冲区预分配
+        let max_pixels_per_fragment =
+            LedMatrixProtocol::max_pixels_per_fragment(MAX_UDP_PAYLOAD)
+                .map_err(|e| format!("Invalid UDP payload setting: {}", e))?;
+        // 预分配单个分片的最大空间: cmd(1) + header(5) + pixels * 5
+        let frame_buffer = Vec::with_capacity(1 + 5 + max_pixels_per_fragment * 5);
 
         Ok(Self {
             device_name,
@@ -102,6 +110,8 @@ impl LedMatrixUdpController {
             led_count,
             zones,
             frame_buffer,
+            max_pixels_per_fragment,
+            frame_id: 0,
         })
     }
 
@@ -186,9 +196,28 @@ impl Controller for LedMatrixUdpController {
             ));
         }
 
-        // 使用新的索引化批量更新协议
-        LedMatrixProtocol::encode_update_pixels_into(colors, &mut self.frame_buffer)?;
-        self.send(&self.frame_buffer)?;
+        // 使用分片协议，保证UDP包不会超出安全负载
+        let max_pixels = self.max_pixels_per_fragment;
+        let total_fragments =
+            LedMatrixProtocol::calc_total_fragments(self.led_count, max_pixels)?;
+        let frame_id = self.frame_id;
+        self.frame_id = self.frame_id.wrapping_add(1);
+
+        for fragment_index in 0..total_fragments {
+            let start = fragment_index as usize * max_pixels;
+            let end = (start + max_pixels).min(self.led_count);
+
+            LedMatrixProtocol::encode_fragment_into(
+                frame_id,
+                total_fragments,
+                fragment_index,
+                start,
+                &colors[start..end],
+                &mut self.frame_buffer,
+            )?;
+
+            self.send(&self.frame_buffer)?;
+        }
 
         Ok(())
     }
@@ -196,8 +225,7 @@ impl Controller for LedMatrixUdpController {
     fn clear(&mut self) -> Result<(), String> {
         // 发送全黑帧
         let black = vec![Color { r: 0, g: 0, b: 0 }; self.led_count];
-        LedMatrixProtocol::encode_update_pixels_into(&black, &mut self.frame_buffer)?;
-        self.send(&self.frame_buffer)
+        self.update(&black)
     }
 
     fn disconnect(&mut self) -> Result<(), String> {
