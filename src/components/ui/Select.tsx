@@ -1,6 +1,6 @@
 import { Portal } from "@ark-ui/react/portal";
 import { Select as ArkSelect, createListCollection } from "@ark-ui/react/select";
-import { ChevronDownIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { ReactNode, useMemo } from "react";
 import "./Select.css";
 
@@ -81,7 +81,9 @@ export function Select<T extends string | number = string>({
             {collection.items.map((item) => (
               <ArkSelect.Item key={item.value} item={item}>
                 <ArkSelect.ItemText>{item.label}</ArkSelect.ItemText>
-                <ArkSelect.ItemIndicator>✓</ArkSelect.ItemIndicator>
+                <ArkSelect.ItemIndicator>
+                  <CheckIcon size={14} strokeWidth={2} />
+                </ArkSelect.ItemIndicator>
               </ArkSelect.Item>
             ))}
           </ArkSelect.Content>

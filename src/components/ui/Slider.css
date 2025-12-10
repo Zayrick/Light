@@ -36,12 +36,12 @@
 }
 
 [data-scope="slider"][data-part="thumb"] {
-  width: 18px;
-  height: 18px;
-  background-color: var(--accent-color);
+  width: 14px;
+  height: 14px;
+  background-color: var(--accent-text);
   border-radius: 50%;
-  border: 2px solid var(--bg-card);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  border: 2px solid var(--accent-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   cursor: grab;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
