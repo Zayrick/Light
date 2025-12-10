@@ -36,17 +36,11 @@ export function SettingsPage() {
 
   const handleScaleChange = (value: number) => {
     setCaptureScale(value);
-  };
-
-  const handleScaleCommit = (value: number) => {
     api.setCaptureScale(value);
   };
 
   const handleFpsChange = (value: number) => {
     setCaptureFps(value);
-  };
-
-  const handleFpsCommit = (value: number) => {
     api.setCaptureFps(value);
   };
 
@@ -85,7 +79,6 @@ export function SettingsPage() {
               max={100}
               value={captureScale}
               onChange={handleScaleChange}
-              onCommit={handleScaleCommit}
               disabled={loading}
               label="Resolution Scale"
               valueText={`${captureScale}%${captureScale === 100 ? " (Original)" : ""}`}
@@ -103,7 +96,6 @@ export function SettingsPage() {
               max={60}
               value={captureFps}
               onChange={handleFpsChange}
-              onCommit={handleFpsCommit}
               disabled={loading}
               label="Sampling Frame Rate"
               valueText={`${captureFps} FPS`}
