@@ -11,6 +11,8 @@ export interface SliderProps {
   max?: number;
   /** 步进值 */
   step?: number;
+  /** 可视化标记点（例如 Mipmap 采样点），值需在 min/max 范围内 */
+  markers?: number[];
   /** 左侧标签 */
   label?: ReactNode;
   /** 右侧显示的值文本 */
@@ -28,17 +30,23 @@ export function Slider({
   min = 0,
   max = 100,
   step = 1,
+  markers,
   label,
   valueText,
   onChange,
   onCommit,
   disabled = false,
 }: SliderProps) {
+  const markerValues = markers
+    ?.filter((marker) => marker >= min && marker <= max)
+    .sort((a, b) => a - b);
+
   const handleValueChange = (details: ArkSlider.ValueChangeDetails) => {
     onChange?.(details.value[0]);
   };
 
   const handleValueChangeEnd = (details: ArkSlider.ValueChangeDetails) => {
+    // 始终传递原始值，让调用方决定是否吸附及如何吸附（如带动画）
     onCommit?.(details.value[0]);
   };
 
@@ -61,6 +69,13 @@ export function Slider({
       <ArkSlider.Control>
         <ArkSlider.Track>
           <ArkSlider.Range />
+          {markerValues && markerValues.length > 0 && (
+            <ArkSlider.MarkerGroup>
+              {markerValues.map((marker) => (
+                <ArkSlider.Marker key={marker} value={marker} />
+              ))}
+            </ArkSlider.MarkerGroup>
+          )}
         </ArkSlider.Track>
         <ArkSlider.Thumb index={0} />
       </ArkSlider.Control>

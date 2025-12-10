@@ -33,6 +33,163 @@ struct CaptureRegion {
     height: i32,
 }
 
+struct ScreenDcGuard {
+    hwnd: HWND,
+    dc: HDC,
+    active: bool,
+}
+
+impl ScreenDcGuard {
+    unsafe fn new(hwnd: HWND) -> Result<Self, ScreenCaptureError> {
+        Ok(Self {
+            hwnd,
+            dc: get_dc_checked(hwnd)?,
+            active: true,
+        })
+    }
+
+    fn handle(&self) -> HDC {
+        self.dc
+    }
+
+    fn into_inner(mut self) -> HDC {
+        self.active = false;
+        self.dc
+    }
+}
+
+impl Drop for ScreenDcGuard {
+    fn drop(&mut self) {
+        if self.active && !self.dc.0.is_null() {
+            unsafe {
+                release_dc_checked(self.hwnd, self.dc);
+            }
+        }
+    }
+}
+
+struct MemoryDcGuard {
+    dc: HDC,
+    active: bool,
+}
+
+impl MemoryDcGuard {
+    unsafe fn new(screen_dc: HDC) -> Result<Self, ScreenCaptureError> {
+        let memory_dc = CreateCompatibleDC(Some(screen_dc));
+        if memory_dc.0.is_null() {
+            return Err(ScreenCaptureError::OsError {
+                context: "CreateCompatibleDC",
+                code: GetLastError().0,
+            });
+        }
+
+        Ok(Self {
+            dc: memory_dc,
+            active: true,
+        })
+    }
+
+    fn handle(&self) -> HDC {
+        self.dc
+    }
+
+    fn into_inner(mut self) -> HDC {
+        self.active = false;
+        self.dc
+    }
+}
+
+impl Drop for MemoryDcGuard {
+    fn drop(&mut self) {
+        if self.active && !self.dc.0.is_null() {
+            unsafe {
+                let _ = DeleteDC(self.dc);
+            }
+        }
+    }
+}
+
+struct BitmapGuard {
+    bitmap: HBITMAP,
+    active: bool,
+}
+
+impl BitmapGuard {
+    unsafe fn new(screen_dc: HDC, width: i32, height: i32) -> Result<Self, ScreenCaptureError> {
+        let bitmap = CreateCompatibleBitmap(screen_dc, width, height);
+        if bitmap.0.is_null() {
+            return Err(ScreenCaptureError::OsError {
+                context: "CreateCompatibleBitmap",
+                code: GetLastError().0,
+            });
+        }
+
+        Ok(Self {
+            bitmap,
+            active: true,
+        })
+    }
+
+    fn handle(&self) -> HBITMAP {
+        self.bitmap
+    }
+
+    fn into_inner(mut self) -> HBITMAP {
+        self.active = false;
+        self.bitmap
+    }
+}
+
+impl Drop for BitmapGuard {
+    fn drop(&mut self) {
+        if self.active && !self.bitmap.0.is_null() {
+            unsafe {
+                let _ = DeleteObject(self.bitmap.into());
+            }
+        }
+    }
+}
+
+struct BitmapSelectionGuard {
+    dc: HDC,
+    old_bitmap: HGDIOBJ,
+    active: bool,
+}
+
+impl BitmapSelectionGuard {
+    unsafe fn new(dc: HDC, bitmap: HBITMAP) -> Result<Self, ScreenCaptureError> {
+        let bitmap_obj = HGDIOBJ(bitmap.0);
+        let old_bitmap = SelectObject(dc, bitmap_obj);
+        if old_bitmap.0.is_null() {
+            return Err(ScreenCaptureError::OsError {
+                context: "SelectObject",
+                code: GetLastError().0,
+            });
+        }
+
+        Ok(Self {
+            dc,
+            old_bitmap,
+            active: true,
+        })
+    }
+
+    fn into_inner(mut self) -> HGDIOBJ {
+        self.active = false;
+        self.old_bitmap
+    }
+}
+
+impl Drop for BitmapSelectionGuard {
+    fn drop(&mut self) {
+        if self.active && !self.old_bitmap.0.is_null() {
+            unsafe {
+                let _ = SelectObject(self.dc, self.old_bitmap);
+            }
+        }
+    }
+}
+
 pub struct GdiCapturer {
     desktop_hwnd: HWND,
     screen_dc: HDC,
@@ -62,38 +219,12 @@ impl GdiCapturer {
     pub fn with_output(output_index: usize) -> Result<Self, ScreenCaptureError> {
         unsafe {
             let desktop_hwnd = GetDesktopWindow();
-            let screen_dc = get_dc_checked(desktop_hwnd)?;
-            let memory_dc = CreateCompatibleDC(Some(screen_dc));
-            if memory_dc.0.is_null() {
-                release_dc_checked(desktop_hwnd, screen_dc);
-                return Err(ScreenCaptureError::OsError {
-                    context: "CreateCompatibleDC",
-                    code: GetLastError().0,
-                });
-            }
+            let screen_dc_guard = ScreenDcGuard::new(desktop_hwnd)?;
+            let memory_dc_guard = MemoryDcGuard::new(screen_dc_guard.handle())?;
 
             let region = detect_region(output_index);
-            let bitmap = CreateCompatibleBitmap(screen_dc, region.width, region.height);
-            if bitmap.0.is_null() {
-                let _ = DeleteDC(memory_dc);
-                release_dc_checked(desktop_hwnd, screen_dc);
-                return Err(ScreenCaptureError::OsError {
-                    context: "CreateCompatibleBitmap",
-                    code: GetLastError().0,
-                });
-            }
-
-            let bitmap_obj = HGDIOBJ(bitmap.0);
-            let old_bitmap = SelectObject(memory_dc, bitmap_obj);
-            if old_bitmap.0.is_null() {
-                let _ = DeleteObject(bitmap.into());
-                let _ = DeleteDC(memory_dc);
-                release_dc_checked(desktop_hwnd, screen_dc);
-                return Err(ScreenCaptureError::OsError {
-                    context: "SelectObject",
-                    code: GetLastError().0,
-                });
-            }
+            let bitmap_guard = BitmapGuard::new(screen_dc_guard.handle(), region.width, region.height)?;
+            let selection_guard = BitmapSelectionGuard::new(memory_dc_guard.handle(), bitmap_guard.handle())?;
 
             let stride = (region.width as usize * 4).max(4);
             let buffer_len = stride * region.height as usize;
@@ -119,6 +250,14 @@ impl GdiCapturer {
             let scaled_width = (region.width as u32 * scale_percent / 100).max(1);
             let scaled_height = (region.height as u32 * scale_percent / 100).max(1);
             let scaled_stride = scaled_width as usize * BYTES_PER_PIXEL;
+            let buffer = vec![0u8; buffer_len];
+            let scaled_buffer = vec![0u8; scaled_stride * scaled_height as usize];
+
+            // Transfer ownership of handles only after all fallible allocations succeed.
+            let screen_dc = screen_dc_guard.into_inner();
+            let memory_dc = memory_dc_guard.into_inner();
+            let bitmap = bitmap_guard.into_inner();
+            let old_bitmap = selection_guard.into_inner();
 
             Ok(Self {
                 desktop_hwnd,
@@ -129,9 +268,9 @@ impl GdiCapturer {
                 region,
                 output_index,
                 stride,
-                buffer: vec![0u8; buffer_len],
+                buffer,
                 bitmap_info,
-                scaled_buffer: vec![0u8; scaled_stride * scaled_height as usize],
+                scaled_buffer,
                 scaled_width,
                 scaled_height,
                 scaled_stride,
