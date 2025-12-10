@@ -66,3 +66,110 @@
   height: 28px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.newsToggle {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.newsToggle:hover {
+  border-color: var(--border-strong);
+}
+
+.newsToggle[data-state="on"] {
+  border-color: var(--accent-color);
+  background: var(--accent-color);
+  color: var(--accent-text);
+}
+
+.compactNewsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 24px;
+  width: 100%; /* Ensure full width */
+  flex: 1; /* Take up available space */
+  /* Hide scrollbar */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.compactNewsHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.compactBackButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  height: 34px;
+}
+
+.compactNewsContent {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Updated Layout */
+.dashboardContainer {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboardMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 40px;
+  min-width: 0;
+  /* Hide scrollbar */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.dashboardSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 40px;
+  width: 350px; /* Base width */
+  /* Hide scrollbar */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
