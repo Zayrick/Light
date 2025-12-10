@@ -11,9 +11,9 @@ use std::time::Instant;
 use windows::Win32::Foundation::{GetLastError, HWND};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ERROR_NOT_FOUND};
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
-    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
-    HGDIOBJ, RGBQUAD, SRCCOPY,
+    CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+    ReleaseDC, SelectObject, SetStretchBltMode, StretchBlt, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+    COLORONCOLOR, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, RGBQUAD, SRCCOPY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetDesktopWindow, GetSystemMetrics, SM_CXSCREEN, SM_CXVIRTUALSCREEN, SM_CYSCREEN,
@@ -198,14 +198,11 @@ pub struct GdiCapturer {
     old_bitmap: HGDIOBJ,
     region: CaptureRegion,
     output_index: usize,
+    target_width: u32,
+    target_height: u32,
     stride: usize,
     buffer: Vec<u8>,
     bitmap_info: BITMAPINFO,
-    // Scaled buffer and dimensions
-    scaled_buffer: Vec<u8>,
-    scaled_width: u32,
-    scaled_height: u32,
-    scaled_stride: usize,
     // Frame rate control
     last_capture_time: Option<Instant>,
     has_frame: bool,
@@ -223,20 +220,31 @@ impl GdiCapturer {
             let memory_dc_guard = MemoryDcGuard::new(screen_dc_guard.handle())?;
 
             let region = detect_region(output_index);
-            let bitmap_guard = BitmapGuard::new(screen_dc_guard.handle(), region.width, region.height)?;
+            let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as u32;
+            let target_width = (region.width as u32 * scale_percent / 100).max(1);
+            let target_height = (region.height as u32 * scale_percent / 100).max(1);
+
+            let bitmap_guard = BitmapGuard::new(
+                screen_dc_guard.handle(),
+                target_width as i32,
+                target_height as i32,
+            )?;
             let selection_guard = BitmapSelectionGuard::new(memory_dc_guard.handle(), bitmap_guard.handle())?;
 
-            let stride = (region.width as usize * 4).max(4);
-            let buffer_len = stride * region.height as usize;
+            // Prefer GPU-side scaling: memory bitmap uses the target (scaled) size.
+            SetStretchBltMode(memory_dc_guard.handle(), COLORONCOLOR);
+
+            let stride = (target_width as usize * BYTES_PER_PIXEL).max(4);
+            let buffer_len = stride * target_height as usize;
             let bitmap_info = BITMAPINFO {
                 bmiHeader: BITMAPINFOHEADER {
                     biSize: size_of::<BITMAPINFOHEADER>() as u32,
-                    biWidth: region.width,
-                    biHeight: -region.height, // top-down orientation
+                    biWidth: target_width as i32,
+                    biHeight: -(target_height as i32), // top-down orientation
                     biPlanes: 1,
                     biBitCount: 32,
                     biCompression: BI_RGB.0,
-                    biSizeImage: (stride * region.height as usize) as u32,
+                    biSizeImage: (stride * target_height as usize) as u32,
                     biXPelsPerMeter: 0,
                     biYPelsPerMeter: 0,
                     biClrUsed: 0,
@@ -244,14 +252,7 @@ impl GdiCapturer {
                 },
                 bmiColors: [RGBQUAD::default(); 1],
             };
-
-            // Calculate scaled dimensions
-            let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as u32;
-            let scaled_width = (region.width as u32 * scale_percent / 100).max(1);
-            let scaled_height = (region.height as u32 * scale_percent / 100).max(1);
-            let scaled_stride = scaled_width as usize * BYTES_PER_PIXEL;
             let buffer = vec![0u8; buffer_len];
-            let scaled_buffer = vec![0u8; scaled_stride * scaled_height as usize];
 
             // Transfer ownership of handles only after all fallible allocations succeed.
             let screen_dc = screen_dc_guard.into_inner();
@@ -267,13 +268,11 @@ impl GdiCapturer {
                 old_bitmap,
                 region,
                 output_index,
+                target_width,
+                target_height,
                 stride,
                 buffer,
                 bitmap_info,
-                scaled_buffer,
-                scaled_width,
-                scaled_height,
-                scaled_stride,
                 last_capture_time: None,
                 has_frame: false,
             })
@@ -286,27 +285,32 @@ impl GdiCapturer {
 
     fn capture_internal(&mut self) -> Result<(), ScreenCaptureError> {
         unsafe {
-            BitBlt(
+            if !StretchBlt(
                 self.memory_dc,
                 0,
                 0,
-                self.region.width,
-                self.region.height,
+                self.target_width as i32,
+                self.target_height as i32,
                 Some(self.screen_dc),
                 self.region.origin_x,
                 self.region.origin_y,
+                self.region.width,
+                self.region.height,
                 SRCCOPY,
             )
-            .map_err(|_| ScreenCaptureError::OsError {
-                context: "BitBlt",
-                code: GetLastError().0,
-            })?;
+            .as_bool()
+            {
+                return Err(ScreenCaptureError::OsError {
+                    context: "StretchBlt",
+                    code: GetLastError().0,
+                });
+            }
 
             let scan_lines = GetDIBits(
                 self.memory_dc,
                 self.bitmap,
                 0,
-                self.region.height as u32,
+                self.target_height,
                 Some(self.buffer.as_mut_ptr() as *mut c_void),
                 &mut self.bitmap_info,
                 DIB_RGB_COLORS,
@@ -317,40 +321,8 @@ impl GdiCapturer {
                     code: GetLastError().0,
                 });
             }
-
-            // Downsample if needed
-            self.downsample();
         }
         Ok(())
-    }
-
-    fn downsample(&mut self) {
-        let src_width = self.region.width as usize;
-        let src_height = self.region.height as usize;
-        let dst_width = self.scaled_width as usize;
-        let dst_height = self.scaled_height as usize;
-
-        // If no scaling needed, just copy
-        if src_width == dst_width && src_height == dst_height {
-            self.scaled_buffer.copy_from_slice(&self.buffer);
-            return;
-        }
-
-        // Simple nearest-neighbor downsampling
-        for y in 0..dst_height {
-            let src_y = y * src_height / dst_height;
-            let dst_row_start = y * self.scaled_stride;
-            let src_row_start = src_y * self.stride;
-
-            for x in 0..dst_width {
-                let src_x = x * src_width / dst_width;
-                let src_idx = src_row_start + src_x * BYTES_PER_PIXEL;
-                let dst_idx = dst_row_start + x * BYTES_PER_PIXEL;
-
-                self.scaled_buffer[dst_idx..dst_idx + BYTES_PER_PIXEL]
-                    .copy_from_slice(&self.buffer[src_idx..src_idx + BYTES_PER_PIXEL]);
-            }
-        }
     }
 }
 
@@ -372,15 +344,15 @@ impl ScreenCapturer for GdiCapturer {
         }
 
         Ok(ScreenFrame {
-            width: self.scaled_width,
-            height: self.scaled_height,
-            stride: self.scaled_stride,
-            pixels: &self.scaled_buffer,
+            width: self.target_width,
+            height: self.target_height,
+            stride: self.stride,
+            pixels: &self.buffer,
         })
     }
 
     fn size(&self) -> (u32, u32) {
-        (self.scaled_width, self.scaled_height)
+        (self.target_width, self.target_height)
     }
 }
 
