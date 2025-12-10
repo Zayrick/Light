@@ -129,9 +129,11 @@ impl DxgiCapturer {
         let (actual_width, actual_height) = rotated_dimensions(width, height, rotation);
 
         // Calculate scaled dimensions
-        let scale_percent = CAPTURE_SCALE_PERCENT.load(std::sync::atomic::Ordering::Relaxed).clamp(1, 100) as u32;
-        let scaled_width = (actual_width * scale_percent / 100).max(1);
-        let scaled_height = (actual_height * scale_percent / 100).max(1);
+        let scale_percent = CAPTURE_SCALE_PERCENT
+            .load(std::sync::atomic::Ordering::Relaxed)
+            .clamp(1, 100);
+        let (scaled_width, scaled_height) =
+            compute_scaled_dimensions(actual_width, actual_height, scale_percent);
 
         // Create staging texture for final CPU readback
         let staging_texture = unsafe {
@@ -465,10 +467,11 @@ impl DxgiCapturer {
             let rotated_height = rotated_height as usize;
 
             let scale_percent =
-                CAPTURE_SCALE_PERCENT.load(std::sync::atomic::Ordering::Relaxed).clamp(1, 100) as usize;
-
-            let scaled_width = (rotated_width * scale_percent / 100).max(1);
-            let scaled_height = (rotated_height * scale_percent / 100).max(1);
+                CAPTURE_SCALE_PERCENT.load(std::sync::atomic::Ordering::Relaxed).clamp(1, 100);
+            let (scaled_width_u32, scaled_height_u32) =
+                compute_scaled_dimensions(rotated_width as u32, rotated_height as u32, scale_percent);
+            let scaled_width = scaled_width_u32 as usize;
+            let scaled_height = scaled_height_u32 as usize;
 
             let mut scaled = vec![0u8; scaled_width * scaled_height * BYTES_PER_PIXEL];
 
@@ -953,6 +956,25 @@ fn rotated_dimensions(width: u32, height: u32, rotation: DXGI_MODE_ROTATION) -> 
         DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270 => (height, width),
         _ => (width, height),
     }
+}
+
+fn compute_scaled_dimensions(
+    actual_width: u32,
+    actual_height: u32,
+    scale_percent: u8,
+) -> (u32, u32) {
+    let target_width = (actual_width.saturating_mul(scale_percent as u32) / 100).max(1);
+    let target_height = (actual_height.saturating_mul(scale_percent as u32) / 100).max(1);
+
+    let mut scaled_width = actual_width.max(1);
+    let mut scaled_height = actual_height.max(1);
+
+    while scaled_width / 2 >= target_width && scaled_height / 2 >= target_height {
+        scaled_width = (scaled_width / 2).max(1);
+        scaled_height = (scaled_height / 2).max(1);
+    }
+
+    (scaled_width, scaled_height)
 }
 
 pub fn wide_to_string(buffer: &[u16]) -> String {
