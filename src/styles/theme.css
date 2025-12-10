@@ -24,6 +24,27 @@
   --radius-l: 12px;
   
   --font-sans: "Segoe UI Variable", "Segoe UI", Inter, sans-serif;
+
+  /* Apple System Colors (Light) */
+  --color-red: #FF383C;
+  --color-orange: #FF8D28;
+  --color-yellow: #FFCC00;
+  --color-green: #34C759;
+  --color-mint: #00C8B3;
+  --color-teal: #00C3D0;
+  --color-cyan: #00C0E8;
+  --color-blue: #0088FF;
+  --color-indigo: #6155F5;
+  --color-purple: #CB30E0;
+  --color-pink: #FF2D55;
+  --color-brown: #AC7F5E;
+
+  --color-gray: #8E8E93;
+  --color-gray-2: #AEAEB2;
+  --color-gray-3: #C7C7CC;
+  --color-gray-4: #D1D1D6;
+  --color-gray-5: #E5E5EA;
+  --color-gray-6: #F2F2F7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,6 +67,27 @@
     --accent-text: #000000;
 
     --success-color: #6cc4a1;
+
+    /* Apple System Colors (Dark) */
+    --color-red: #FF4245;
+    --color-orange: #FF9230;
+    --color-yellow: #FFD600;
+    --color-green: #30D158;
+    --color-mint: #00DAC3;
+    --color-teal: #00D2E0;
+    --color-cyan: #3CD3FE;
+    --color-blue: #0091FF;
+    --color-indigo: #6D7CFF;
+    --color-purple: #DB34F2;
+    --color-pink: #FF375F;
+    --color-brown: #B78A66;
+
+    --color-gray: #8E8E93;
+    --color-gray-2: #636366;
+    --color-gray-3: #48484A;
+    --color-gray-4: #3A3A3C;
+    --color-gray-5: #2C2C2E;
+    --color-gray-6: #1C1C1E;
   }
 }
 
