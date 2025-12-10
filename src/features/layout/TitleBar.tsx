@@ -17,7 +17,7 @@ export function TitleBar() {
   return (
     <div className="titlebar">
       <div className="titlebar-drag-region" data-tauri-drag-region>
-        Light Control
+        Light Studio
       </div>
       <div className="titlebar-button" onClick={minimize}>
         <svg className="titlebar-icon" viewBox="0 0 10 1">
