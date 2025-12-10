@@ -12,15 +12,64 @@ export function useDevices() {
     setDevices((prev) =>
       prev.map((dev) =>
         dev.port === port
-          ? { ...dev, current_effect_id: effectId ?? undefined }
+          ? {
+              ...dev,
+              current_effect_id: effectId ?? undefined,
+              current_effect_params: undefined,
+            }
           : dev
       )
     );
 
     setSelectedDevice((prev) =>
       prev && prev.port === port
-        ? { ...prev, current_effect_id: effectId ?? undefined }
+        ? {
+            ...prev,
+            current_effect_id: effectId ?? undefined,
+            current_effect_params: undefined,
+          }
         : prev
+    );
+  }, []);
+
+  const updateDeviceParams = useCallback(
+    (port: string, params: Record<string, number | boolean>) => {
+      setDevices((prev) =>
+        prev.map((dev) =>
+          dev.port === port
+            ? {
+                ...dev,
+                current_effect_params: {
+                  ...(dev.current_effect_params ?? {}),
+                  ...params,
+                },
+              }
+            : dev
+        )
+      );
+
+      setSelectedDevice((prev) =>
+        prev && prev.port === port
+          ? {
+              ...prev,
+              current_effect_params: {
+                ...(prev.current_effect_params ?? {}),
+                ...params,
+              },
+            }
+          : prev
+      );
+    },
+    []
+  );
+
+  const updateDeviceBrightness = useCallback((port: string, brightness: number) => {
+    setDevices((prev) =>
+      prev.map((dev) => (dev.port === port ? { ...dev, brightness } : dev))
+    );
+
+    setSelectedDevice((prev) =>
+      prev && prev.port === port ? { ...prev, brightness } : prev
     );
   }, []);
 
@@ -66,6 +115,8 @@ export function useDevices() {
     statusMsg,
     scanDevices,
     updateDeviceEffect,
+    updateDeviceParams,
+    updateDeviceBrightness,
   };
 }
 

@@ -40,6 +40,8 @@ export default function App() {
     statusMsg,
     scanDevices,
     updateDeviceEffect,
+    updateDeviceParams,
+    updateDeviceBrightness,
   } = useDevices();
   
   const { effects, applyEffect } = useEffects();
@@ -129,6 +131,8 @@ export default function App() {
               device={selectedDevice}
               effects={effects}
               onSetEffect={handleSetEffect}
+              onUpdateParams={updateDeviceParams}
+              onUpdateBrightness={updateDeviceBrightness}
             />
           </motion.div>
         )}

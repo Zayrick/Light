@@ -30,5 +30,6 @@ export interface Device {
   virtual_layout: [number, number]; // Tuple [width, height]
   brightness: number;
   current_effect_id?: string;
+  current_effect_params?: Record<string, number | boolean>;
 }
 
