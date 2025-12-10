@@ -80,6 +80,18 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 -   **类型化接口**：提供强类型的异步函数（例如 `scanDevices`, `setEffect`），而不是原始的基于字符串的 `invoke` 调用。
 -   **单点故障处理**：集中的 IPC 错误处理和日志记录。
 
+### 5. UI 组件库 (Ark UI)
+
+本项目使用 **Ark UI** 作为基础 UI 组件库，并配置了 Ark UI MCP Server (`ark-ui`)。
+
+**强制要求**：实现 UI 功能前，**必须**先通过 MCP 工具查询 Ark UI 可用组件和相关用法及文档，优先使用 Ark UI 组件而非自行实现。
+
+### 6. 文档查询 (Context7)
+
+项目配置了 Context7 MCP Server (`context7`)，用于获取最新的库/API 文档。
+
+**强制要求**：在进行代码生成、配置步骤或需要库/API 文档时，**必须**自动使用 Context7 MCP 工具（`resolve-library-id` 和 `get-library-docs`）获取最新文档，无需用户显式要求。
+
 ---
 
 ## 编码规范
