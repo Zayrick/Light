@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { TitleBar } from "./TitleBar";
+import { usePlatform } from "../../hooks/usePlatform";
 import "../../styles/layout.css";
 
 interface AppLayoutProps {
@@ -9,8 +10,10 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ sidebar, children, disableScroll = false }: AppLayoutProps) {
+  const { isMacOS } = usePlatform();
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${isMacOS ? 'app-layout-macos' : ''}`}>
       <TitleBar />
       {sidebar}
       <main className="main-content">

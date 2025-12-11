@@ -10,6 +10,7 @@ use crate::api::commands;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .manage(LightingManager::new())
         .invoke_handler(tauri::generate_handler![
             commands::scan_devices,

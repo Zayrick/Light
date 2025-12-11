@@ -13,14 +13,14 @@
   background-color: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  padding-top: 32px; /* Space for TitleBar */
+  padding-top: 0; /* Content scrolls under TitleBar */
   border-right: none; /* Removed divider line */
   flex-shrink: 0;
   transition: width 0.2s ease;
 }
 
 .sidebar-content {
-  padding: 8px;
+  padding: 32px 8px 8px 8px; /* Top padding for TitleBar clearance */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -234,7 +234,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding-top: 32px; /* Space for TitleBar */
+  padding-top: 0; /* Content scrolls under TitleBar */
   overflow: hidden;
   position: relative;
 }
@@ -242,8 +242,8 @@
 .scroll-container {
   flex: 1;
   min-height: 0;
-  /* Reduced left padding to bring content closer to sidebar */
-  padding: 24px 24px 24px 12px; 
+  /* Top padding for TitleBar clearance, reduced left padding */
+  padding: 56px 24px 24px 12px; 
   overflow-y: auto;
 }
 
