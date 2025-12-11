@@ -242,8 +242,8 @@
 .scroll-container {
   flex: 1;
   min-height: 0;
-  /* Top padding for TitleBar clearance, reduced left padding */
-  padding: 56px 24px 24px 12px; 
+  /* Global horizontal padding only; pages own their vertical spacing */
+  padding: 0 24px 0 12px;
   overflow-y: auto;
 }
 
