@@ -83,6 +83,7 @@ export default function App() {
   return (
     <AppLayout
       disableScroll={activeTab === "device-detail" || activeTab === "home"}
+      hideScrollbar={activeTab === "settings"}
       sidebar={
         <Sidebar
           activeTab={activeTab}
