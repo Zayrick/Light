@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode } from 'react';
 import { platform } from '@tauri-apps/plugin-os';
 
 interface PlatformContextType {
@@ -16,7 +16,7 @@ const PlatformContext = createContext<PlatformContextType>({
 });
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
-  const [platformInfo, setPlatformInfo] = useState<PlatformContextType>(() => {
+  const [platformInfo] = useState<PlatformContextType>(() => {
     // Initialize synchronously since platform() is synchronous
     try {
       const os = platform();
