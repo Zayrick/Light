@@ -14,11 +14,6 @@ const windowsCaptureMethodOptions = [
   { value: "gdi" as const, label: "GDI (Legacy)" },
 ];
 
-// macOS/Linux capture method (using xcap)
-const xcapCaptureMethodOptions = [
-  { value: "xcap" as const, label: "XCap (Cross-platform)" },
-];
-
 const buildMipScalePoints = () => {
   const points: number[] = [100];
   let current = 100;
@@ -149,10 +144,14 @@ export function SettingsPage() {
   const [tauriVersion, setTauriVersion] = useState<string>("");
   const [appVersion, setAppVersion] = useState<string>("");
 
+  // Only show capture method selector on Windows where multiple options exist
   const captureMethodOptions = useMemo(
-    () => (isWindows ? windowsCaptureMethodOptions : xcapCaptureMethodOptions),
+    () => (isWindows ? windowsCaptureMethodOptions : []),
     [isWindows]
   );
+
+  // Whether to show capture method selector (only when multiple options available)
+  const showCaptureMethodSelector = captureMethodOptions.length > 1;
 
   const mipScalePoints = useMemo(buildMipScalePoints, []);
   // Both DXGI and Graphics Capture benefit from GPU-optimized mip scaling
@@ -452,30 +451,26 @@ export function SettingsPage() {
         <Card className="settings-card">
           <h3>Screen Capture Quality</h3>
 
-          {/* Capture Method Select */}
-          <div className="setting-section">
-            <Select
-              value={captureMethod}
-              options={captureMethodOptions}
-              onChange={handleMethodChange}
-              disabled={loading || captureMethodOptions.length <= 1}
-              label="Capture Method"
-              valueText={`${captureMethodOptions.length} option${captureMethodOptions.length > 1 ? 's' : ''}`}
-            />
-            <p>
-              {isWindows ? (
-                <>
-                  <strong>DXGI</strong>: High performance with GPU acceleration and HDR support.
-                  <br />
-                  <strong>Graphics Capture</strong>: Modern API for Windows 10+, event-driven with low latency.
-                  <br />
-                  <strong>GDI</strong>: Legacy mode with best compatibility for older systems.
-                </>
-              ) : (
-                "XCap provides cross-platform screen capture support for macOS and Linux."
-              )}
-            </p>
-          </div>
+          {/* Capture Method Select - Only shown on Windows where multiple options exist */}
+          {showCaptureMethodSelector && (
+            <div className="setting-section">
+              <Select
+                value={captureMethod}
+                options={captureMethodOptions}
+                onChange={handleMethodChange}
+                disabled={loading}
+                label="Capture Method"
+                valueText={`${captureMethodOptions.length} options`}
+              />
+              <p>
+                <strong>DXGI</strong>: High performance with GPU acceleration and HDR support.
+                <br />
+                <strong>Graphics Capture</strong>: Modern API for Windows 10+, event-driven with low latency.
+                <br />
+                <strong>GDI</strong>: Legacy mode with best compatibility for older systems.
+              </p>
+            </div>
+          )}
 
           {/* Resolution Scale Slider */}
           <div className="setting-section">
