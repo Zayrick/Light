@@ -1,7 +1,7 @@
 use crate::interface::controller::{Color, Controller, ControllerMetadata, DeviceType, Zone};
+use crate::resource::driver::serail_port::RateLimitedSerialPort;
 use inventory;
-use serialport::{SerialPort, SerialPortType};
-use std::io::Write;
+use serialport::SerialPortType;
 use std::time::Duration;
 
 mod protocol;
@@ -9,11 +9,14 @@ use protocol::SkydimoSerialProtocol;
 mod config;
 use config::build_layout_from_device_name;
 
+/// Baud rate used for Skydimo serial devices.
+const BAUD_RATE: u32 = 115_200;
+
 pub struct SkydimoSerialController {
     pub port_name: String,
     model: String,
     id: String,
-    port: Box<dyn SerialPort>,
+    port: RateLimitedSerialPort,
     zones: Vec<Zone>,
     led_count: usize,
     buffer_cache: Vec<Color>,
@@ -21,7 +24,12 @@ pub struct SkydimoSerialController {
 }
 
 impl SkydimoSerialController {
-    fn new(port_name: String, model: String, id: String, port: Box<dyn SerialPort>) -> Self {
+    fn new(
+        port_name: String,
+        model: String,
+        id: String,
+        port: RateLimitedSerialPort,
+    ) -> Self {
         // Try to build a matrix layout from the reported model name.
         let (zones, led_count) = if let Some(layout) = build_layout_from_device_name(&model) {
             (vec![layout.zone], layout.total_leds)
@@ -121,8 +129,9 @@ impl Controller for SkydimoSerialController {
         };
 
         SkydimoSerialProtocol::encode_into(&self.buffer_cache, &mut self.packet_cache);
+        // Use rate-limited write; returns Ok(false) if frame was dropped due to throttling.
         self.port
-            .write_all(&self.packet_cache)
+            .write_all_throttled(&self.packet_cache)
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -141,7 +150,7 @@ fn probe() -> Vec<Box<dyn Controller>> {
             continue;
         }
 
-        if let Ok(mut port) = serialport::new(&p.port_name, 115_200)
+        if let Ok(mut port) = serialport::new(&p.port_name, BAUD_RATE)
             .timeout(Duration::from_millis(200))
             .open()
         {
@@ -151,14 +160,27 @@ fn probe() -> Vec<Box<dyn Controller>> {
                     let full_model = if !model.starts_with("Skydimo") {
                         format!("Skydimo {}", model)
                     } else {
-                        model
+                        model.clone()
                     };
+
+                    // Compute frame size for rate limiting based on LED count.
+                    let led_count =
+                        if let Some(layout) = build_layout_from_device_name(&full_model) {
+                            layout.total_leds
+                        } else {
+                            100 // Fallback
+                        };
+                    let frame_size = 6 + led_count * 3;
+
+                    // Wrap the port in a rate-limited driver.
+                    let rate_limited_port =
+                        RateLimitedSerialPort::new(port, BAUD_RATE, frame_size);
 
                     controllers.push(Box::new(SkydimoSerialController::new(
                         p.port_name.clone(),
                         full_model,
                         id,
-                        port,
+                        rate_limited_port,
                     )));
                 }
                 Err(_) => {
