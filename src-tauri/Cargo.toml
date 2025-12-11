@@ -32,18 +32,9 @@ mdns-sd = "0.17.1"
 flume = "0.11.1"
 window-vibrancy = "0.7.1"
 tauri-plugin-os = "2.3.2"
+rayon = "1.11.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"
-windows = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D11",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_System_SystemInformation",
-    "Win32_System_Com",
-] }
+windows = { version = "0.61.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_System_SystemInformation", "Win32_System_Com", "Graphics_Capture", "Graphics_DirectX_Direct3D11", "Graphics_Imaging", "Foundation", "System", "Win32_System_WinRT", "Win32_System_WinRT_Direct3D11", "Win32_System_WinRT_Graphics_Capture", "Graphics_DirectX", "Foundation_Metadata"], default-features = false }
 

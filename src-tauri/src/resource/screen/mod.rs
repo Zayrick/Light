@@ -6,6 +6,17 @@ pub struct ScreenFrame<'a> {
     pub height: u32,
     pub stride: usize,
     pub pixels: &'a [u8],
+    /// Optional dirty regions reported by the backend. Empty means "unknown/entire frame".
+    pub dirty_regions: &'a [DirtyRegion],
+}
+
+/// A rectangular dirty region within a captured frame.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DirtyRegion {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 /// Errors that can occur while capturing the screen.
