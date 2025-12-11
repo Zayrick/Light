@@ -220,7 +220,7 @@ export function DeviceDetail({
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", paddingTop: "56px", paddingBottom: "24px" }}>
       <header
         className="page-header"
         style={{

@@ -372,7 +372,7 @@ export function SettingsPage() {
   }, [captureScale]);
 
   return (
-    <>
+    <div className="settings-page">
       <header className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>
@@ -494,6 +494,6 @@ export function SettingsPage() {
           </div>
         </Card>
       </div>
-    </>
+    </div>
   );
 }
