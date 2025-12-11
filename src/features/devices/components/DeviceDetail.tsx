@@ -310,6 +310,7 @@ export function DeviceDetail({
                         display: "grid",
                         gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
                         gap: "8px",
+                        padding: "2px",
                         paddingBottom: "20px",
                       }}
                     >
