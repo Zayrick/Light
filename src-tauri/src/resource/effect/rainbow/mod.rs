@@ -117,5 +117,5 @@ inventory::submit!(EffectMetadata {
     group: Some("Dynamic"),
     icon: Some("Waves"),
     params: &RAINBOW_PARAMS,
-    factory: factory,
+    factory,
 });

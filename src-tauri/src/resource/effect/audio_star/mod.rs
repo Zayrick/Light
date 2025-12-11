@@ -57,6 +57,12 @@ pub struct AudioStarEffect {
     audio_samples: Vec<f32>,
 }
 
+impl Default for AudioStarEffect {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AudioStarEffect {
     pub fn new() -> Self {
         // Default AGC settings matching C++ AudioSettingsStruct.
@@ -354,7 +360,7 @@ impl Effect for AudioStarEffect {
         }
 
         if let Some(sat) = params.get("edgeBeatSaturation").and_then(|v| v.as_f64()) {
-            self.edge_beat_saturation = (sat as u8).min(255);
+            self.edge_beat_saturation = sat as u8;
         }
 
         if let Some(sens) = params.get("edgeBeatSensitivity").and_then(|v| v.as_f64()) {
@@ -534,6 +540,6 @@ inventory::submit!(EffectMetadata {
     group: Some("Audio"),
     icon: Some("AudioLines"),
     params: &AUDIO_STAR_PARAMS,
-    factory: factory,
+    factory,
 });
 

@@ -192,8 +192,8 @@ fn probe() -> Vec<Box<dyn Controller>> {
     controllers
 }
 
-inventory::submit!(ControllerMetadata {
+    inventory::submit!(ControllerMetadata {
     name: "Skydimo Serial Controller",
     description: "Skydimo Serial LED Strip Driver",
-    probe: probe,
+    probe,
 });

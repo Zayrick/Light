@@ -338,6 +338,12 @@ pub struct BlackBorderProcessor {
     inconsistent_cnt: u32,
 }
 
+impl Default for BlackBorderProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BlackBorderProcessor {
     pub fn new() -> Self {
         Self {

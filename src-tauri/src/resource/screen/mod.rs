@@ -58,6 +58,7 @@ pub trait ScreenCapturer {
 // Windows: Use native DXGI/GDI implementation
 #[cfg(target_os = "windows")]
 #[path = "Windows/mod.rs"]
+#[allow(clippy::module_inception)]
 mod screen;
 
 #[cfg(target_os = "windows")]
@@ -72,6 +73,7 @@ pub use screen::{
 // macOS: Use ScreenCaptureKit backend (native Apple framework)
 #[cfg(target_os = "macos")]
 #[path = "MacOS/mod.rs"]
+#[allow(clippy::module_inception)]
 mod screen;
 
 #[cfg(target_os = "macos")]
@@ -86,6 +88,7 @@ pub use screen::{
 // Linux: Use xcap backend
 #[cfg(target_os = "linux")]
 #[path = "xcap_backend.rs"]
+#[allow(clippy::module_inception)]
 mod screen;
 
 #[cfg(target_os = "linux")]

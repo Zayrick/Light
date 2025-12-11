@@ -101,5 +101,5 @@ inventory::submit!(EffectMetadata {
     group: Some("Test"),
     icon: Some("LayoutGrid"),
     params: &[],
-    factory: factory,
+    factory,
 });

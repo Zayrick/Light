@@ -582,17 +582,17 @@ fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixL
 
     let (height, width) = match config.layout {
         Perimeter4 => {
-            let h = (z1.max(z3) + 2) as usize;
-            let w = (z2.max(z4) + 2) as usize;
+            let h = z1.max(z3) + 2;
+            let w = z2.max(z4) + 2;
             (h, w)
         }
         Perimeter3 => {
-            let h = (z1.max(z3) + 1) as usize;
-            let w = (z2 + 2) as usize;
+            let h = z1.max(z3) + 1;
+            let w = z2 + 2;
             (h, w)
         }
         Sides2 => {
-            let h = (z1.max(z2) + 2) as usize;
+            let h = z1.max(z2) + 2;
             let mut w_f = ((16.0 / 9.0) * (h as f64)).round() as isize;
             if w_f < 3 {
                 w_f = 3;

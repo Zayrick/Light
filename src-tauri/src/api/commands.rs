@@ -221,7 +221,7 @@ pub fn set_window_effect(effect: String, app_handle: tauri::AppHandle) -> Result
         apply_window_effect_impl(&effect, &app_handle)?;
         let mut guard = CURRENT_WINDOW_EFFECT.lock().unwrap();
         *guard = effect;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -237,7 +237,7 @@ pub fn initialize_window_effect(app: &tauri::App) {
     let default = default_effect_for_platform();
     let handle = app.handle();
 
-    if let Err(err) = apply_window_effect_impl(default, &handle) {
+    if let Err(err) = apply_window_effect_impl(default, handle) {
         eprintln!("[window_effect] Failed to apply default window effect '{}': {}", default, err);
     }
 

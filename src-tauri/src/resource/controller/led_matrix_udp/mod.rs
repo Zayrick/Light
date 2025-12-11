@@ -340,8 +340,8 @@ fn probe() -> Vec<Box<dyn Controller>> {
 }
 
 // 注册控制器到inventory
-inventory::submit!(ControllerMetadata {
+    inventory::submit!(ControllerMetadata {
     name: "LED Matrix UDP Controller",
     description: "UDP-based LED Matrix Display with mDNS discovery",
-    probe: probe,
+    probe,
 });

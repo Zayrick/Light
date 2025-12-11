@@ -142,8 +142,8 @@ impl RateLimitedSerialPort {
     }
 
     /// Returns a reference to the underlying serial port.
-    pub fn inner(&self) -> &Box<dyn SerialPort> {
-        &self.port
+    pub fn inner(&self) -> &dyn SerialPort {
+        &*self.port
     }
 
     /// Consumes this wrapper and returns the underlying serial port.
