@@ -38,7 +38,6 @@ export default function App() {
     selectedDevice,
     setSelectedDevice,
     isScanning,
-    statusMsg,
     scanDevices,
     updateDeviceEffect,
     updateDeviceParams,
@@ -86,6 +85,7 @@ export default function App() {
       <AppLayout
         disableScroll={activeTab === "device-detail" || activeTab === "home"}
         hideScrollbar={activeTab === "settings"}
+        pageKey={`${activeTab}-${selectedDevice?.id || ""}`}
         sidebar={
           <Sidebar
             activeTab={activeTab}
@@ -93,7 +93,6 @@ export default function App() {
             devices={devices}
             selectedDevice={selectedDevice}
             setSelectedDevice={setSelectedDevice}
-            statusMsg={statusMsg}
           />
         }
       >

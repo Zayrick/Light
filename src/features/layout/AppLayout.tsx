@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { TitleBar } from "./TitleBar";
 import { usePlatform } from "../../hooks/usePlatform";
 import "../../styles/layout.css";
@@ -8,6 +8,7 @@ interface AppLayoutProps {
   children: ReactNode;
   disableScroll?: boolean;
   hideScrollbar?: boolean;
+  pageKey?: string;
 }
 
 export function AppLayout({
@@ -15,8 +16,16 @@ export function AppLayout({
   children,
   disableScroll = false,
   hideScrollbar = false,
+  pageKey,
 }: AppLayoutProps) {
   const { isMacOS } = usePlatform();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [pageKey, disableScroll]);
 
   const scrollContainerClass = [
     "scroll-container",
@@ -35,7 +44,7 @@ export function AppLayout({
       <TitleBar />
       {sidebar}
       <main className="main-content">
-        <div className={scrollContainerClass}>
+        <div ref={scrollRef} className={scrollContainerClass}>
           <div className={contentClass}>{children}</div>
         </div>
       </main>
