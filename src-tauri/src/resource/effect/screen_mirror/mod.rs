@@ -5,10 +5,8 @@ pub mod renderer;
 use crate::interface::controller::Color;
 use crate::interface::effect::{Effect, EffectMetadata};
 use crate::resource::screen::ScreenSubscription;
-#[cfg(target_os = "windows")]
-use border::BlackBorderProcessor;
+use border::{BlackBorderProcessor, BlackBorderMode};
 use renderer::{render_frame, CropRegion};
-#[cfg(target_os = "windows")]
 use std::cell::RefCell;
 use inventory;
 use params::SCREEN_PARAMS;
@@ -24,7 +22,6 @@ pub struct ScreenMirrorEffect {
     brightness: f32,
     saturation: f32,
     gamma: f32,
-    #[cfg(target_os = "windows")]
     black_border: RefCell<BlackBorderProcessor>,
     previous_buffer: Vec<Color>,
 }
@@ -41,7 +38,6 @@ impl ScreenMirrorEffect {
             brightness: 1.0,
             saturation: 1.0,
             gamma: 1.0,
-            #[cfg(target_os = "windows")]
             black_border: RefCell::new(BlackBorderProcessor::new()),
             previous_buffer: Vec::new(),
         }
@@ -85,12 +81,9 @@ impl ScreenMirrorEffect {
         let smoothness = self.smoothness;
         
         if let Some(subscription) = self.screen.as_mut() {
-            #[cfg(target_os = "windows")]
             let auto_crop_enabled = self.auto_crop_enabled;
-            #[cfg(target_os = "windows")]
             let black_border = &self.black_border;
 
-            #[cfg(target_os = "windows")]
             if !auto_crop_enabled {
                 // Ensure processor is reset when auto-crop is disabled.
                 black_border.borrow_mut().set_enabled(false);
@@ -101,7 +94,6 @@ impl ScreenMirrorEffect {
             let gamma = self.gamma;
 
             match subscription.capture_with(|frame| {
-                #[cfg(target_os = "windows")]
                 let crop = if auto_crop_enabled {
                     let mut processor = black_border.borrow_mut();
                     processor.set_enabled(true);
@@ -110,9 +102,6 @@ impl ScreenMirrorEffect {
                 } else {
                     CropRegion::default()
                 };
-                
-                #[cfg(not(target_os = "windows"))]
-                let crop = CropRegion::default();
 
                 render_frame(
                     layout,
@@ -180,12 +169,9 @@ impl Effect for ScreenMirrorEffect {
 
         if let Some(auto_crop) = _params.get("autoCrop").and_then(|v| v.as_bool()) {
             self.auto_crop_enabled = auto_crop;
-            #[cfg(target_os = "windows")]
-            {
-                self.black_border
-                    .borrow_mut()
-                    .set_enabled(self.auto_crop_enabled);
-            }
+            self.black_border
+                .borrow_mut()
+                .set_enabled(self.auto_crop_enabled);
         }
 
         if let Some(val) = _params.get("brightness").and_then(|v| v.as_f64()) {
@@ -198,7 +184,6 @@ impl Effect for ScreenMirrorEffect {
             self.gamma = val as f32;
         }
 
-        #[cfg(target_os = "windows")]
         {
             let mut bb = self.black_border.borrow_mut();
 
@@ -239,8 +224,6 @@ impl Effect for ScreenMirrorEffect {
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
-        let _ = _params;
 
         // Display index selection - available on all platforms
         if let Some(display_index_value) =
