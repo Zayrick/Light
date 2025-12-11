@@ -566,6 +566,10 @@ fn apply_window_effect_impl(
         eprintln!("[window_effect] clear_vibrancy failed: {}", err);
     }
 
+    // NOTE: Some legacy effect ids map to deprecated NSVisualEffectMaterial variants.
+    // We keep them for compatibility and silence the warnings locally; consider
+    // migrating callers to semantic materials (e.g., WindowBackground/ContentBackground).
+    #[allow(deprecated)]
     let material = match effect {
         "appearanceBased" => NSVisualEffectMaterial::AppearanceBased,
         "light" => NSVisualEffectMaterial::Light,

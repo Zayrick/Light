@@ -296,6 +296,7 @@ impl ScreenCapturer for XcapCapturer {
             height: self.height,
             stride: self.stride,
             pixels: &self.buffer,
+            dirty_regions: &[],
         })
     }
 
