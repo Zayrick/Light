@@ -9,7 +9,6 @@ use std::sync::{
     Mutex, OnceLock,
 };
 
-use image::imageops;
 use serde::{Deserialize, Serialize};
 use xcap::Monitor;
 
