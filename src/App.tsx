@@ -7,6 +7,7 @@ import { DeviceDetail } from "./features/devices/components/DeviceDetail";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useDevices } from "./hooks/useDevices";
 import { useEffects } from "./hooks/useEffects";
+import { PlatformProvider } from "./hooks/usePlatform";
 import "./styles/theme.css";
 import "./styles/layout.css";
 
@@ -81,77 +82,78 @@ export default function App() {
   };
 
   return (
-    <AppLayout
-      disableScroll={activeTab === "device-detail" || activeTab === "home"}
-      sidebar={
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          devices={devices}
-          selectedDevice={selectedDevice}
-          setSelectedDevice={setSelectedDevice}
-          statusMsg={statusMsg}
-        />
-      }
-    >
-      <AnimatePresence mode="wait" custom={direction}>
-        {activeTab === "home" && (
-          <motion.div
-            key="home"
-            custom={direction}
-            variants={variants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={ANIMATION_TRANSITION}
-            style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-          >
-            <HomePage
-              devices={devices}
-              effects={effects}
-              isScanning={isScanning}
-              onScan={scanDevices}
-              onNavigate={handleNavigate}
-            />
-          </motion.div>
-        )}
+    <PlatformProvider>
+      <AppLayout
+        disableScroll={activeTab === "device-detail" || activeTab === "home"}
+        sidebar={
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            devices={devices}
+            selectedDevice={selectedDevice}
+            setSelectedDevice={setSelectedDevice}
+          />
+        }
+      >
+        <AnimatePresence mode="wait" custom={direction}>
+          {activeTab === "home" && (
+            <motion.div
+              key="home"
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={ANIMATION_TRANSITION}
+              style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+            >
+              <HomePage
+                devices={devices}
+                effects={effects}
+                isScanning={isScanning}
+                onScan={scanDevices}
+                onNavigate={handleNavigate}
+              />
+            </motion.div>
+          )}
 
-        {activeTab === "device-detail" && selectedDevice && (
-          <motion.div
-            key={`device-detail-${selectedDevice.id}`}
-            custom={direction}
-            variants={variants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={ANIMATION_TRANSITION}
-            style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-          >
-            <DeviceDetail
-              device={selectedDevice}
-              effects={effects}
-              onSetEffect={handleSetEffect}
-              onUpdateParams={updateDeviceParams}
-              onUpdateBrightness={updateDeviceBrightness}
-            />
-          </motion.div>
-        )}
+          {activeTab === "device-detail" && selectedDevice && (
+            <motion.div
+              key={`device-detail-${selectedDevice.id}`}
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={ANIMATION_TRANSITION}
+              style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+            >
+              <DeviceDetail
+                device={selectedDevice}
+                effects={effects}
+                onSetEffect={handleSetEffect}
+                onUpdateParams={updateDeviceParams}
+                onUpdateBrightness={updateDeviceBrightness}
+              />
+            </motion.div>
+          )}
 
-        {activeTab === "settings" && (
-          <motion.div
-            key="settings"
-            custom={direction}
-            variants={variants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={ANIMATION_TRANSITION}
-            style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
-          >
-            <SettingsPage />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </AppLayout>
+          {activeTab === "settings" && (
+            <motion.div
+              key="settings"
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={ANIMATION_TRANSITION}
+              style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
+            >
+              <SettingsPage />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </AppLayout>
+    </PlatformProvider>
   );
 }

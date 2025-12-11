@@ -14,7 +14,6 @@ interface SidebarProps {
   devices: Device[];
   selectedDevice: Device | null;
   setSelectedDevice: (device: Device | null) => void;
-  statusMsg: string;
 }
 
 export function Sidebar({
@@ -23,7 +22,6 @@ export function Sidebar({
   devices,
   selectedDevice,
   setSelectedDevice,
-  statusMsg,
 }: SidebarProps) {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -131,8 +129,6 @@ export function Sidebar({
           </motion.div>
         </div>
       </div>
-
-      <div className="status-bar">{statusMsg}</div>
     </aside>
   );
 }
