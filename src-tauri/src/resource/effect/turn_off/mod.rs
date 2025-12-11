@@ -30,5 +30,5 @@ inventory::submit!(EffectMetadata {
     group: Some("Basic"),
     icon: Some("Power"),
     params: &[],
-    factory: factory,
+    factory,
 });

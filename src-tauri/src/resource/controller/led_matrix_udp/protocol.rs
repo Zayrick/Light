@@ -1,4 +1,4 @@
-/// LED矩阵UDP协议命令定义（与虚拟设备保持一致）
+//! LED矩阵UDP协议命令定义（与虚拟设备保持一致）
 
 /// 查询设备信息
 pub const CMD_QUERY_INFO: u8 = 0x10;
@@ -77,7 +77,7 @@ impl LedMatrixProtocol {
         if max_pixels_per_fragment == 0 {
             return Err("max_pixels_per_fragment cannot be zero".to_string());
         }
-        let total = (color_count + max_pixels_per_fragment - 1) / max_pixels_per_fragment;
+        let total = color_count.div_ceil(max_pixels_per_fragment);
         u8::try_from(total).map_err(|_| "Fragment count exceeds protocol limit (<=255)".to_string())
     }
 

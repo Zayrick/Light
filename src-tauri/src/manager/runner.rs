@@ -93,7 +93,7 @@ impl EffectRunner {
                     };
 
                     let mut c = writer_controller.lock().unwrap();
-                    if let Err(_) = c.update(target_slice) {
+                    if c.update(target_slice).is_err() {
                         break; // Stop on hardware error
                     }
                     // Recycle the buffer

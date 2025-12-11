@@ -26,6 +26,12 @@ pub struct ScreenMirrorEffect {
     previous_buffer: Vec<Color>,
 }
 
+impl Default for ScreenMirrorEffect {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScreenMirrorEffect {
     pub fn new() -> Self {
         Self {
@@ -251,5 +257,5 @@ inventory::submit!(EffectMetadata {
     group: Some("Screen Sync"),
     icon: Some("Monitor"),
     params: &SCREEN_PARAMS,
-    factory: factory,
+    factory,
 });

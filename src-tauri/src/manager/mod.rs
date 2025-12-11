@@ -24,12 +24,20 @@ pub struct Device {
     pub current_effect_params: Option<Map<String, Value>>,
 }
 
+type ControllerRef = Arc<Mutex<Box<dyn Controller>>>;
+
 pub struct LightingManager {
-    controllers: Mutex<HashMap<String, Arc<Mutex<Box<dyn Controller>>>>>,
+    controllers: Mutex<HashMap<String, ControllerRef>>,
     active_effects: Mutex<HashMap<String, EffectRunner>>,
     device_brightness: Mutex<HashMap<String, u8>>,
     active_effect_ids: Mutex<HashMap<String, String>>,
     active_effect_params: Mutex<HashMap<String, Map<String, Value>>>,
+}
+
+impl Default for LightingManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LightingManager {
@@ -50,9 +58,9 @@ impl LightingManager {
         for controller in found_controllers {
             let port = controller.port_name();
             // Only add if not already present
-            if !state_controllers.contains_key(&port) {
-                state_controllers.insert(port, Arc::new(Mutex::new(controller)));
-            }
+            state_controllers
+                .entry(port)
+                .or_insert_with(|| Arc::new(Mutex::new(controller)));
         }
 
         let mut devices = Vec::new();
@@ -146,9 +154,7 @@ impl LightingManager {
 
         if let Some(obj) = params.as_object() {
             let mut stored = self.active_effect_params.lock().unwrap();
-            let entry = stored
-                .entry(port.to_string())
-                .or_insert_with(Map::new);
+            let entry = stored.entry(port.to_string()).or_default();
             for (key, value) in obj {
                 entry.insert(key.clone(), value.clone());
             }

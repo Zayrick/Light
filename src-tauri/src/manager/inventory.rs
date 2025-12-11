@@ -20,12 +20,9 @@ pub fn list_effects() -> Vec<&'static EffectMetadata> {
 }
 
 pub fn get_effect_metadata(id: &str) -> Option<&'static EffectMetadata> {
-    for effect in inventory::iter::<EffectMetadata> {
-        if effect.id == id {
-            return Some(effect);
-        }
-    }
-    None
+    inventory::iter::<EffectMetadata>
+        .into_iter()
+        .find(|effect| effect.id == id)
 }
 
 pub fn default_params_for_effect(id: &str) -> Option<Map<String, Value>> {
@@ -45,10 +42,8 @@ pub fn default_params_for_effect(id: &str) -> Option<Map<String, Value>> {
 }
 
 pub fn create_effect(id: &str) -> Option<Box<dyn Effect>> {
-    for effect in inventory::iter::<EffectMetadata> {
-        if effect.id == id {
-            return Some((effect.factory)());
-        }
-    }
-    None
+    inventory::iter::<EffectMetadata>
+        .into_iter()
+        .find(|effect| effect.id == id)
+        .map(|effect| (effect.factory)())
 }

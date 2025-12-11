@@ -9,6 +9,7 @@ pub struct CropRegion {
     pub bottom: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_frame(
     layout: (usize, usize),
     frame: &ScreenFrame<'_>,
@@ -47,6 +48,7 @@ fn smooth_color(prev: Color, target: Color, smoothness: u32) -> Color {
     interpolate(prev, target, factor)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_linear(
     frame: &ScreenFrame<'_>,
     buffer: &mut [Color],
@@ -81,6 +83,7 @@ fn render_linear(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_matrix(
     layout: (usize, usize),
     frame: &ScreenFrame<'_>,
@@ -129,6 +132,7 @@ fn render_matrix(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sample_pixel(
     frame: &ScreenFrame<'_>,
     ratio_x: f32,
