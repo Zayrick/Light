@@ -1,5 +1,16 @@
 /* Settings Page Styles */
 
+.settings-page {
+  padding: 56px 0 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-page .page-header {
+  margin-bottom: 0;
+}
+
 .settings-container {
   padding: 0;
   /* Masonry Layout */
