@@ -22,9 +22,8 @@ const BLACK_BORDER_MODE_OPTIONS: [StaticSelectOption; 4] = [
     },
 ];
 
-#[cfg(target_os = "windows")]
 fn screen_source_options() -> Result<Vec<SelectOption>, String> {
-    use crate::resource::screen::windows::list_displays;
+    use crate::resource::screen::list_displays;
 
     list_displays()
         .map(|displays| {
@@ -37,11 +36,6 @@ fn screen_source_options() -> Result<Vec<SelectOption>, String> {
                 .collect()
         })
         .map_err(|err| err.to_string())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn screen_source_options() -> Result<Vec<SelectOption>, String> {
-    Ok(Vec::new())
 }
 
 pub const SCREEN_PARAMS: [EffectParam; 12] = [
