@@ -143,6 +143,10 @@ export function DeviceLedVisualizer({ device }: Props) {
       workerReady.current = true;
     }
 
+    // Set CSS size on main thread (OffscreenCanvas cannot access style)
+    canvas.style.width = `${layout.width}px`;
+    canvas.style.height = `${layout.height}px`;
+
     workerRef.current.postMessage({ type: 'layout', ...layout });
   }, [layout, isValidLayout]);
 
@@ -210,7 +214,15 @@ export function DeviceLedVisualizer({ device }: Props) {
     <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)', display: 'block' }}
+        style={{
+          position: 'absolute',
+          top: '50%',
+          right: 0,
+          transform: 'translateY(-50%)',
+          display: 'block',
+          width: bounds.width > 0 ? `${bounds.width}px` : '100%',
+          height: bounds.height > 0 ? `${bounds.height}px` : '100%',
+        }}
       />
     </div>
   );

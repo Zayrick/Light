@@ -250,7 +250,7 @@ export function DeviceDetail({
             maxWidth: "600px",
           }}
         >
-          <DeviceLedVisualizer device={device} />
+          <DeviceLedVisualizer key={device.port} device={device} />
         </div>
       </header>
 
