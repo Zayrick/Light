@@ -1,12 +1,15 @@
 //! Audio capture manager using cpal.
 //!
 //! Provides audio capture from both input devices (microphones) and output devices
-//! (system audio loopback on Windows WASAPI).
+//! (system audio loopback on Windows WASAPI, or ScreenCaptureKit on macOS).
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, SampleFormat, Stream, StreamConfig};
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex, RwLock};
+
+#[cfg(target_os = "macos")]
+use super::screencapturekit_audio::SystemAudioCapture;
 
 /// Global audio manager singleton.
 static AUDIO_MANAGER: Lazy<AudioManager> = Lazy::new(AudioManager::new);
@@ -27,14 +30,14 @@ pub struct AudioDevice {
 }
 
 /// Ring buffer for audio samples with thread-safe access.
-struct AudioRingBuffer {
+pub(crate) struct AudioRingBuffer {
     buffer: Vec<f32>,
     write_pos: usize,
     capacity: usize,
 }
 
 impl AudioRingBuffer {
-    fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         Self {
             buffer: vec![0.0; capacity],
             write_pos: 0,
@@ -42,7 +45,7 @@ impl AudioRingBuffer {
         }
     }
 
-    fn write(&mut self, samples: &[f32]) {
+    pub(crate) fn write(&mut self, samples: &[f32]) {
         for &sample in samples {
             self.buffer[self.write_pos] = sample;
             self.write_pos = (self.write_pos + 1) % self.capacity;
@@ -50,7 +53,7 @@ impl AudioRingBuffer {
     }
 
     /// Read the most recent `count` samples into the destination buffer.
-    fn read_recent(&self, dest: &mut [f32]) {
+    pub(crate) fn read_recent(&self, dest: &mut [f32]) {
         let count = dest.len().min(self.capacity);
         let start = if self.write_pos >= count {
             self.write_pos - count
@@ -64,11 +67,20 @@ impl AudioRingBuffer {
     }
 }
 
-/// Active audio capture state.
-struct CaptureState {
+/// Active audio capture state using cpal.
+struct CpalCaptureState {
     _stream: Stream,
     buffer: Arc<Mutex<AudioRingBuffer>>,
     sample_rate: u32,
+}
+
+/// Active audio capture state - platform-specific variants.
+enum CaptureState {
+    /// Standard cpal-based capture (input devices, Windows output loopback)
+    Cpal(CpalCaptureState),
+    /// macOS system audio capture using ScreenCaptureKit
+    #[cfg(target_os = "macos")]
+    ScreenCaptureKit(SystemAudioCapture),
 }
 
 /// The main audio manager responsible for device enumeration and capture.
@@ -162,6 +174,33 @@ impl AudioManager {
             .device_by_index(device_index)
             .ok_or_else(|| format!("Invalid audio device index: {}", device_index))?;
 
+        // On macOS, use ScreenCaptureKit for output device loopback
+        #[cfg(target_os = "macos")]
+        if kind == AudioDeviceKind::Output {
+            return self.start_screencapturekit_capture();
+        }
+
+        // For input devices (all platforms) or output devices on Windows, use cpal
+        self.start_cpal_capture(device, kind)
+    }
+
+    /// Start capturing using ScreenCaptureKit (macOS system audio).
+    #[cfg(target_os = "macos")]
+    fn start_screencapturekit_capture(&self) -> Result<(), String> {
+        let mut capture = SystemAudioCapture::new()?;
+        capture.start()?;
+
+        let capture_state = CaptureState::ScreenCaptureKit(capture);
+
+        if let Ok(mut guard) = self.active_capture.write() {
+            *guard = Some(capture_state);
+        }
+
+        Ok(())
+    }
+
+    /// Start capturing using cpal (input devices, Windows output loopback).
+    fn start_cpal_capture(&self, device: &Device, kind: AudioDeviceKind) -> Result<(), String> {
         let config = match kind {
             AudioDeviceKind::Input => device
                 .default_input_config()
@@ -290,11 +329,11 @@ impl AudioManager {
 
         stream.play().map_err(|e| format!("Failed to play stream: {}", e))?;
 
-        let capture_state = CaptureState {
+        let capture_state = CaptureState::Cpal(CpalCaptureState {
             _stream: stream,
             buffer,
             sample_rate,
-        };
+        });
 
         if let Ok(mut guard) = self.active_capture.write() {
             *guard = Some(capture_state);
@@ -312,10 +351,13 @@ impl AudioManager {
 
     /// Get the current sample rate of the active capture.
     pub fn sample_rate(&self) -> Option<u32> {
-        self.active_capture
-            .read()
-            .ok()
-            .and_then(|guard| guard.as_ref().map(|state| state.sample_rate))
+        self.active_capture.read().ok().and_then(|guard| {
+            guard.as_ref().map(|state| match state {
+                CaptureState::Cpal(cpal_state) => cpal_state.sample_rate,
+                #[cfg(target_os = "macos")]
+                CaptureState::ScreenCaptureKit(sck_state) => sck_state.sample_rate(),
+            })
+        })
     }
 
     /// Read the most recent audio samples.
@@ -323,9 +365,17 @@ impl AudioManager {
     pub fn read_samples(&self, dest: &mut [f32]) -> usize {
         if let Ok(guard) = self.active_capture.read() {
             if let Some(state) = guard.as_ref() {
-                if let Ok(buf) = state.buffer.lock() {
-                    buf.read_recent(dest);
-                    return dest.len();
+                match state {
+                    CaptureState::Cpal(cpal_state) => {
+                        if let Ok(buf) = cpal_state.buffer.lock() {
+                            buf.read_recent(dest);
+                            return dest.len();
+                        }
+                    }
+                    #[cfg(target_os = "macos")]
+                    CaptureState::ScreenCaptureKit(sck_state) => {
+                        return sck_state.read_samples(dest);
+                    }
                 }
             }
         }

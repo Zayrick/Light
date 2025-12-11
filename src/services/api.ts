@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Device, EffectInfo } from "../types";
 
-export type CaptureMethod = "dxgi" | "gdi" | "graphics" | "xcap";
+export type CaptureMethod = "dxgi" | "gdi" | "graphics" | "xcap" | "screencapturekit";
 export type WindowEffectId = string;
 
 export interface SystemInfo {

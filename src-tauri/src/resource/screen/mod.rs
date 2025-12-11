@@ -69,11 +69,24 @@ pub use windows::{
     set_hardware_acceleration, set_sample_ratio,
 };
 
-// macOS and Linux: Use xcap backend
-#[cfg(not(target_os = "windows"))]
+// macOS: Use ScreenCaptureKit backend (native Apple framework)
+#[cfg(target_os = "macos")]
+mod screencapturekit_backend;
+
+#[cfg(target_os = "macos")]
+pub use screencapturekit_backend::{
+    CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
+    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_hardware_acceleration, get_sample_ratio, list_displays,
+    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_hardware_acceleration, set_sample_ratio,
+};
+
+// Linux: Use xcap backend
+#[cfg(target_os = "linux")]
 mod xcap_backend;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub use xcap_backend::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
     get_capture_fps, get_capture_method, get_capture_scale_percent,
