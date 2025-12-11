@@ -167,6 +167,15 @@ pub struct EffectInfo {
     pub params: Vec<EffectParamInfo>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemInfoResponse {
+    pub os_platform: String,
+    pub os_version: String,
+    pub os_build: String,
+    pub arch: String,
+}
+
 #[cfg(not(target_os = "windows"))]
 #[derive(Serialize)]
 pub struct DisplayInfoResponse {

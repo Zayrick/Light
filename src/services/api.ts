@@ -2,6 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { Device, EffectInfo } from "../types";
 
 export type CaptureMethod = "dxgi" | "gdi";
+export type WindowEffectId = string;
+
+export interface SystemInfo {
+  osPlatform: string;
+  osVersion: string;
+  osBuild: string;
+  arch: string;
+}
 
 export const api = {
   scanDevices: async (): Promise<Device[]> => {
@@ -46,5 +54,21 @@ export const api = {
 
   setCaptureMethod: async (method: CaptureMethod): Promise<void> => {
     return await invoke("set_capture_method", { method });
+  },
+
+  getWindowEffects: async (): Promise<WindowEffectId[]> => {
+    return await invoke<WindowEffectId[]>("get_window_effects");
+  },
+
+  getWindowEffect: async (): Promise<WindowEffectId> => {
+    return await invoke<WindowEffectId>("get_window_effect");
+  },
+
+  setWindowEffect: async (effect: WindowEffectId): Promise<void> => {
+    return await invoke("set_window_effect", { effect });
+  },
+
+  getSystemInfo: async (): Promise<SystemInfo> => {
+    return await invoke<SystemInfo>("get_system_info");
   },
 };
