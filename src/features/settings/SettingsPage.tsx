@@ -381,63 +381,25 @@ export function SettingsPage() {
       </header>
       <div className="settings-container">
         <Card className="settings-card">
-          <h3>Screen Capture Quality</h3>
-
-          {/* Capture Method Select */}
+          <h3>System Information</h3>
           <div className="setting-section">
-            <Select
-              value={captureMethod}
-              options={captureMethodOptions}
-              onChange={handleMethodChange}
-              disabled={loading}
-              label="Capture Method"
-              valueText="2 options"
-            />
             <p>
-              DXGI offers better performance with GPU acceleration and HDR support.
-              GDI provides better compatibility with older systems.
+              <strong>系统版本：</strong>{" "}
+              {systemInfo ? systemInfo.osPlatform : "Loading..."}
             </p>
-          </div>
-
-          {/* Resolution Scale Slider */}
-          <div className="setting-section">
-            <Slider
-              min={1}
-              max={100}
-              step={0.1}
-              value={captureScale}
-              onChange={handleScaleChange}
-              onCommit={handleScaleCommit}
-              markers={isDxgi ? mipScalePoints : undefined}
-              disabled={loading}
-              label="Resolution Scale"
-              valueText={displayScaleText()}
-            />
             <p>
-              Adjust the capture resolution. 100% maintains original quality (may affect performance).
-              Lower values improve performance.
+              <strong>系统版本号：</strong>{" "}
+              {systemInfo ? systemInfo.osVersion : "Loading..."}
             </p>
-            {isDxgi && (
-              <p>
-                Mipmap snap points: {mipScalePoints.map((p) => `${p}%`).join(" / ")}. Values will snap to
-                the nearest point when released to match GPU downsampling levels.
-              </p>
-            )}
-          </div>
-
-          {/* Frame Rate Slider */}
-          <div className="setting-section">
-            <Slider
-              min={1}
-              max={60}
-              value={captureFps}
-              onChange={handleFpsChange}
-              disabled={loading}
-              label="Sampling Frame Rate"
-              valueText={`${captureFps} FPS`}
-            />
             <p>
-              Control how often the screen is sampled per second. Lower FPS reduces CPU/GPU usage but may look less smooth.
+              <strong>操作系统版本：</strong>{" "}
+              {systemInfo ? systemInfo.osBuild : "Loading..."}
+            </p>
+            <p>
+              <strong>Tauri 版本：</strong> {tauriVersion || "Loading..."}
+            </p>
+            <p>
+              <strong>软件版本：</strong> {appVersion || "Loading..."}
             </p>
           </div>
         </Card>
@@ -473,25 +435,61 @@ export function SettingsPage() {
         </Card>
 
         <Card className="settings-card">
-          <h3>System Information</h3>
+          <h3>Screen Capture Quality</h3>
+
+          {/* Capture Method Select */}
           <div className="setting-section">
+            <Select
+              value={captureMethod}
+              options={captureMethodOptions}
+              onChange={handleMethodChange}
+              disabled={loading}
+              label="Capture Method"
+              valueText="2 options"
+            />
             <p>
-              <strong>系统版本：</strong>{" "}
-              {systemInfo ? systemInfo.osPlatform : "Loading..."}
+              DXGI offers better performance with GPU acceleration and HDR support.
+              GDI provides better compatibility with older systems.
             </p>
+          </div>
+
+          {/* Resolution Scale Slider */}
+          <div className="setting-section">
+            <Slider
+              min={1}
+              max={100}
+              step={0.1}
+              value={captureScale}
+              onChange={handleScaleChange}
+              onCommit={handleScaleCommit}
+              markers={isDxgi ? mipScalePoints : undefined}
+              disabled={loading}
+              label="Resolution Scale"
+              valueText={displayScaleText()}
+            />
             <p>
-              <strong>系统版本号：</strong>{" "}
-              {systemInfo ? systemInfo.osVersion : "Loading..."}
+              Lowering resolution improves performance. 100% matches native quality.
             </p>
+            {isDxgi && (
+              <p>
+                Values snap to GPU-optimized levels for best performance.
+              </p>
+            )}
+          </div>
+
+          {/* Frame Rate Slider */}
+          <div className="setting-section">
+            <Slider
+              min={1}
+              max={60}
+              value={captureFps}
+              onChange={handleFpsChange}
+              disabled={loading}
+              label="Sampling Frame Rate"
+              valueText={`${captureFps} FPS`}
+            />
             <p>
-              <strong>操作系统版本：</strong>{" "}
-              {systemInfo ? systemInfo.osBuild : "Loading..."}
-            </p>
-            <p>
-              <strong>Tauri 版本：</strong> {tauriVersion || "Loading..."}
-            </p>
-            <p>
-              <strong>软件版本：</strong> {appVersion || "Loading..."}
+              Control how often the screen is sampled per second. Lower FPS reduces CPU/GPU usage but may look less smooth.
             </p>
           </div>
         </Card>

@@ -7,20 +7,36 @@ interface AppLayoutProps {
   sidebar: ReactNode;
   children: ReactNode;
   disableScroll?: boolean;
+  hideScrollbar?: boolean;
 }
 
-export function AppLayout({ sidebar, children, disableScroll = false }: AppLayoutProps) {
+export function AppLayout({
+  sidebar,
+  children,
+  disableScroll = false,
+  hideScrollbar = false,
+}: AppLayoutProps) {
   const { isMacOS } = usePlatform();
+
+  const scrollContainerClass = [
+    "scroll-container",
+    disableScroll ? "no-scroll" : "",
+    hideScrollbar ? "no-scrollbar" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const contentClass = ["content-max-width", disableScroll ? "full-height" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={`app-layout ${isMacOS ? 'app-layout-macos' : ''}`}>
       <TitleBar />
       {sidebar}
       <main className="main-content">
-        <div className={`scroll-container ${disableScroll ? 'no-scroll' : ''}`}>
-          <div className={`content-max-width ${disableScroll ? 'full-height' : ''}`}>
-            {children}
-          </div>
+        <div className={scrollContainerClass}>
+          <div className={contentClass}>{children}</div>
         </div>
       </main>
     </div>
