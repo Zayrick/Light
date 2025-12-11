@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex, RwLock};
 
 #[cfg(target_os = "macos")]
-use super::screencapturekit_audio::SystemAudioCapture;
+use super::macos::SystemAudioCapture;
 
 /// Global audio manager singleton.
 static AUDIO_MANAGER: Lazy<AudioManager> = Lazy::new(AudioManager::new);

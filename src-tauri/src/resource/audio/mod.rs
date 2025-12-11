@@ -1,7 +1,11 @@
 pub mod manager;
 
 #[cfg(target_os = "macos")]
-pub mod screencapturekit_audio;
+#[path = "MacOS/mod.rs"]
+mod macos;
+
+#[cfg(target_os = "macos")]
+pub use macos::SystemAudioCapture;
 
 pub use manager::{AudioManager, AudioDevice, AudioDeviceKind};
 
