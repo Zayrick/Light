@@ -1,14 +1,9 @@
-//! macOS system audio capture using ScreenCaptureKit.
-//!
-//! This module provides system audio loopback capture for macOS using the native
-//! ScreenCaptureKit framework, which supports capturing system audio output.
-
-use super::manager::AudioRingBuffer;
 use screencapturekit::prelude::*;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, RwLock,
 };
+use crate::resource::audio::manager::AudioRingBuffer;
 
 /// No-op screen handler (required for stream to function, but we ignore video frames)
 struct NoOpScreenHandler;
@@ -210,4 +205,3 @@ impl Drop for SystemAudioCapture {
         let _ = self.stop();
     }
 }
-
