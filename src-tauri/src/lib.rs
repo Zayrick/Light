@@ -23,8 +23,19 @@ pub fn run() {
             commands::set_capture_fps,
             commands::get_capture_fps,
             commands::set_capture_method,
-            commands::get_capture_method
+            commands::get_capture_method,
+            commands::get_window_effects,
+            commands::get_window_effect,
+            commands::set_window_effect,
+            commands::get_system_info,
         ])
+        .setup(|app| {
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            {
+                commands::initialize_window_effect(app);
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
