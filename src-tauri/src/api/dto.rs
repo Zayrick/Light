@@ -176,12 +176,3 @@ pub struct SystemInfoResponse {
     pub arch: String,
 }
 
-#[cfg(not(target_os = "windows"))]
-#[derive(Serialize)]
-pub struct DisplayInfoResponse {
-    pub index: usize,
-    pub name: String,
-    pub width: u32,
-    pub height: u32,
-}
-
