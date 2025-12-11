@@ -8,6 +8,7 @@ import "./Settings.css";
 
 const captureMethodOptions = [
   { value: "dxgi" as const, label: "DXGI (Desktop Duplication)" },
+  { value: "graphics" as const, label: "Graphics Capture (Windows 10+)" },
   { value: "gdi" as const, label: "GDI (Legacy)" },
 ];
 
@@ -141,7 +142,8 @@ export function SettingsPage() {
   const [appVersion, setAppVersion] = useState<string>("");
 
   const mipScalePoints = useMemo(buildMipScalePoints, []);
-  const isDxgi = captureMethod === "dxgi";
+  // Both DXGI and Graphics Capture benefit from GPU-optimized mip scaling
+  const isGpuAccelerated = captureMethod === "dxgi" || captureMethod === "graphics";
 
   const snapToMipScale = useCallback(
     (value: number) =>
@@ -181,7 +183,7 @@ export function SettingsPage() {
 
   const syncLiveScale = useCallback(
     (value: number, options?: { force?: boolean }) => {
-      const target = isDxgi ? snapToMipScale(value) : value;
+      const target = isGpuAccelerated ? snapToMipScale(value) : value;
       pendingLiveScaleRef.current = target;
 
       if (options?.force) {
@@ -208,7 +210,7 @@ export function SettingsPage() {
         api.setCaptureScale(next);
       }, LIVE_SYNC_INTERVAL);
     },
-    [isDxgi, snapToMipScale],
+    [isGpuAccelerated, snapToMipScale],
   );
 
   // 吸附到最近有效点并同步后端（无动画，用于初始化/切换模式）
@@ -347,7 +349,7 @@ export function SettingsPage() {
     syncLiveScale(value, { force: true });
 
     // GDI 无 mipmap 约束，直接提交
-    if (!isDxgi) {
+    if (!isGpuAccelerated) {
       cancelAnimation();
       setCaptureScale(value);
       return;
@@ -445,11 +447,14 @@ export function SettingsPage() {
               onChange={handleMethodChange}
               disabled={loading}
               label="Capture Method"
-              valueText="2 options"
+              valueText="3 options"
             />
             <p>
-              DXGI offers better performance with GPU acceleration and HDR support.
-              GDI provides better compatibility with older systems.
+              <strong>DXGI</strong>: High performance with GPU acceleration and HDR support.
+              <br />
+              <strong>Graphics Capture</strong>: Modern API for Windows 10+, event-driven with low latency.
+              <br />
+              <strong>GDI</strong>: Legacy mode with best compatibility for older systems.
             </p>
           </div>
 
@@ -462,7 +467,7 @@ export function SettingsPage() {
               value={captureScale}
               onChange={handleScaleChange}
               onCommit={handleScaleCommit}
-              markers={isDxgi ? mipScalePoints : undefined}
+              markers={isGpuAccelerated ? mipScalePoints : undefined}
               disabled={loading}
               label="Resolution Scale"
               valueText={displayScaleText()}
@@ -470,7 +475,7 @@ export function SettingsPage() {
             <p>
               Lowering resolution improves performance. 100% matches native quality.
             </p>
-            {isDxgi && (
+            {isGpuAccelerated && (
               <p>
                 Values snap to GPU-optimized levels for best performance.
               </p>

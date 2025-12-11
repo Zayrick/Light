@@ -25,7 +25,7 @@ use windows::{
                 D3D11CreateDevice, ID3D11Buffer, ID3D11Device, ID3D11DeviceContext,
                 ID3D11InputLayout, ID3D11PixelShader, ID3D11RenderTargetView, ID3D11SamplerState,
                 ID3D11ShaderResourceView, ID3D11Texture2D, ID3D11VertexShader,
-                D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_BUFFER_DESC,
+                D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_BOX, D3D11_BUFFER_DESC,
                 D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ, D3D11_CPU_ACCESS_WRITE,
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_FILTER_MIN_MAG_MIP_LINEAR,
                 D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_MAPPED_SUBRESOURCE,
@@ -55,7 +55,8 @@ use windows::{
     },
 };
 
-use crate::resource::screen::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use crate::resource::screen::{DirtyRegion, ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use rayon::prelude::*;
 use super::{
     CAPTURE_SCALE_PERCENT, CAPTURE_FPS, HARDWARE_ACCELERATION, HDR_COLOR_SPACE,
     BYTES_PER_PIXEL, DEFAULT_TIMEOUT_MS, DEFAULT_TARGET_NITS,
@@ -95,6 +96,7 @@ pub struct DxgiCapturer {
     stride: usize,
     has_frame: bool,
     last_capture_time: Option<Instant>,
+    dirty_regions: Vec<DirtyRegion>,
 
     // HDR state
     is_hdr: bool,
@@ -107,6 +109,12 @@ pub struct DxgiCapturer {
 
     // GPU pipeline (only for HDR or hardware acceleration)
     gpu_pipeline: Option<GpuPipeline>,
+
+    // GPU crop cache
+    crop_texture: Option<ID3D11Texture2D>,
+    crop_size: Option<(u32, u32)>,
+    crop_buffer: Vec<u8>,
+    crop_dirty_regions: Vec<DirtyRegion>,
 }
 
 impl DxgiCapturer {
@@ -195,12 +203,17 @@ impl DxgiCapturer {
             stride: scaled_width as usize * BYTES_PER_PIXEL,
             has_frame: false,
             last_capture_time: None,
+            dirty_regions: Vec::new(),
             is_hdr,
             target_nits: DEFAULT_TARGET_NITS,
             staging_texture,
             actual_width,
             actual_height,
             gpu_pipeline,
+            crop_texture: None,
+            crop_size: None,
+            crop_buffer: Vec::new(),
+            crop_dirty_regions: Vec::new(),
         })
     }
 
@@ -217,6 +230,157 @@ impl DxgiCapturer {
 
     pub fn output_index(&self) -> usize {
         self.output_index
+    }
+
+    /// Capture a cropped region using GPU copy when available.
+    pub fn capture_crop_gpu(
+        &mut self,
+        start_x: u32,
+        start_y: u32,
+        end_x: u32,
+        end_y: u32,
+    ) -> Result<ScreenFrame<'_>, ScreenCaptureError> {
+        // Ensure we have an up-to-date frame first.
+        let fps = CAPTURE_FPS.load(std::sync::atomic::Ordering::Relaxed).clamp(1, 60) as u64;
+        let interval = std::time::Duration::from_micros(1_000_000u64 / fps.max(1));
+        let now = Instant::now();
+        let should_capture = match self.last_capture_time {
+            Some(last) => now.duration_since(last) >= interval,
+            None => true,
+        };
+        if should_capture || !self.has_frame {
+            let _ = self.capture_internal()?;
+            self.last_capture_time = Some(now);
+        }
+
+        let width = self.width.max(1);
+        let height = self.height.max(1);
+        if start_x >= end_x || start_y >= end_y || end_x > width || end_y > height {
+            return Err(ScreenCaptureError::InvalidState("Invalid crop region"));
+        }
+
+        let crop_width = end_x - start_x;
+        let crop_height = end_y - start_y;
+
+        if let Some(pipeline) = &self.gpu_pipeline {
+            // Prepare/reuse crop staging texture
+            let needs_new = self
+                .crop_size
+                .map(|(w, h)| w != crop_width || h != crop_height)
+                .unwrap_or(true);
+
+            if needs_new {
+                let desc = D3D11_TEXTURE2D_DESC {
+                    Width: crop_width,
+                    Height: crop_height,
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                    Usage: D3D11_USAGE_STAGING,
+                    BindFlags: 0,
+                    CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+                    MiscFlags: 0,
+                };
+                let mut tex = None;
+                unsafe {
+                    self.device
+                        .CreateTexture2D(&desc, None, Some(&mut tex))
+                        .map_err(|err| os_error("CreateTexture2D (crop)", err))?;
+                }
+                self.crop_texture = tex;
+                self.crop_size = Some((crop_width, crop_height));
+            }
+
+            let crop_tex = self.crop_texture.as_ref().unwrap();
+
+            // Copy from the converted texture (post HDR/tone-map + scaling) to the crop staging texture.
+            let src_box = D3D11_BOX {
+                left: start_x,
+                top: start_y,
+                front: 0,
+                right: end_x,
+                bottom: end_y,
+                back: 1,
+            };
+            unsafe {
+                self.device_context.CopySubresourceRegion(
+                    crop_tex,
+                    0,
+                    0,
+                    0,
+                    0,
+                    &pipeline.convert_texture,
+                    0,
+                    Some(&src_box),
+                );
+            }
+
+            // Map cropped texture to CPU
+            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+            unsafe {
+                self.device_context
+                    .Map(crop_tex, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+                    .map_err(|err| os_error("Map(crop_tex)", err))?;
+            }
+
+            let src_pitch = mapped.RowPitch as usize;
+            let dst_stride = crop_width as usize * BYTES_PER_PIXEL;
+            let height_usize = crop_height as usize;
+            self.crop_buffer.resize(dst_stride * height_usize, 0);
+
+            let src = unsafe { slice::from_raw_parts(mapped.pData as *const u8, src_pitch * height_usize) };
+            for y in 0..height_usize {
+                let src_row = &src[y * src_pitch..y * src_pitch + dst_stride];
+                let dst_row = &mut self.crop_buffer[y * dst_stride..(y + 1) * dst_stride];
+                dst_row.copy_from_slice(src_row);
+            }
+
+            unsafe {
+                self.device_context.Unmap(crop_tex, 0);
+            }
+
+            self.crop_dirty_regions.clear();
+            self.crop_dirty_regions.push(DirtyRegion {
+                x: 0,
+                y: 0,
+                width: crop_width as i32,
+                height: crop_height as i32,
+            });
+
+            return Ok(ScreenFrame {
+                width: crop_width,
+                height: crop_height,
+                stride: dst_stride,
+                pixels: &self.crop_buffer,
+                dirty_regions: &self.crop_dirty_regions,
+            });
+        }
+
+        // Fallback: CPU crop from existing buffer.
+        let dst_stride = crop_width as usize * BYTES_PER_PIXEL;
+        let height_usize = crop_height as usize;
+        self.crop_buffer.resize(dst_stride * height_usize, 0);
+        for y in 0..height_usize {
+            let src_offset = (start_y as usize + y) * self.stride + start_x as usize * BYTES_PER_PIXEL;
+            let dst_offset = y * dst_stride;
+            self.crop_buffer[dst_offset..dst_offset + dst_stride]
+                .copy_from_slice(&self.buffer[src_offset..src_offset + dst_stride]);
+        }
+        self.crop_dirty_regions.clear();
+        self.crop_dirty_regions.push(DirtyRegion {
+            x: 0,
+            y: 0,
+            width: crop_width as i32,
+            height: crop_height as i32,
+        });
+        Ok(ScreenFrame {
+            width: crop_width,
+            height: crop_height,
+            stride: dst_stride,
+            pixels: &self.crop_buffer,
+            dirty_regions: &self.crop_dirty_regions,
+        })
     }
 
     fn capture_internal(&mut self) -> Result<CaptureStatus, ScreenCaptureError> {
@@ -246,6 +410,8 @@ impl DxgiCapturer {
             let desktop_texture: ID3D11Texture2D = resource
                 .cast()
                 .map_err(|err| os_error("IDXGIResource::cast<ID3D11Texture2D>", err))?;
+
+            collect_dirty_regions(&self.duplication, &mut self.dirty_regions)?;
 
             // Process frame based on pipeline type
             let has_gpu_pipeline = self.gpu_pipeline.is_some();
@@ -480,43 +646,45 @@ impl DxgiCapturer {
             let scaled_height = scaled_height_u32 as usize;
 
             let mut scaled = vec![0u8; scaled_width * scaled_height * BYTES_PER_PIXEL];
-
             let src_bpp = bytes_per_pixel_for_format(format);
+            let dst_stride = scaled_width * BYTES_PER_PIXEL;
 
-            for y in 0..scaled_height {
-                let rotated_y = y * rotated_height / scaled_height;
-                let dst_row_start = y * scaled_width * BYTES_PER_PIXEL;
+            scaled
+                .par_chunks_mut(dst_stride)
+                .enumerate()
+                .for_each(|(y, row)| {
+                    let rotated_y = y * rotated_height / scaled_height;
 
-                for x in 0..scaled_width {
-                    let rotated_x = x * rotated_width / scaled_width;
+                    for x in 0..scaled_width {
+                        let rotated_x = x * rotated_width / scaled_width;
 
-                    let (src_x, src_y) = match self.rotation {
-                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => {
-                            (rotated_x, rotated_y)
-                        }
-                        DXGI_MODE_ROTATION_ROTATE90 => {
-                            let h = height;
-                            (rotated_y, h - 1 - rotated_x)
-                        }
-                        DXGI_MODE_ROTATION_ROTATE180 => {
-                            let w = width;
-                            let h = height;
-                            (w - 1 - rotated_x, h - 1 - rotated_y)
-                        }
-                        DXGI_MODE_ROTATION_ROTATE270 => {
-                            let w = width;
-                            (w - 1 - rotated_y, rotated_x)
-                        }
-                        _ => (rotated_x, rotated_y),
-                    };
+                        let (src_x, src_y) = match self.rotation {
+                            DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => {
+                                (rotated_x, rotated_y)
+                            }
+                            DXGI_MODE_ROTATION_ROTATE90 => {
+                                let h = height;
+                                (rotated_y, h - 1 - rotated_x)
+                            }
+                            DXGI_MODE_ROTATION_ROTATE180 => {
+                                let w = width;
+                                let h = height;
+                                (w - 1 - rotated_x, h - 1 - rotated_y)
+                            }
+                            DXGI_MODE_ROTATION_ROTATE270 => {
+                                let w = width;
+                                (w - 1 - rotated_y, rotated_x)
+                            }
+                            _ => (rotated_x, rotated_y),
+                        };
 
-                    let src_idx = src_y * pitch + src_x * src_bpp;
-                    let dst_idx = dst_row_start + x * BYTES_PER_PIXEL;
+                        let src_idx = src_y * pitch + src_x * src_bpp;
+                        let dst_idx = x * BYTES_PER_PIXEL;
 
-                    let bgra = decode_pixel_to_bgra8(&data[src_idx..], format);
-                    scaled[dst_idx..dst_idx + BYTES_PER_PIXEL].copy_from_slice(&bgra);
-                }
-            }
+                        let bgra = decode_pixel_to_bgra8(&data[src_idx..], format);
+                        row[dst_idx..dst_idx + BYTES_PER_PIXEL].copy_from_slice(&bgra);
+                    }
+                });
 
             self.buffer = scaled;
             self.width = scaled_width as u32;
@@ -538,16 +706,32 @@ impl ScreenCapturer for DxgiCapturer {
         };
 
         if should_capture || !self.has_frame {
-            match self.capture_internal()? {
-                CaptureStatus::Updated => {
+            match self.capture_internal() {
+                Ok(CaptureStatus::Updated) => {
                     self.last_capture_time = Some(now);
                 }
-                CaptureStatus::NoFrame => {
+                Ok(CaptureStatus::NoFrame) => {
+                    self.dirty_regions.clear();
                     if !self.has_frame {
                         return Err(ScreenCaptureError::InvalidState("No frame available yet"));
                     }
                 }
-            }
+                Err(ScreenCaptureError::InvalidState(_)) => {
+                    // Attempt auto-recovery once by rebuilding the duplicator for the same output.
+                    if let Ok(rebuilt) = DxgiCapturer::with_output(self.output_index) {
+                        *self = rebuilt;
+                        // retry once
+                        if let CaptureStatus::Updated = self.capture_internal()? {
+                            self.last_capture_time = Some(now);
+                        }
+                    } else {
+                        return Err(ScreenCaptureError::InvalidState(
+                            "DXGI duplication lost and recovery failed",
+                        ));
+                    }
+                }
+                Err(err) => return Err(err),
+            };
         }
 
         Ok(ScreenFrame {
@@ -555,6 +739,7 @@ impl ScreenCapturer for DxgiCapturer {
             height: self.height,
             stride: self.stride,
             pixels: &self.buffer,
+            dirty_regions: &self.dirty_regions,
         })
     }
 
@@ -1052,6 +1237,41 @@ fn decode_pixel_to_bgra8(src: &[u8], format: DXGI_FORMAT) -> [u8; 4] {
             [src[0], src[1], src[2], src[3]]
         }
     }
+}
+
+fn collect_dirty_regions(
+    duplication: &IDXGIOutputDuplication,
+    target: &mut Vec<DirtyRegion>,
+) -> Result<(), ScreenCaptureError> {
+    target.clear();
+
+    let mut buffer_size = 0u32;
+    unsafe {
+        // First call to retrieve required buffer size; expected to return MORE_DATA.
+        let _ = duplication.GetFrameDirtyRects(0, std::ptr::null_mut(), &mut buffer_size);
+    }
+
+    let rect_size = std::mem::size_of::<windows::Win32::Foundation::RECT>() as u32;
+    let count = (buffer_size + rect_size - 1) / rect_size;
+    if count == 0 {
+        return Ok(());
+    }
+
+    let mut rects = vec![windows::Win32::Foundation::RECT::default(); count as usize];
+    unsafe {
+        duplication
+            .GetFrameDirtyRects(buffer_size, rects.as_mut_ptr(), &mut buffer_size)
+            .map_err(|err| os_error("IDXGIOutputDuplication::GetFrameDirtyRects", err))?;
+    }
+
+    target.extend(rects.iter().map(|r| DirtyRegion {
+        x: r.left,
+        y: r.top,
+        width: (r.right - r.left).max(0),
+        height: (r.bottom - r.top).max(0),
+    }));
+
+    Ok(())
 }
 
 #[inline]

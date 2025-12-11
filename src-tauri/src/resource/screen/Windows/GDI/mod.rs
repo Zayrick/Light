@@ -348,6 +348,7 @@ impl ScreenCapturer for GdiCapturer {
             height: self.target_height,
             stride: self.stride,
             pixels: &self.buffer,
+            dirty_regions: &[],
         })
     }
 

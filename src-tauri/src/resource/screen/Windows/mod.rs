@@ -8,6 +8,8 @@
 pub mod dxgi;
 #[path = "GDI/mod.rs"]
 pub mod gdi;
+#[path = "graphics_capture.rs"]
+pub mod graphics_capture;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -27,6 +29,7 @@ use windows::Win32::Graphics::Dxgi::{
 use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 use dxgi::DxgiCapturer;
 use gdi::GdiCapturer;
+use graphics_capture::GraphicsCapturer;
 
 // ============================================================================
 // Constants
@@ -68,6 +71,8 @@ pub enum CaptureMethod {
     Dxgi,
     /// GDI (Graphics Device Interface, better compatibility)
     Gdi,
+    /// WinRT Graphics Capture API (fullscreen)
+    Graphics,
 }
 
 impl std::fmt::Display for CaptureMethod {
@@ -75,6 +80,7 @@ impl std::fmt::Display for CaptureMethod {
         match self {
             CaptureMethod::Dxgi => write!(f, "dxgi"),
             CaptureMethod::Gdi => write!(f, "gdi"),
+            CaptureMethod::Graphics => write!(f, "graphics"),
         }
     }
 }
@@ -86,6 +92,7 @@ impl std::str::FromStr for CaptureMethod {
         match s.to_lowercase().as_str() {
             "dxgi" => Ok(CaptureMethod::Dxgi),
             "gdi" => Ok(CaptureMethod::Gdi),
+            "graphics" => Ok(CaptureMethod::Graphics),
             _ => Err(format!("Unknown capture method: {}", s)),
         }
     }
@@ -239,6 +246,7 @@ pub fn list_displays() -> Result<Vec<DisplayInfo>, ScreenCaptureError> {
 pub enum DesktopDuplicator {
     Dxgi(DxgiCapturer),
     Gdi(GdiCapturer),
+    Graphics(GraphicsCapturer),
 }
 
 impl DesktopDuplicator {
@@ -265,6 +273,7 @@ impl DesktopDuplicator {
                 }
             },
             CaptureMethod::Gdi => Ok(Self::Gdi(GdiCapturer::with_output(output_index)?)),
+            CaptureMethod::Graphics => Ok(Self::Graphics(GraphicsCapturer::with_output(output_index)?)),
         }
     }
 
@@ -272,6 +281,10 @@ impl DesktopDuplicator {
         match self {
             Self::Dxgi(capturer) => capturer.set_output_index(output_index),
             Self::Gdi(capturer) => GdiCapturer::with_output(output_index).map(|c| *capturer = c),
+            Self::Graphics(capturer) => {
+                *capturer = GraphicsCapturer::with_output(output_index)?;
+                Ok(())
+            }
         }
     }
 
@@ -279,6 +292,7 @@ impl DesktopDuplicator {
         match self {
             Self::Dxgi(capturer) => capturer.output_index(),
             Self::Gdi(capturer) => capturer.output_index(),
+            Self::Graphics(capturer) => capturer.output_index(),
         }
     }
 }
@@ -288,6 +302,7 @@ impl ScreenCapturer for DesktopDuplicator {
         match self {
             Self::Dxgi(capturer) => capturer.capture(),
             Self::Gdi(capturer) => capturer.capture(),
+            Self::Graphics(capturer) => capturer.capture(),
         }
     }
 
@@ -295,6 +310,7 @@ impl ScreenCapturer for DesktopDuplicator {
         match self {
             Self::Dxgi(capturer) => capturer.size(),
             Self::Gdi(capturer) => capturer.size(),
+            Self::Graphics(capturer) => capturer.size(),
         }
     }
 }
