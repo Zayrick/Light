@@ -11,17 +11,16 @@ use std::sync::Mutex;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tauri::Manager;
 
-#[cfg(target_os = "windows")]
-use crate::resource::screen::windows::{
-    get_capture_fps as get_windows_capture_fps,
-    get_capture_method as get_windows_capture_method,
+use crate::resource::screen::{
+    get_capture_fps as get_screen_capture_fps,
+    get_capture_method as get_screen_capture_method,
     get_capture_scale_percent,
-    list_displays as list_windows_displays,
-    set_capture_fps as set_windows_capture_fps,
-    set_capture_method as set_windows_capture_method,
+    list_displays as list_screen_displays,
+    set_capture_fps as set_screen_capture_fps,
+    set_capture_method as set_screen_capture_method,
     set_capture_scale_percent,
     CaptureMethod,
-    DisplayInfo as WindowsDisplayInfo,
+    DisplayInfo,
 };
 
 #[cfg(target_os = "windows")]
@@ -44,11 +43,7 @@ use std::process::Command;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "windows")))]
 use std::fs;
 
-#[cfg(target_os = "windows")]
-pub type DisplayInfoResponse = WindowsDisplayInfo;
-
-#[cfg(not(target_os = "windows"))]
-use crate::api::dto::DisplayInfoResponse;
+pub type DisplayInfoResponse = DisplayInfo;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static CURRENT_WINDOW_EFFECT: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
@@ -75,20 +70,12 @@ pub fn get_effects() -> Vec<EffectInfo> {
 
 #[tauri::command]
 pub fn get_displays() -> Vec<DisplayInfoResponse> {
-    #[cfg(target_os = "windows")]
-    {
-        match list_windows_displays() {
-            Ok(displays) => displays,
-            Err(err) => {
-                eprintln!("[screen] Failed to enumerate displays: {}", err);
-                Vec::new()
-            }
+    match list_screen_displays() {
+        Ok(displays) => displays,
+        Err(err) => {
+            eprintln!("[screen] Failed to enumerate displays: {}", err);
+            Vec::new()
         }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Vec::new()
     }
 }
 
@@ -122,48 +109,34 @@ pub fn set_brightness(
 
 #[tauri::command]
 pub fn set_capture_scale(percent: u8) {
-    #[cfg(target_os = "windows")]
     set_capture_scale_percent(percent);
 }
 
 #[tauri::command]
 pub fn get_capture_scale() -> u8 {
-    #[cfg(target_os = "windows")]
-    return get_capture_scale_percent();
-    #[cfg(not(target_os = "windows"))]
-    100
+    get_capture_scale_percent()
 }
 
 #[tauri::command]
 pub fn set_capture_fps(fps: u8) {
-    #[cfg(target_os = "windows")]
-    set_windows_capture_fps(fps);
+    set_screen_capture_fps(fps);
 }
 
 #[tauri::command]
 pub fn get_capture_fps() -> u8 {
-    #[cfg(target_os = "windows")]
-    return get_windows_capture_fps();
-    #[cfg(not(target_os = "windows"))]
-    30
+    get_screen_capture_fps()
 }
 
 #[tauri::command]
 pub fn set_capture_method(method: String) {
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(m) = method.parse::<CaptureMethod>() {
-            set_windows_capture_method(m);
-        }
+    if let Ok(m) = method.parse::<CaptureMethod>() {
+        set_screen_capture_method(m);
     }
 }
 
 #[tauri::command]
 pub fn get_capture_method() -> String {
-    #[cfg(target_os = "windows")]
-    return get_windows_capture_method().to_string();
-    #[cfg(not(target_os = "windows"))]
-    "dxgi".to_string()
+    get_screen_capture_method().to_string()
 }
 
 // ============================================================================

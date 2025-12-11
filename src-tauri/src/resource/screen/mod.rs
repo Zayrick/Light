@@ -51,36 +51,33 @@ pub trait ScreenCapturer {
     fn size(&self) -> (u32, u32);
 }
 
+// ============================================================================
+// Platform-specific modules
+// ============================================================================
+
+// Windows: Use native DXGI/GDI implementation
 #[cfg(target_os = "windows")]
 #[path = "Windows/mod.rs"]
 pub mod windows;
 
 #[cfg(target_os = "windows")]
-pub use windows::DesktopDuplicator;
+pub use windows::{
+    CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
+    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_hardware_acceleration, get_sample_ratio, list_displays,
+    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_hardware_acceleration, set_sample_ratio,
+};
+
+// macOS and Linux: Use xcap backend
+#[cfg(not(target_os = "windows"))]
+mod xcap_backend;
 
 #[cfg(not(target_os = "windows"))]
-pub mod windows {
-    use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
-
-    pub struct DesktopDuplicator;
-
-    impl DesktopDuplicator {
-        pub fn new() -> Result<Self, ScreenCaptureError> {
-            Err(ScreenCaptureError::Unsupported(
-                "Windows desktop duplication is not available on this platform",
-            ))
-        }
-    }
-
-    impl ScreenCapturer for DesktopDuplicator {
-        fn capture(&mut self) -> Result<ScreenFrame<'_>, ScreenCaptureError> {
-            Err(ScreenCaptureError::Unsupported(
-                "Screen capture not implemented for this platform",
-            ))
-        }
-
-        fn size(&self) -> (u32, u32) {
-            (0, 0)
-        }
-    }
-}
+pub use xcap_backend::{
+    CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
+    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_hardware_acceleration, get_sample_ratio, list_displays,
+    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_hardware_acceleration, set_sample_ratio,
+};

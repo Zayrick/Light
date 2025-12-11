@@ -4,12 +4,19 @@ import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
 import { Slider } from "../../components/ui/Slider";
 import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/api";
+import { usePlatform } from "../../hooks/usePlatform";
 import "./Settings.css";
 
-const captureMethodOptions = [
+// Windows-specific capture methods
+const windowsCaptureMethodOptions = [
   { value: "dxgi" as const, label: "DXGI (Desktop Duplication)" },
   { value: "graphics" as const, label: "Graphics Capture (Windows 10+)" },
   { value: "gdi" as const, label: "GDI (Legacy)" },
+];
+
+// macOS/Linux capture method (using xcap)
+const xcapCaptureMethodOptions = [
+  { value: "xcap" as const, label: "XCap (Cross-platform)" },
 ];
 
 const buildMipScalePoints = () => {
@@ -131,15 +138,21 @@ const windowEffectMeta: Record<WindowEffectId, { label: string; description: str
 };
 
 export function SettingsPage() {
+  const { isWindows } = usePlatform();
   const [captureScale, setCaptureScale] = useState<number>(5);
   const [captureFps, setCaptureFps] = useState<number>(30);
-  const [captureMethod, setCaptureMethod] = useState<CaptureMethod>("dxgi");
+  const [captureMethod, setCaptureMethod] = useState<CaptureMethod>(isWindows ? "dxgi" : "xcap");
   const [loading, setLoading] = useState(true);
   const [windowEffect, setWindowEffect] = useState<WindowEffectId | "">("");
   const [availableWindowEffects, setAvailableWindowEffects] = useState<WindowEffectId[]>([]);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [tauriVersion, setTauriVersion] = useState<string>("");
   const [appVersion, setAppVersion] = useState<string>("");
+
+  const captureMethodOptions = useMemo(
+    () => (isWindows ? windowsCaptureMethodOptions : xcapCaptureMethodOptions),
+    [isWindows]
+  );
 
   const mipScalePoints = useMemo(buildMipScalePoints, []);
   // Both DXGI and Graphics Capture benefit from GPU-optimized mip scaling
@@ -445,16 +458,22 @@ export function SettingsPage() {
               value={captureMethod}
               options={captureMethodOptions}
               onChange={handleMethodChange}
-              disabled={loading}
+              disabled={loading || captureMethodOptions.length <= 1}
               label="Capture Method"
-              valueText="3 options"
+              valueText={`${captureMethodOptions.length} option${captureMethodOptions.length > 1 ? 's' : ''}`}
             />
             <p>
-              <strong>DXGI</strong>: High performance with GPU acceleration and HDR support.
-              <br />
-              <strong>Graphics Capture</strong>: Modern API for Windows 10+, event-driven with low latency.
-              <br />
-              <strong>GDI</strong>: Legacy mode with best compatibility for older systems.
+              {isWindows ? (
+                <>
+                  <strong>DXGI</strong>: High performance with GPU acceleration and HDR support.
+                  <br />
+                  <strong>Graphics Capture</strong>: Modern API for Windows 10+, event-driven with low latency.
+                  <br />
+                  <strong>GDI</strong>: Legacy mode with best compatibility for older systems.
+                </>
+              ) : (
+                "XCap provides cross-platform screen capture support for macOS and Linux."
+              )}
             </p>
           </div>
 
