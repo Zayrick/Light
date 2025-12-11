@@ -85,6 +85,7 @@ export default function App() {
     <PlatformProvider>
       <AppLayout
         disableScroll={activeTab === "device-detail" || activeTab === "home"}
+        hideScrollbar={activeTab === "settings"}
         sidebar={
           <Sidebar
             activeTab={activeTab}
@@ -92,6 +93,7 @@ export default function App() {
             devices={devices}
             selectedDevice={selectedDevice}
             setSelectedDevice={setSelectedDevice}
+            statusMsg={statusMsg}
           />
         }
       >
