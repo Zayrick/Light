@@ -58,10 +58,10 @@ pub trait ScreenCapturer {
 // Windows: Use native DXGI/GDI implementation
 #[cfg(target_os = "windows")]
 #[path = "Windows/mod.rs"]
-pub mod windows;
+mod screen;
 
 #[cfg(target_os = "windows")]
-pub use windows::{
+pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
     get_capture_fps, get_capture_method, get_capture_scale_percent,
     get_hardware_acceleration, get_sample_ratio, list_displays,
@@ -71,10 +71,11 @@ pub use windows::{
 
 // macOS: Use ScreenCaptureKit backend (native Apple framework)
 #[cfg(target_os = "macos")]
-mod screencapturekit_backend;
+#[path = "MacOS/mod.rs"]
+mod screen;
 
 #[cfg(target_os = "macos")]
-pub use screencapturekit_backend::{
+pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
     get_capture_fps, get_capture_method, get_capture_scale_percent,
     get_hardware_acceleration, get_sample_ratio, list_displays,
@@ -84,10 +85,11 @@ pub use screencapturekit_backend::{
 
 // Linux: Use xcap backend
 #[cfg(target_os = "linux")]
-mod xcap_backend;
+#[path = "xcap_backend.rs"]
+mod screen;
 
 #[cfg(target_os = "linux")]
-pub use xcap_backend::{
+pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
     get_capture_fps, get_capture_method, get_capture_scale_percent,
     get_hardware_acceleration, get_sample_ratio, list_displays,
