@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
 import { Slider } from "../../components/ui/Slider";
 import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/api";
+import { logger } from "../../services/logger";
 import { usePlatform } from "../../hooks/usePlatform";
 import "./Settings.css";
 
@@ -332,7 +333,7 @@ export function SettingsPage() {
         setTauriVersion(tauriVer);
       })
       .catch((err) => {
-        console.error("[settings] Failed to load system/app info", err);
+        logger.error("settings.systemInfo.load_failed", {}, err);
       });
 
     return () => {

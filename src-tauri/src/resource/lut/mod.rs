@@ -27,13 +27,13 @@ fn load_lut_from_file() -> Option<Vec<u8>> {
             // We only need the first LUT (HDR RGB), which is the first LUT_SIZE bytes.
             let mut buffer = vec![0u8; LUT_SIZE];
             if file.read_exact(&mut buffer).is_ok() {
-                println!("[LUT] Loaded HDR LUT from {}", p);
+                log::info!(path = p; "[LUT] Loaded HDR LUT");
                 return Some(buffer);
             }
         }
     }
     
-    eprintln!("[LUT] Could not find or read lut_lin_tables.3d");
+    log::warn!("[LUT] Could not find or read lut_lin_tables.3d");
     None
 }
 

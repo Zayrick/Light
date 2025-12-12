@@ -73,7 +73,7 @@ pub fn get_displays() -> Vec<DisplayInfoResponse> {
     match list_screen_displays() {
         Ok(displays) => displays,
         Err(err) => {
-            eprintln!("[screen] Failed to enumerate displays: {}", err);
+            log::error!(err:display = err; "[screen] Failed to enumerate displays");
             Vec::new()
         }
     }
@@ -238,7 +238,11 @@ pub fn initialize_window_effect(app: &tauri::App) {
     let handle = app.handle();
 
     if let Err(err) = apply_window_effect_impl(default, handle) {
-        eprintln!("[window_effect] Failed to apply default window effect '{}': {}", default, err);
+        log::warn!(
+            effect = default,
+            err:display = err;
+            "[window_effect] Failed to apply default window effect"
+        );
     }
 
     let mut guard = CURRENT_WINDOW_EFFECT.lock().unwrap();
@@ -520,16 +524,16 @@ fn apply_window_effect_impl(
 
     // Clear existing effects; ignore errors but log them for debugging.
     if let Err(err) = clear_mica(&window) {
-        eprintln!("[window_effect] clear_mica failed: {}", err);
+        log::warn!(err:display = err; "[window_effect] clear_mica failed");
     }
     if let Err(err) = clear_tabbed(&window) {
-        eprintln!("[window_effect] clear_tabbed failed: {}", err);
+        log::warn!(err:display = err; "[window_effect] clear_tabbed failed");
     }
     if let Err(err) = clear_blur(&window) {
-        eprintln!("[window_effect] clear_blur failed: {}", err);
+        log::warn!(err:display = err; "[window_effect] clear_blur failed");
     }
     if let Err(err) = clear_acrylic(&window) {
-        eprintln!("[window_effect] clear_acrylic failed: {}", err);
+        log::warn!(err:display = err; "[window_effect] clear_acrylic failed");
     }
 
     match effect {
@@ -563,7 +567,7 @@ fn apply_window_effect_impl(
         .ok_or_else(|| "Main window not found".to_string())?;
 
     if let Err(err) = clear_vibrancy(&window) {
-        eprintln!("[window_effect] clear_vibrancy failed: {}", err);
+        log::warn!(err:display = err; "[window_effect] clear_vibrancy failed");
     }
 
     // NOTE: Some legacy effect ids map to deprecated NSVisualEffectMaterial variants.

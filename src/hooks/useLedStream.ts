@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { LedColor as LedColorType } from "../types";
+import { logger } from "../services/logger";
 
 export type LedColor = LedColorType;
 
@@ -34,8 +35,7 @@ async function ensureListening() {
       );
       isListening = true;
     } catch (err) {
-      // Keep silent in production; consumers may retry on demand
-      console.error("Failed to initialize LED stream listener:", err);
+      logger.error("ledStream.listener.init_failed", {}, err);
     } finally {
       startListeningPromise = null;
     }

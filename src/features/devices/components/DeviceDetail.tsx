@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Device, EffectInfo, EffectParam } from "../../../types";
 import { api } from "../../../services/api";
+import { logger } from "../../../services/logger";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { Sun, Sliders } from "lucide-react";
 import { Card } from "../../../components/ui/Card";
@@ -67,7 +68,7 @@ export function DeviceDetail({
       await api.setBrightness(device.port, value);
       onUpdateBrightness(device.port, value);
     } catch (err) {
-      console.error(err);
+      logger.error("device.brightness.set_failed", { port: device.port, brightness: value }, err);
     }
   };
 
@@ -172,7 +173,11 @@ export function DeviceDetail({
       await api.updateEffectParams(device.port, payload);
       return true;
     } catch (err) {
-      console.error("Failed to update params:", err);
+      logger.error(
+        "device.effectParams.update_failed",
+        { port: device.port, effectId: mode.id, payload },
+        err,
+      );
       return false;
     }
   };
@@ -215,7 +220,7 @@ export function DeviceDetail({
         }
       }
     } catch (err) {
-      console.error("Failed to set effect:", err);
+      logger.error("device.effect.set_failed", { port: device.port, effectId: modeId }, err);
     }
   };
 

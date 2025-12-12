@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { EffectInfo } from "../types";
 import { api } from "../services/api";
+import { logger } from "../services/logger";
 
 export function useEffects() {
   const [effects, setEffects] = useState<EffectInfo[]>([]);
@@ -14,7 +15,7 @@ export function useEffects() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to fetch effects:", err);
+        logger.error("effects.fetch_failed", {}, err);
         setError(err);
         setLoading(false);
       });
@@ -25,7 +26,7 @@ export function useEffects() {
       await api.setEffect(port, effectId);
       return true;
     } catch (error) {
-      console.error(error);
+      logger.error("effects.apply_failed", { port, effectId }, error);
       return false;
     }
   };

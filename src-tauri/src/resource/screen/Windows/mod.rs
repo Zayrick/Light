@@ -268,7 +268,11 @@ impl DesktopDuplicator {
                 Ok(capturer) => Ok(Self::Dxgi(capturer)),
                 Err(err) => {
                     // Try to fall back to GDI if DXGI fails
-                    eprintln!("[screen] DXGI failed, falling back to GDI: {}", err);
+                    log::warn!(
+                        output_index = output_index,
+                        err:display = err;
+                        "[screen] DXGI failed, falling back to GDI"
+                    );
                     Ok(Self::Gdi(GdiCapturer::with_output(output_index)?))
                 }
             },

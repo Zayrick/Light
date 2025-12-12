@@ -222,7 +222,7 @@ impl AudioManager {
         let stream_config: StreamConfig = config.into();
 
         let err_fn = |err| {
-            eprintln!("[audio] Stream error: {}", err);
+            log::error!(err:display = err; "[audio] Stream error");
         };
 
         // Build the input stream (for both input and output loopback devices).
