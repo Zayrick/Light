@@ -284,7 +284,7 @@ impl Effect for AudioStarEffect {
             let manager = AudioManager::get();
             if !manager.is_capturing() {
                 if let Err(e) = manager.start_capture(device_index) {
-                    eprintln!("[audio_star] Failed to start audio capture: {}", e);
+                    log::error!(device_index = device_index, err:display = e; "[audio_star] Failed to start audio capture");
                 }
             }
         }
@@ -341,7 +341,7 @@ impl Effect for AudioStarEffect {
                 let manager = AudioManager::get();
                 manager.stop_capture();
                 if let Err(e) = manager.start_capture(new_index) {
-                    eprintln!("[audio_star] Failed to start audio capture: {}", e);
+                    log::error!(device_index = new_index, err:display = e; "[audio_star] Failed to start audio capture");
                 }
             }
         }

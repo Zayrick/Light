@@ -243,7 +243,7 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
     let mdns = match ServiceDaemon::new() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Failed to create mDNS daemon: {}", e);
+            log::error!(err:display = e; "Failed to create mDNS daemon");
             return Vec::new();
         }
     };
@@ -252,7 +252,7 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
     let receiver = match mdns.browse(SERVICE_TYPE) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Failed to browse mDNS services: {}", e);
+            log::error!(err:display = e; "Failed to browse mDNS services");
             return Vec::new();
         }
     };
@@ -287,7 +287,12 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
                         port,
                     };
 
-                    println!("Discovered LED Matrix: {} at {}:{}", name, device.ip, port);
+                    log::info!(
+                        name = name.as_str(),
+                        ip = device.ip.as_str(),
+                        port = port;
+                        "Discovered LED Matrix via mDNS"
+                    );
 
                     if let Ok(mut devices) = devices_clone.lock() {
                         devices.insert(name, device);
@@ -321,17 +326,21 @@ fn discover_devices(timeout_secs: u64) -> Vec<DiscoveredDevice> {
 fn probe() -> Vec<Box<dyn Controller>> {
     let mut controllers: Vec<Box<dyn Controller>> = Vec::new();
 
-    println!("Scanning for LED Matrix devices via mDNS...");
+    log::info!("Scanning for LED Matrix devices via mDNS...");
     let devices = discover_devices(3); // 3秒超时
 
     for device in devices {
         match LedMatrixUdpController::new(device.clone()) {
             Ok(controller) => {
-                println!("Connected to LED Matrix: {}", device.name);
+                log::info!(name = device.name.as_str(); "Connected to LED Matrix");
                 controllers.push(Box::new(controller));
             }
             Err(e) => {
-                eprintln!("Failed to create controller for {}: {}", device.name, e);
+                log::warn!(
+                    name = device.name.as_str(),
+                    err:display = e;
+                    "Failed to create LED Matrix controller"
+                );
             }
         }
     }

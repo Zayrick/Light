@@ -9,7 +9,7 @@ pub fn list_controller_drivers() -> Vec<&'static ControllerMetadata> {
 pub fn scan_controllers() -> Vec<Box<dyn Controller>> {
     let mut controllers = Vec::new();
     for driver in inventory::iter::<ControllerMetadata> {
-        println!("Probing driver: {}", driver.name);
+        log::debug!(driver = driver.name; "Probing controller driver");
         controllers.extend((driver.probe)());
     }
     controllers

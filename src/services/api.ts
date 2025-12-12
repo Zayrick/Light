@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Device, EffectInfo } from "../types";
+import { logger } from "./logger";
 
 export type CaptureMethod = "dxgi" | "gdi" | "graphics" | "xcap" | "screencapturekit";
 export type WindowEffectId = string;
@@ -11,64 +12,77 @@ export interface SystemInfo {
   arch: string;
 }
 
+async function invokeWithLog<T>(
+  command: string,
+  args?: Record<string, unknown>,
+  ctx?: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (err) {
+    logger.error("ipc.invoke_failed", { command, ...ctx }, err);
+    throw err;
+  }
+}
+
 export const api = {
   scanDevices: async (): Promise<Device[]> => {
-    return await invoke<Device[]>("scan_devices");
+    return await invokeWithLog<Device[]>("scan_devices");
   },
 
   getEffects: async (): Promise<EffectInfo[]> => {
-    return await invoke<EffectInfo[]>("get_effects");
+    return await invokeWithLog<EffectInfo[]>("get_effects");
   },
 
   setEffect: async (port: string, effectId: string): Promise<void> => {
-    return await invoke("set_effect", { port, effectId });
+    return await invokeWithLog("set_effect", { port, effectId }, { port, effectId });
   },
 
   updateEffectParams: async (port: string, params: Record<string, unknown>): Promise<void> => {
-    return await invoke("update_effect_params", { port, params });
+    return await invokeWithLog("update_effect_params", { port, params }, { port });
   },
 
   setBrightness: async (port: string, brightness: number): Promise<void> => {
-    return await invoke("set_brightness", { port, brightness });
+    return await invokeWithLog("set_brightness", { port, brightness }, { port, brightness });
   },
 
   getCaptureScale: async (): Promise<number> => {
-    return await invoke("get_capture_scale");
+    return await invokeWithLog("get_capture_scale");
   },
 
   setCaptureScale: async (percent: number): Promise<void> => {
-    return await invoke("set_capture_scale", { percent });
+    return await invokeWithLog("set_capture_scale", { percent }, { percent });
   },
 
   getCaptureFps: async (): Promise<number> => {
-    return await invoke("get_capture_fps");
+    return await invokeWithLog("get_capture_fps");
   },
 
   setCaptureFps: async (fps: number): Promise<void> => {
-    return await invoke("set_capture_fps", { fps });
+    return await invokeWithLog("set_capture_fps", { fps }, { fps });
   },
 
   getCaptureMethod: async (): Promise<CaptureMethod> => {
-    return await invoke<CaptureMethod>("get_capture_method");
+    return await invokeWithLog<CaptureMethod>("get_capture_method");
   },
 
   setCaptureMethod: async (method: CaptureMethod): Promise<void> => {
-    return await invoke("set_capture_method", { method });
+    return await invokeWithLog("set_capture_method", { method }, { method });
   },
 
   getWindowEffects: async (): Promise<WindowEffectId[]> => {
-    return await invoke<WindowEffectId[]>("get_window_effects");
+    return await invokeWithLog<WindowEffectId[]>("get_window_effects");
   },
 
   getWindowEffect: async (): Promise<WindowEffectId> => {
-    return await invoke<WindowEffectId>("get_window_effect");
+    return await invokeWithLog<WindowEffectId>("get_window_effect");
   },
 
   setWindowEffect: async (effect: WindowEffectId): Promise<void> => {
-    return await invoke("set_window_effect", { effect });
+    return await invokeWithLog("set_window_effect", { effect }, { effect });
   },
 
   getSystemInfo: async (): Promise<SystemInfo> => {
-    return await invoke<SystemInfo>("get_system_info");
+    return await invokeWithLog<SystemInfo>("get_system_info");
   },
 };

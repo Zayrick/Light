@@ -56,9 +56,10 @@ impl ScreenMirrorEffect {
                     self.screen = Some(handle);
                 }
                 Err(err) => {
-                    eprintln!(
-                        "[screen-mirror] Failed to init screen subscription ({}): {}",
-                        self.display_index, err
+                    log::error!(
+                        display_index = self.display_index,
+                        err:display = err;
+                        "[screen-mirror] Failed to init screen subscription"
                     );
                     self.screen = None;
                 }
@@ -129,7 +130,7 @@ impl ScreenMirrorEffect {
                     return false;
                 }
                 Err(err) => {
-                    eprintln!("[screen-mirror] capture error: {}", err);
+                    log::warn!(err:display = err; "[screen-mirror] capture error");
                     // Drop current subscription so that a new one (and duplicator)
                     // will be created on the next tick if needed.
                     self.screen = None;

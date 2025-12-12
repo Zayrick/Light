@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Device } from "../types";
 import { api } from "../services/api";
+import { logger } from "../services/logger";
 
 export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -95,7 +96,7 @@ export function useDevices() {
           : "No devices found"
       );
     } catch (error) {
-      console.error(error);
+      logger.error("devices.scan_failed", {}, error);
       setStatusMsg("Error scanning devices");
     } finally {
       setIsScanning(false);

@@ -114,9 +114,10 @@ impl From<&'static EffectParam> for EffectParamInfo {
                 let resolved = match options.resolve() {
                     Ok(list) => list,
                     Err(err) => {
-                        eprintln!(
-                            "[effects] Failed to resolve select options for '{}': {}",
-                            param.key, err
+                        log::warn!(
+                            param = param.key,
+                            err:display = err;
+                            "[effects] Failed to resolve select options"
                         );
                         Vec::new()
                     }
