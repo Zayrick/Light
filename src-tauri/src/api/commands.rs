@@ -272,7 +272,7 @@ fn get_windows_version() -> Option<WindowsVersion> {
     let major: u32 = current_version
         .get_value("CurrentMajorVersionNumber")
         .ok()
-        .unwrap_or_else(|| if build >= 22000 { 11 } else { 10 });
+        .unwrap_or(if build >= 22000 { 11 } else { 10 });
 
     Some(WindowsVersion { major, build })
 }

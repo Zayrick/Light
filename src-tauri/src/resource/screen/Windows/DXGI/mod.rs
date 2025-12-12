@@ -177,7 +177,6 @@ impl DxgiCapturer {
         let gpu_pipeline = if hardware && !rotation_requires_cpu {
             Some(create_gpu_pipeline(
                 &device,
-                &device_context,
                 width,
                 height,
                 scaled_width,
@@ -753,7 +752,6 @@ unsafe impl Send for DxgiCapturer {}
 /// Create GPU pipeline for HDR/SDR processing.
 fn create_gpu_pipeline(
     device: &ID3D11Device,
-    _ctx: &ID3D11DeviceContext,
     src_width: u32,
     src_height: u32,
     dst_width: u32,
@@ -813,7 +811,7 @@ fn create_gpu_pipeline(
 
         let params: [f32; 4] = [
             target_nits as f32,
-            18.8515625 - 18.6875 * target_nits as f32,
+            18.851_563 - 18.6875 * target_nits as f32,
             0.0,
             0.0,
         ];
@@ -935,21 +933,20 @@ fn create_gpu_pipeline(
     }
 }
 
+type DxgiDuplicationInit = (
+    ID3D11Device,
+    ID3D11DeviceContext,
+    IDXGIOutputDuplication,
+    DXGI_OUTDUPL_DESC,
+    DXGI_OUTPUT_DESC,
+    Option<DXGI_OUTPUT_DESC1>,
+    bool,
+);
+
 fn create_duplication(
     target_output_index: usize,
     try_hdr: bool,
-) -> Result<
-    (
-        ID3D11Device,
-        ID3D11DeviceContext,
-        IDXGIOutputDuplication,
-        DXGI_OUTDUPL_DESC,
-        DXGI_OUTPUT_DESC,
-        Option<DXGI_OUTPUT_DESC1>,
-        bool,
-    ),
-    ScreenCaptureError,
-> {
+) -> Result<DxgiDuplicationInit, ScreenCaptureError> {
     unsafe {
         let factory: IDXGIFactory1 =
             CreateDXGIFactory1().map_err(|err| os_error("CreateDXGIFactory1", err))?;
@@ -983,18 +980,7 @@ fn try_initialize_on_adapter(
     target_output_index: usize,
     current_index: &mut usize,
     try_hdr: bool,
-) -> Result<
-    Option<(
-        ID3D11Device,
-        ID3D11DeviceContext,
-        IDXGIOutputDuplication,
-        DXGI_OUTDUPL_DESC,
-        DXGI_OUTPUT_DESC,
-        Option<DXGI_OUTPUT_DESC1>,
-        bool,
-    )>,
-    ScreenCaptureError,
-> {
+) -> Result<Option<DxgiDuplicationInit>, ScreenCaptureError> {
     unsafe {
         let base_adapter: IDXGIAdapter = adapter
             .cast()
@@ -1168,11 +1154,6 @@ fn compute_scaled_dimensions(
     (scaled_width, scaled_height)
 }
 
-pub fn wide_to_string(buffer: &[u16]) -> String {
-    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
-    String::from_utf16_lossy(&buffer[..end])
-}
-
 fn os_error(context: &'static str, err: windows::core::Error) -> ScreenCaptureError {
     ScreenCaptureError::OsError {
         context,
@@ -1252,7 +1233,7 @@ fn collect_dirty_regions(
     }
 
     let rect_size = std::mem::size_of::<windows::Win32::Foundation::RECT>() as u32;
-    let count = (buffer_size + rect_size - 1) / rect_size;
+    let count = buffer_size.div_ceil(rect_size);
     if count == 0 {
         return Ok(());
     }
