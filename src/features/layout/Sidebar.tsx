@@ -1,12 +1,20 @@
 import { Home, Settings, Zap } from "lucide-react";
 import clsx from "clsx";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, memo } from "react";
 import { Device } from "../../types";
+import { SidebarLayoutTree } from "./SidebarLayoutTree";
+import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "./constants";
 
-const NAV_TRANSITION = {
-  duration: 0.25,
-  ease: [0.16, 1, 0.3, 1] as const,
-};
+const ActiveHighlight = memo(() => (
+  <motion.div
+    layoutId="active-nav"
+    className="active-highlight"
+    transition={HIGHLIGHT_TRANSITION}
+  />
+));
+
+ActiveHighlight.displayName = "ActiveHighlight";
 
 interface SidebarProps {
   activeTab: string;
@@ -14,6 +22,8 @@ interface SidebarProps {
   devices: Device[];
   selectedDevice: Device | null;
   setSelectedDevice: (device: Device | null) => void;
+  selectedLayoutId: string | null;
+  setSelectedLayoutId: (id: string | null) => void;
 }
 
 export function Sidebar({
@@ -22,19 +32,33 @@ export function Sidebar({
   devices,
   selectedDevice,
   setSelectedDevice,
+  selectedLayoutId,
+  setSelectedLayoutId,
 }: SidebarProps) {
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     e.currentTarget.style.setProperty("--mouse-x", `${x}px`);
     e.currentTarget.style.setProperty("--mouse-y", `${y}px`);
     e.currentTarget.style.setProperty("--spotlight-opacity", "1");
-  };
+  }, []);
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.currentTarget.style.setProperty("--spotlight-opacity", "0");
-  };
+  }, []);
+
+  const handleLayoutSelect = useCallback((id: string) => {
+    setSelectedLayoutId(id);
+    setSelectedDevice(null); // Clear device selection
+    setActiveTab("layout-preview");
+  }, [setSelectedLayoutId, setSelectedDevice, setActiveTab]);
+
+  const handleDeviceSelect = useCallback((device: Device) => {
+    setSelectedDevice(device);
+    setSelectedLayoutId(null); // Clear layout selection
+    setActiveTab("device-detail");
+  }, [setSelectedDevice, setSelectedLayoutId, setActiveTab]);
 
   return (
     <aside className="sidebar">
@@ -51,16 +75,7 @@ export function Sidebar({
               }}
               transition={NAV_TRANSITION}
             >
-              {activeTab === "home" && (
-                <motion.div
-                  layoutId="active-nav"
-                  className="active-highlight"
-                  transition={{
-                    duration: 0.3,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                />
-              )}
+              {activeTab === "home" && <ActiveHighlight />}
               <Home size={18} />
               <span>Home</span>
             </motion.div>
@@ -76,24 +91,14 @@ export function Sidebar({
                     selectedDevice?.id === device.id &&
                     "active"
                 )}
-                onClick={() => {
-                  setSelectedDevice(device);
-                  setActiveTab("device-detail");
-                }}
+                onClick={() => handleDeviceSelect(device)}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
               >
-                {activeTab === "device-detail" &&
-                  selectedDevice?.id === device.id && (
-                    <motion.div
-                      layoutId="active-nav"
-                      className="active-highlight"
-                      transition={{
-                        duration: 0.3,
-                        ease: [0.16, 1, 0.3, 1],
-                      }}
-                    />
-                  )}
+                <AnimatePresence>
+                  {activeTab === "device-detail" &&
+                    selectedDevice?.id === device.id && <ActiveHighlight />}
+                </AnimatePresence>
                 <Zap size={18} className="device-list-icon" />
                 <div className="device-list-info">
                   <div className="device-list-item-name">{device.model}</div>
@@ -101,6 +106,14 @@ export function Sidebar({
                 </div>
               </div>
             ))}
+
+            <SidebarLayoutTree
+              activeTab={activeTab}
+              selectedLayoutId={selectedLayoutId}
+              onSelect={handleLayoutSelect}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
           </div>
         </div>
         <div className="nav-group nav-group-settings">
@@ -114,16 +127,7 @@ export function Sidebar({
             }}
             transition={NAV_TRANSITION}
           >
-            {activeTab === "settings" && (
-              <motion.div
-                layoutId="active-nav"
-                className="active-highlight"
-                transition={{
-                  duration: 0.3,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-              />
-            )}
+            {activeTab === "settings" && <ActiveHighlight />}
             <Settings size={18} />
             <span>Settings</span>
           </motion.div>
