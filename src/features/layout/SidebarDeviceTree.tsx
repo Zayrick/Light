@@ -1,5 +1,5 @@
 import { TreeView, createTreeCollection } from "@ark-ui/react/tree-view";
-import { ChevronRight, CircleDot, PlugZap, Zap } from "lucide-react";
+import { ChevronRight, PlugZap, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
@@ -164,21 +164,26 @@ const DeviceTreeItem = ({
   };
   const indentStyle = depth > 1 ? { marginLeft: `${getIndent()}px` } : undefined;
 
-  const icon =
-    node.kind === "device" ? (
-      <Zap size={18} className="device-list-icon" />
-    ) : node.kind === "output" ? (
-      <PlugZap size={16} className="device-list-icon" />
-    ) : (
-      <CircleDot size={14} className="device-list-icon" />
-    );
-
   const indicatorColor =
     node.controlState === "explicit"
       ? "var(--success-color)"
       : node.controlState === "inherited"
         ? "var(--color-blue)"
         : "var(--color-gray)";
+
+  const icon =
+    node.kind === "device" ? (
+      <Zap size={18} className="device-list-icon" style={{ color: indicatorColor }} />
+    ) : node.kind === "output" ? (
+      <PlugZap size={16} className="device-list-icon" style={{ color: indicatorColor }} />
+    ) : null;
+
+  const segmentDot =
+    node.kind === "segment" ? (
+      <span className="sidebar-status-dot-wrap" aria-hidden="true">
+        <span className="sidebar-status-dot" style={{ backgroundColor: indicatorColor }} />
+      </span>
+    ) : null;
 
   const Highlight = () => (
     <AnimatePresence>
@@ -212,18 +217,6 @@ const DeviceTreeItem = ({
             onMouseLeave={onMouseLeave}
           >
             <Highlight />
-            <div
-              style={{
-                position: "absolute",
-                left: 5,
-                top: "50%",
-                transform: "translateY(-50%)",
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                backgroundColor: indicatorColor,
-              }}
-            />
             {icon}
             <div className="device-list-info">
               <div className="device-list-item-name">{node.name}</div>
@@ -258,20 +251,8 @@ const DeviceTreeItem = ({
           onMouseLeave={onMouseLeave}
         >
           <Highlight />
-          <div
-            style={{
-              position: "absolute",
-              left: 5,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 6,
-              height: 6,
-              borderRadius: 999,
-              backgroundColor: indicatorColor,
-            }}
-          />
           <TreeView.ItemText className="layout-item-text">
-            {icon}
+            {segmentDot ?? icon}
             <span className="device-list-item-name">{node.name}</span>
           </TreeView.ItemText>
         </TreeView.Item>
