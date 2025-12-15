@@ -34,14 +34,6 @@ pub enum DeviceType {
     Unknown,
 }
 
-/// Zone layout type for a region of LEDs.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ZoneType {
-    Single,
-    Linear,
-    Matrix,
-}
-
 /// Mapping from a virtual 2D matrix to physical LED indices.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MatrixMap {
@@ -51,49 +43,56 @@ pub struct MatrixMap {
     pub map: Vec<Option<usize>>,
 }
 
-/// A logical region of LEDs on a device.
+/// Segment layout type for a region of LEDs.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SegmentType {
+    Single,
+    Linear,
+    Matrix,
+}
+
+/// A logical region of LEDs on an output port.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Zone {
+pub struct SegmentDefinition {
+    /// Stable id for this segment (used for updates & mode targeting).
+    pub id: String,
     pub name: String,
-    pub zone_type: ZoneType,
-    /// Starting physical LED index covered by this zone (if linear/single).
-    pub start_index: usize,
-    /// Number of physical LEDs covered by this zone.
+    pub segment_type: SegmentType,
+    /// Number of physical LEDs covered by this segment.
     pub leds_count: usize,
-    /// Optional 2D matrix layout for this zone.
+    /// Optional 2D matrix layout for this segment.
     pub matrix: Option<MatrixMap>,
 }
 
-impl Zone {
-    pub fn single(name: impl Into<String>, index: usize) -> Self {
-        Self {
-            name: name.into(),
-            zone_type: ZoneType::Single,
-            start_index: index,
-            leds_count: 1,
-            matrix: None,
-        }
-    }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutputCapabilities {
+    /// Whether the user is allowed to edit segments for this output.
+    ///
+    /// Per spec: segments are only meaningful for `Linear` outputs (future feature),
+    /// but we keep this generic for extension.
+    pub editable: bool,
+    /// Minimum total physical LEDs for this output (sum of segments).
+    pub min_total_leds: usize,
+    /// Maximum total physical LEDs for this output (sum of segments).
+    pub max_total_leds: usize,
+    /// Optional discrete list of allowed total LED counts (e.g. only 100 or 120).
+    pub allowed_total_leds: Option<Vec<usize>>,
+    /// Allowed segment types when editing is enabled.
+    pub allowed_segment_types: Vec<SegmentType>,
+}
 
-    pub fn linear(name: impl Into<String>, start_index: usize, leds_count: usize) -> Self {
-        Self {
-            name: name.into(),
-            zone_type: ZoneType::Linear,
-            start_index,
-            leds_count,
-            matrix: None,
-        }
-    }
-
-    pub fn matrix(name: impl Into<String>, matrix: MatrixMap, total_leds: usize) -> Self {
-        Self {
-            name: name.into(),
-            zone_type: ZoneType::Matrix,
-            start_index: 0,
-            leds_count: total_leds,
-            matrix: Some(matrix),
-        }
-    }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutputPortDefinition {
+    /// Stable id for this output port.
+    pub id: String,
+    pub name: String,
+    /// Driver-defined output layout type (point/linear/matrix).
+    pub output_type: SegmentType,
+    /// Total physical LED count for this output.
+    pub leds_count: usize,
+    /// Optional 2D matrix layout for `Matrix` outputs.
+    pub matrix: Option<MatrixMap>,
+    pub capabilities: OutputCapabilities,
 }
 
 // Removed Sync, as we use Mutex to coordinate access and SerialPort is often not Sync
@@ -103,41 +102,24 @@ pub trait Controller: Send {
     fn description(&self) -> String;
     fn serial_id(&self) -> String;
 
-    /// Number of physical LEDs on the device.
-    fn length(&self) -> usize;
-
     /// High-level device type (used mainly for UI grouping).
     fn device_type(&self) -> DeviceType {
         DeviceType::Light
     }
 
-    /// Logical zones for this device. Defaults to a single linear zone.
-    fn zones(&self) -> Vec<Zone> {
-        vec![Zone::linear("Zone 1", 0, self.length())]
-    }
+    /// Outputs exposed by this device.
+    fn outputs(&self) -> Vec<OutputPortDefinition>;
 
-    /// Virtual 2D layout (width, height) used by effects.
+    /// Update the device with a flattened frame of colors in **physical order**.
     ///
-    /// By default, if a matrix zone exists, its dimensions are used; otherwise,
-    /// the device is treated as a 1D strip with height 1.
-    fn virtual_layout(&self) -> (usize, usize) {
-        for zone in self.zones() {
-            if zone.zone_type == ZoneType::Matrix {
-                if let Some(matrix) = &zone.matrix {
-                    return (matrix.width, matrix.height);
-                }
-            }
-        }
-        (self.length(), 1)
-    }
-
-    /// Update the device with a frame of colors in virtual layout order.
+    /// The physical order is defined as: outputs in `outputs()` order, and
+    /// within each output, LEDs in the driver's physical order (0..leds_count).
     fn update(&mut self, colors: &[Color]) -> Result<(), String>;
 
     fn clear(&mut self) -> Result<(), String> {
-        let (w, h) = self.virtual_layout();
-        let len = w.checked_mul(h).unwrap_or(0).max(1);
-        let black = vec![Color::default(); len];
+        // Best-effort default: clear the sum of output lengths.
+        let len: usize = self.outputs().iter().map(|o| o.leds_count).sum();
+        let black = vec![Color::default(); len.max(1)];
         self.update(&black)
     }
 

@@ -1,8 +1,10 @@
-import { Home, Settings, Zap } from "lucide-react";
+import { Home, Settings } from "lucide-react";
 import clsx from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useCallback, memo } from "react";
 import { Device } from "../../types";
+import type { SelectedScope } from "../../hooks/useDevices";
+import { SidebarDeviceTree } from "./SidebarDeviceTree";
 import { SidebarLayoutTree } from "./SidebarLayoutTree";
 import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "./constants";
 
@@ -20,8 +22,8 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   devices: Device[];
-  selectedDevice: Device | null;
-  setSelectedDevice: (device: Device | null) => void;
+  selectedScope: SelectedScope | null;
+  setSelectedScope: (scope: SelectedScope | null) => void;
   selectedLayoutId: string | null;
   setSelectedLayoutId: (id: string | null) => void;
 }
@@ -30,8 +32,8 @@ export function Sidebar({
   activeTab,
   setActiveTab,
   devices,
-  selectedDevice,
-  setSelectedDevice,
+  selectedScope,
+  setSelectedScope,
   selectedLayoutId,
   setSelectedLayoutId,
 }: SidebarProps) {
@@ -50,15 +52,15 @@ export function Sidebar({
 
   const handleLayoutSelect = useCallback((id: string) => {
     setSelectedLayoutId(id);
-    setSelectedDevice(null); // Clear device selection
+    setSelectedScope(null); // Clear device selection
     setActiveTab("layout-preview");
-  }, [setSelectedLayoutId, setSelectedDevice, setActiveTab]);
+  }, [setSelectedLayoutId, setSelectedScope, setActiveTab]);
 
-  const handleDeviceSelect = useCallback((device: Device) => {
-    setSelectedDevice(device);
+  const handleScopeSelect = useCallback((scope: SelectedScope) => {
+    setSelectedScope(scope);
     setSelectedLayoutId(null); // Clear layout selection
     setActiveTab("device-detail");
-  }, [setSelectedDevice, setSelectedLayoutId, setActiveTab]);
+  }, [setSelectedScope, setSelectedLayoutId, setActiveTab]);
 
   return (
     <aside className="sidebar">
@@ -82,30 +84,14 @@ export function Sidebar({
             <div className="nav-divider"></div>
           </div>
           <div className="device-list">
-            {devices.map((device) => (
-              <div
-                key={device.id}
-                className={clsx(
-                  "device-list-item",
-                  activeTab === "device-detail" &&
-                    selectedDevice?.id === device.id &&
-                    "active"
-                )}
-                onClick={() => handleDeviceSelect(device)}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-              >
-                <AnimatePresence>
-                  {activeTab === "device-detail" &&
-                    selectedDevice?.id === device.id && <ActiveHighlight />}
-                </AnimatePresence>
-                <Zap size={18} className="device-list-icon" />
-                <div className="device-list-info">
-                  <div className="device-list-item-name">{device.model}</div>
-                  <div className="device-list-item-port">{device.port}</div>
-                </div>
-              </div>
-            ))}
+            <SidebarDeviceTree
+              activeTab={activeTab}
+              devices={devices}
+              selectedScope={selectedScope}
+              onSelectScope={handleScopeSelect}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
 
             <SidebarLayoutTree
               activeTab={activeTab}

@@ -18,7 +18,7 @@ interface HomePageProps {
   effects: EffectInfo[];
   isScanning: boolean;
   onScan: () => void;
-  onNavigate: (deviceId: string) => void;
+  onNavigate: (devicePort: string) => void;
 }
 
 export function HomePage({
@@ -175,59 +175,68 @@ export function HomePage({
               </div>
             ) : (
               <div className="simplified-device-list">
-                {devices.map((device) => (
-                  <Card
-                    key={device.id}
-                    className="simplified-device-card"
-                    hoverable
-                    onClick={() => onNavigate(device.id)}
-                  >
-                    <div className="simplified-device-info">
-                      <div className="device-icon">
-                        <Zap size={20} />
-                      </div>
-                      <div>
-                        <h3 className={styles.deviceInfoTitle}>
-                          {device.model}
-                        </h3>
-                        <div className={styles.deviceInfoSubtitle}>
-                          <span>{device.port}</span>
-                          {device.current_effect_id && (
-                            <>
-                              <span>•</span>
-                              <span>
-                                {effects.find(e => e.id === device.current_effect_id)?.name || "Unknown Effect"}
-                              </span>
-                            </>
-                          )}
+                {devices.map((device) => {
+                  const activeEffectId =
+                    device.mode.effective_effect_id ??
+                    device.outputs
+                      .map((o) => o.mode.effective_effect_id)
+                      .find((id): id is string => Boolean(id)) ??
+                    device.outputs
+                      .flatMap((o) => o.segments)
+                      .map((s) => s.mode.effective_effect_id)
+                      .find((id): id is string => Boolean(id));
+
+                  return (
+                    <Card
+                      key={device.port}
+                      className="simplified-device-card"
+                      hoverable
+                      onClick={() => onNavigate(device.port)}
+                    >
+                      <div className="simplified-device-info">
+                        <div className="device-icon">
+                          <Zap size={20} />
+                        </div>
+                        <div>
+                          <h3 className={styles.deviceInfoTitle}>{device.model}</h3>
+                          <div className={styles.deviceInfoSubtitle}>
+                            <span>{device.port}</span>
+                            {activeEffectId && (
+                              <>
+                                <span>•</span>
+                                <span>
+                                  {effects.find((e) => e.id === activeEffectId)?.name ||
+                                    "Unknown Effect"}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="simplified-device-footer">
-                      {device.current_effect_id ? (
-                        <div className={styles.deviceActiveStatus}>
-                          <div className="device-status-dot" />
-                          <span className={styles.deviceActiveText}>
-                            Active
-                          </span>
-                        </div>
-                      ) : (
-                        <div /> /* Spacer */
-                      )}
-                      <Button
-                        variant="secondary"
-                        style={{ padding: "6px 10px" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onNavigate(device.id);
-                        }}
-                      >
-                         <ArrowRight size={16} />
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+
+                      <div className="simplified-device-footer">
+                        {activeEffectId ? (
+                          <div className={styles.deviceActiveStatus}>
+                            <div className="device-status-dot" />
+                            <span className={styles.deviceActiveText}>Active</span>
+                          </div>
+                        ) : (
+                          <div /> /* Spacer */
+                        )}
+                        <Button
+                          variant="secondary"
+                          style={{ padding: "6px 10px" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigate(device.port);
+                          }}
+                        >
+                          <ArrowRight size={16} />
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </motion.div>

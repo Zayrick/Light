@@ -1,4 +1,7 @@
-use crate::interface::controller::{Color, Controller, ControllerMetadata, DeviceType, Zone};
+use crate::interface::controller::{
+    Color, Controller, ControllerMetadata, DeviceType, OutputCapabilities, OutputPortDefinition,
+    SegmentType,
+};
 use crate::resource::driver::serail_port::RateLimitedSerialPort;
 use inventory;
 use serialport::SerialPortType;
@@ -17,7 +20,7 @@ pub struct SkydimoSerialController {
     model: String,
     id: String,
     port: RateLimitedSerialPort,
-    zones: Vec<Zone>,
+    outputs: Vec<OutputPortDefinition>,
     led_count: usize,
     buffer_cache: Vec<Color>,
     packet_cache: Vec<u8>,
@@ -30,20 +33,51 @@ impl SkydimoSerialController {
         id: String,
         port: RateLimitedSerialPort,
     ) -> Self {
-        // Try to build a matrix layout from the reported model name.
-        let (zones, led_count) = if let Some(layout) = build_layout_from_device_name(&model) {
-            (vec![layout.zone], layout.total_leds)
+        // Try to build a default layout from the reported model name.
+        let (output_type, led_count, matrix) = if let Some(layout) = build_layout_from_device_name(&model) {
+            (layout.segment_type, layout.total_leds, layout.matrix)
         } else {
             // Fallback: treat as a simple linear strip of 100 LEDs.
-            (vec![Zone::linear("LED Strip", 0, 100)], 100)
+            (SegmentType::Linear, 100, None)
         };
+
+        let capabilities = match output_type {
+            SegmentType::Matrix => OutputCapabilities {
+                editable: false,
+                min_total_leds: led_count,
+                max_total_leds: led_count,
+                allowed_total_leds: Some(vec![led_count]),
+                allowed_segment_types: vec![SegmentType::Matrix],
+            },
+            SegmentType::Linear | SegmentType::Single => OutputCapabilities {
+                // Allow segment editing, but keep total LED count fixed for this controller.
+                editable: true,
+                min_total_leds: led_count,
+                max_total_leds: led_count,
+                allowed_total_leds: Some(vec![led_count]),
+                allowed_segment_types: vec![
+                    SegmentType::Single,
+                    SegmentType::Linear,
+                    SegmentType::Matrix,
+                ],
+            },
+        };
+
+        let outputs = vec![OutputPortDefinition {
+            id: "out1".to_string(),
+            name: "Output 1".to_string(),
+            output_type,
+            leds_count: led_count,
+            matrix,
+            capabilities,
+        }];
 
         Self {
             port_name,
             model,
             id,
             port,
-            zones,
+            outputs,
             led_count,
             buffer_cache: Vec::with_capacity(led_count),
             packet_cache: Vec::with_capacity(led_count * 3 + 10),
@@ -68,16 +102,12 @@ impl Controller for SkydimoSerialController {
         self.id.clone()
     }
 
-    fn length(&self) -> usize {
-        self.led_count
-    }
-
     fn device_type(&self) -> DeviceType {
         DeviceType::Light
     }
 
-    fn zones(&self) -> Vec<Zone> {
-        self.zones.clone()
+    fn outputs(&self) -> Vec<OutputPortDefinition> {
+        self.outputs.clone()
     }
 
     fn update(&mut self, colors: &[Color]) -> Result<(), String> {
@@ -86,47 +116,12 @@ impl Controller for SkydimoSerialController {
             self.buffer_cache.resize(self.led_count, Color::default());
         }
 
-        // If we have a matrix zone, map from virtual matrix buffer into the
-        // physical LED order defined by the Skydimo configuration.
-        if let Some(matrix_zone) = self.zones.iter().find(|z| z.matrix.is_some()) {
-            let matrix = matrix_zone.matrix.as_ref().unwrap();
-            let expected = matrix.width.saturating_mul(matrix.height);
-
-            if colors.len() != expected {
-                // Mismatched frame size – fall back to clamping on physical count.
-                for (i, c) in colors.iter().take(self.led_count).enumerate() {
-                    self.buffer_cache[i] = *c;
-                }
-            } else {
-                // Clear buffer with black first if needed, but usually we overwrite.
-                // Since the mapping might be sparse (Option<usize>), we should clear or
-                // assume unmapped LEDs are black.
-                // For performance, if we map *all* LEDs, we don't need to clear.
-                // But let's be safe and fill with default (black) if map is sparse.
-                // However, filling every frame is cost.
-                // Let's just overwrite mapped ones. If unmapped ones retain old color, that might be a glitch.
-                // Ideally we clear.
-                self.buffer_cache.fill(Color::default());
-
-                for (virtual_idx, opt_led) in matrix.map.iter().enumerate() {
-                    if let Some(led_idx) = opt_led {
-                        if *led_idx < self.buffer_cache.len() && virtual_idx < colors.len() {
-                            self.buffer_cache[*led_idx] = colors[virtual_idx];
-                        }
-                    }
-                }
-            }
-        } else {
-            // No matrix information – treat the buffer as physical order.
-            // Copy min(colors.len(), led_count)
-            let len = colors.len().min(self.led_count);
-            self.buffer_cache[..len].copy_from_slice(&colors[..len]);
-
-            // If buffer is larger than input, zero out the rest?
-            if len < self.led_count {
-                self.buffer_cache[len..].fill(Color::default());
-            }
-        };
+        // Treat the input buffer as **physical LED order**.
+        let len = colors.len().min(self.led_count);
+        self.buffer_cache[..len].copy_from_slice(&colors[..len]);
+        if len < self.led_count {
+            self.buffer_cache[len..].fill(Color::default());
+        }
 
         SkydimoSerialProtocol::encode_into(&self.buffer_cache, &mut self.packet_cache);
         // Use rate-limited write; returns Ok(false) if frame was dropped due to throttling.
@@ -164,12 +159,11 @@ fn probe() -> Vec<Box<dyn Controller>> {
                     };
 
                     // Compute frame size for rate limiting based on LED count.
-                    let led_count =
-                        if let Some(layout) = build_layout_from_device_name(&full_model) {
-                            layout.total_leds
-                        } else {
-                            100 // Fallback
-                        };
+                    let led_count = if let Some(layout) = build_layout_from_device_name(&full_model) {
+                        layout.total_leds
+                    } else {
+                        100 // Fallback
+                    };
                     let frame_size = 6 + led_count * 3;
 
                     // Wrap the port in a rate-limited driver.

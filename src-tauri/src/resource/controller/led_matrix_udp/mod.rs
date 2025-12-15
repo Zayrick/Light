@@ -1,5 +1,6 @@
 use crate::interface::controller::{
-    Color, Controller, ControllerMetadata, DeviceType, MatrixMap, Zone,
+    Color, Controller, ControllerMetadata, DeviceType, MatrixMap, OutputCapabilities,
+    OutputPortDefinition, SegmentType,
 };
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use std::collections::HashMap;
@@ -31,7 +32,7 @@ pub struct LedMatrixUdpController {
     width: usize,
     height: usize,
     led_count: usize,
-    zones: Vec<Zone>,
+    outputs: Vec<OutputPortDefinition>,
     /// 帧缓冲区，用于全量更新
     frame_buffer: Vec<u8>,
     /// 单个分片最多包含的像素数量
@@ -79,19 +80,24 @@ impl LedMatrixUdpController {
             ));
         }
 
-        // 创建矩阵映射 - 行优先顺序
-        let mut map = Vec::with_capacity(led_count);
-        for i in 0..led_count {
-            map.push(Some(i));
-        }
+        // Create identity matrix mapping (row-major).
+        let map = (0..led_count).map(Some).collect::<Vec<_>>();
+        let matrix_map = MatrixMap { width, height, map };
 
-        let matrix_map = MatrixMap {
-            width,
-            height,
-            map,
-        };
-
-        let zones = vec![Zone::matrix("LED Matrix", matrix_map, led_count)];
+        let outputs = vec![OutputPortDefinition {
+            id: "matrix".to_string(),
+            name: "LED Matrix".to_string(),
+            output_type: SegmentType::Matrix,
+            leds_count: led_count,
+            matrix: Some(matrix_map),
+            capabilities: OutputCapabilities {
+                editable: false,
+                min_total_leds: led_count,
+                max_total_leds: led_count,
+                allowed_total_leds: Some(vec![led_count]),
+                allowed_segment_types: vec![SegmentType::Matrix],
+            },
+        }];
 
         // 分片参数与缓冲区预分配
         let max_pixels_per_fragment =
@@ -108,7 +114,7 @@ impl LedMatrixUdpController {
             width,
             height,
             led_count,
-            zones,
+            outputs,
             frame_buffer,
             max_pixels_per_fragment,
             frame_id: 0,
@@ -170,20 +176,12 @@ impl Controller for LedMatrixUdpController {
         self.device_name.clone()
     }
 
-    fn length(&self) -> usize {
-        self.led_count
-    }
-
     fn device_type(&self) -> DeviceType {
         DeviceType::Virtual
     }
 
-    fn zones(&self) -> Vec<Zone> {
-        self.zones.clone()
-    }
-
-    fn virtual_layout(&self) -> (usize, usize) {
-        (self.width, self.height)
+    fn outputs(&self) -> Vec<OutputPortDefinition> {
+        self.outputs.clone()
     }
 
     fn update(&mut self, colors: &[Color]) -> Result<(), String> {

@@ -54,6 +54,11 @@ pub async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Dev
 }
 
 #[tauri::command]
+pub fn get_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>, String> {
+    Ok(manager.get_devices())
+}
+
+#[tauri::command]
 pub fn get_effects() -> Vec<EffectInfo> {
     list_effects()
         .into_iter()
@@ -86,7 +91,13 @@ pub fn set_effect(
     manager: State<LightingManager>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.start_effect(&port, &effect_id, app_handle)
+    manager.set_scope_effect(
+        &port,
+        None,
+        None,
+        Some(&effect_id),
+        app_handle,
+    )
 }
 
 #[tauri::command]
@@ -95,7 +106,51 @@ pub fn update_effect_params(
     params: serde_json::Value,
     manager: State<LightingManager>,
 ) -> Result<(), String> {
-    manager.update_effect_params(&port, params)
+    manager.update_scope_effect_params(&port, None, None, params)
+}
+
+#[tauri::command]
+pub fn set_scope_effect(
+    port: String,
+    output_id: Option<String>,
+    segment_id: Option<String>,
+    effect_id: Option<String>,
+    manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    manager.set_scope_effect(
+        &port,
+        output_id.as_deref(),
+        segment_id.as_deref(),
+        effect_id.as_deref(),
+        app_handle,
+    )
+}
+
+#[tauri::command]
+pub fn update_scope_effect_params(
+    port: String,
+    output_id: Option<String>,
+    segment_id: Option<String>,
+    params: serde_json::Value,
+    manager: State<LightingManager>,
+) -> Result<(), String> {
+    manager.update_scope_effect_params(
+        &port,
+        output_id.as_deref(),
+        segment_id.as_deref(),
+        params,
+    )
+}
+
+#[tauri::command]
+pub fn set_output_segments(
+    port: String,
+    output_id: String,
+    segments: Vec<crate::interface::controller::SegmentDefinition>,
+    manager: State<LightingManager>,
+) -> Result<(), String> {
+    manager.set_output_segments(&port, &output_id, segments)
 }
 
 #[tauri::command]

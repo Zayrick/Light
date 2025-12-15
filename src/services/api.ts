@@ -30,6 +30,10 @@ export const api = {
     return await invokeWithLog<Device[]>("scan_devices");
   },
 
+  getDevices: async (): Promise<Device[]> => {
+    return await invokeWithLog<Device[]>("get_devices");
+  },
+
   getEffects: async (): Promise<EffectInfo[]> => {
     return await invokeWithLog<EffectInfo[]>("get_effects");
   },
@@ -40,6 +44,34 @@ export const api = {
 
   updateEffectParams: async (port: string, params: Record<string, unknown>): Promise<void> => {
     return await invokeWithLog("update_effect_params", { port, params }, { port });
+  },
+
+  setScopeEffect: async (args: {
+    port: string;
+    outputId?: string;
+    segmentId?: string;
+    effectId: string | null;
+  }): Promise<void> => {
+    const { port, outputId, segmentId, effectId } = args;
+    return await invokeWithLog(
+      "set_scope_effect",
+      { port, outputId, segmentId, effectId },
+      { port, outputId, segmentId, effectId }
+    );
+  },
+
+  updateScopeEffectParams: async (args: {
+    port: string;
+    outputId?: string;
+    segmentId?: string;
+    params: Record<string, unknown>;
+  }): Promise<void> => {
+    const { port, outputId, segmentId, params } = args;
+    return await invokeWithLog(
+      "update_scope_effect_params",
+      { port, outputId, segmentId, params },
+      { port, outputId, segmentId }
+    );
   },
 
   setBrightness: async (port: string, brightness: number): Promise<void> => {

@@ -3,76 +3,17 @@ import { Device } from "../types";
 import { api } from "../services/api";
 import { logger } from "../services/logger";
 
+export interface SelectedScope {
+  port: string;
+  outputId?: string;
+  segmentId?: string;
+}
+
 export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [selectedScope, setSelectedScope] = useState<SelectedScope | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready");
-
-  const updateDeviceEffect = useCallback((port: string, effectId: string | null) => {
-    setDevices((prev) =>
-      prev.map((dev) =>
-        dev.port === port
-          ? {
-              ...dev,
-              current_effect_id: effectId ?? undefined,
-              current_effect_params: undefined,
-            }
-          : dev
-      )
-    );
-
-    setSelectedDevice((prev) =>
-      prev && prev.port === port
-        ? {
-            ...prev,
-            current_effect_id: effectId ?? undefined,
-            current_effect_params: undefined,
-          }
-        : prev
-    );
-  }, []);
-
-  const updateDeviceParams = useCallback(
-    (port: string, params: Record<string, number | boolean>) => {
-      setDevices((prev) =>
-        prev.map((dev) =>
-          dev.port === port
-            ? {
-                ...dev,
-                current_effect_params: {
-                  ...(dev.current_effect_params ?? {}),
-                  ...params,
-                },
-              }
-            : dev
-        )
-      );
-
-      setSelectedDevice((prev) =>
-        prev && prev.port === port
-          ? {
-              ...prev,
-              current_effect_params: {
-                ...(prev.current_effect_params ?? {}),
-                ...params,
-              },
-            }
-          : prev
-      );
-    },
-    []
-  );
-
-  const updateDeviceBrightness = useCallback((port: string, brightness: number) => {
-    setDevices((prev) =>
-      prev.map((dev) => (dev.port === port ? { ...dev, brightness } : dev))
-    );
-
-    setSelectedDevice((prev) =>
-      prev && prev.port === port ? { ...prev, brightness } : prev
-    );
-  }, []);
 
   const scanDevices = useCallback(async () => {
     setIsScanning(true);
@@ -82,13 +23,13 @@ export function useDevices() {
       const foundDevices = await api.scanDevices();
       setDevices(foundDevices);
       if (foundDevices.length > 0) {
-        // Preserve selection if still exists, otherwise select first
-        setSelectedDevice((prev) => {
-          const stillExists = foundDevices.find((d) => d.id === prev?.id);
-          return stillExists || foundDevices[0];
+        // Preserve selection if still exists, otherwise select first device scope
+        setSelectedScope((prev) => {
+          const stillExists = prev && foundDevices.some((d) => d.port === prev.port);
+          return stillExists ? prev : { port: foundDevices[0].port };
         });
       } else {
-        setSelectedDevice(null);
+        setSelectedScope(null);
       }
       setStatusMsg(
         foundDevices.length > 0
@@ -103,6 +44,23 @@ export function useDevices() {
     }
   }, []);
 
+  const refreshDevices = useCallback(async () => {
+    try {
+      const current = await api.getDevices();
+      setDevices(current);
+      if (current.length > 0) {
+        setSelectedScope((prev) => {
+          const stillExists = prev && current.some((d) => d.port === prev.port);
+          return stillExists ? prev : { port: current[0].port };
+        });
+      } else {
+        setSelectedScope(null);
+      }
+    } catch (error) {
+      logger.error("devices.refresh_failed", {}, error);
+    }
+  }, []);
+
   // Initial scan
   useEffect(() => {
     scanDevices();
@@ -110,14 +68,12 @@ export function useDevices() {
 
   return {
     devices,
-    selectedDevice,
-    setSelectedDevice,
+    selectedScope,
+    setSelectedScope,
     isScanning,
     statusMsg,
     scanDevices,
-    updateDeviceEffect,
-    updateDeviceParams,
-    updateDeviceBrightness,
+    refreshDevices,
   };
 }
 
