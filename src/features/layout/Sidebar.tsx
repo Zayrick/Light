@@ -5,7 +5,6 @@ import { useCallback, memo } from "react";
 import { Device } from "../../types";
 import type { SelectedScope } from "../../hooks/useDevices";
 import { SidebarDeviceTree } from "./SidebarDeviceTree";
-import { SidebarLayoutTree } from "./SidebarLayoutTree";
 import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "./constants";
 
 const ActiveHighlight = memo(() => (
@@ -24,8 +23,6 @@ interface SidebarProps {
   devices: Device[];
   selectedScope: SelectedScope | null;
   setSelectedScope: (scope: SelectedScope | null) => void;
-  selectedLayoutId: string | null;
-  setSelectedLayoutId: (id: string | null) => void;
 }
 
 export function Sidebar({
@@ -34,8 +31,6 @@ export function Sidebar({
   devices,
   selectedScope,
   setSelectedScope,
-  selectedLayoutId,
-  setSelectedLayoutId,
 }: SidebarProps) {
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -50,17 +45,10 @@ export function Sidebar({
     e.currentTarget.style.setProperty("--spotlight-opacity", "0");
   }, []);
 
-  const handleLayoutSelect = useCallback((id: string) => {
-    setSelectedLayoutId(id);
-    setSelectedScope(null); // Clear device selection
-    setActiveTab("layout-preview");
-  }, [setSelectedLayoutId, setSelectedScope, setActiveTab]);
-
   const handleScopeSelect = useCallback((scope: SelectedScope) => {
     setSelectedScope(scope);
-    setSelectedLayoutId(null); // Clear layout selection
     setActiveTab("device-detail");
-  }, [setSelectedScope, setSelectedLayoutId, setActiveTab]);
+  }, [setSelectedScope, setActiveTab]);
 
   return (
     <aside className="sidebar">
@@ -89,14 +77,6 @@ export function Sidebar({
               devices={devices}
               selectedScope={selectedScope}
               onSelectScope={handleScopeSelect}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            />
-
-            <SidebarLayoutTree
-              activeTab={activeTab}
-              selectedLayoutId={selectedLayoutId}
-              onSelect={handleLayoutSelect}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             />
