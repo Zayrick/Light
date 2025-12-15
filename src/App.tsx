@@ -33,6 +33,7 @@ const ANIMATION_TRANSITION = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
+  const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const {
     devices,
     selectedDevice,
@@ -47,17 +48,21 @@ export default function App() {
   const { effects, applyEffect } = useEffects();
 
   // Calculate direction based on sidebar order
-  const getPageIndex = (tab: string, deviceId: string | undefined) => {
+  const getPageIndex = (tab: string, deviceId: string | undefined, layoutId: string | null) => {
     if (tab === "home") return 0;
     if (tab === "settings") return 9999; // Always at bottom
     if (tab === "device-detail" && deviceId) {
       const idx = devices.findIndex(d => d.id === deviceId);
       return idx >= 0 ? idx + 1 : 0;
     }
+    if (tab === "layout-preview" && layoutId) {
+      // Layout items come after devices
+      return devices.length + 1;
+    }
     return 0;
   };
 
-  const currentIndex = getPageIndex(activeTab, selectedDevice?.id);
+  const currentIndex = getPageIndex(activeTab, selectedDevice?.id, selectedLayoutId);
   const prevIndexRef = useRef(currentIndex);
   const direction = currentIndex > prevIndexRef.current ? 1 : -1;
 
@@ -83,9 +88,9 @@ export default function App() {
   return (
     <PlatformProvider>
       <AppLayout
-        disableScroll={activeTab === "device-detail" || activeTab === "home"}
+        disableScroll={activeTab === "device-detail" || activeTab === "home" || activeTab === "layout-preview"}
         hideScrollbar={activeTab === "settings"}
-        pageKey={`${activeTab}-${selectedDevice?.id || ""}`}
+        pageKey={`${activeTab}-${selectedDevice?.id || selectedLayoutId || ""}`}
         sidebar={
           <Sidebar
             activeTab={activeTab}
@@ -93,6 +98,8 @@ export default function App() {
             devices={devices}
             selectedDevice={selectedDevice}
             setSelectedDevice={setSelectedDevice}
+            selectedLayoutId={selectedLayoutId}
+            setSelectedLayoutId={setSelectedLayoutId}
           />
         }
       >
@@ -136,6 +143,24 @@ export default function App() {
                 onUpdateParams={updateDeviceParams}
                 onUpdateBrightness={updateDeviceBrightness}
               />
+            </motion.div>
+          )}
+
+          {activeTab === "layout-preview" && selectedLayoutId && (
+            <motion.div
+              key={`layout-preview-${selectedLayoutId}`}
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={ANIMATION_TRANSITION}
+              style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
+            >
+              <div style={{ textAlign: "center", color: "var(--text-secondary)" }}>
+                <h2 style={{ marginBottom: 8, color: "var(--text-primary)" }}>Layout Preview</h2>
+                <p>Selected: {selectedLayoutId}</p>
+              </div>
             </motion.div>
           )}
 
