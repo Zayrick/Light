@@ -36,23 +36,25 @@ export default function App() {
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const {
     devices,
-    selectedDevice,
-    setSelectedDevice,
+    selectedScope,
+    setSelectedScope,
     isScanning,
     scanDevices,
-    updateDeviceEffect,
-    updateDeviceParams,
-    updateDeviceBrightness,
+    refreshDevices,
   } = useDevices();
   
-  const { effects, applyEffect } = useEffects();
+  const { effects } = useEffects();
+
+  const selectedDevice = selectedScope
+    ? devices.find((d) => d.port === selectedScope.port) ?? null
+    : null;
 
   // Calculate direction based on sidebar order
-  const getPageIndex = (tab: string, deviceId: string | undefined, layoutId: string | null) => {
+  const getPageIndex = (tab: string, devicePort: string | undefined, layoutId: string | null) => {
     if (tab === "home") return 0;
     if (tab === "settings") return 9999; // Always at bottom
-    if (tab === "device-detail" && deviceId) {
-      const idx = devices.findIndex(d => d.id === deviceId);
+    if (tab === "device-detail" && devicePort) {
+      const idx = devices.findIndex(d => d.port === devicePort);
       return idx >= 0 ? idx + 1 : 0;
     }
     if (tab === "layout-preview" && layoutId) {
@@ -62,7 +64,7 @@ export default function App() {
     return 0;
   };
 
-  const currentIndex = getPageIndex(activeTab, selectedDevice?.id, selectedLayoutId);
+  const currentIndex = getPageIndex(activeTab, selectedScope?.port, selectedLayoutId);
   const prevIndexRef = useRef(currentIndex);
   const direction = currentIndex > prevIndexRef.current ? 1 : -1;
 
@@ -70,17 +72,10 @@ export default function App() {
     prevIndexRef.current = currentIndex;
   }, [currentIndex]);
 
-  const handleSetEffect = async (port: string, effectId: string) => {
-    const ok = await applyEffect(port, effectId);
-    if (ok) {
-      updateDeviceEffect(port, effectId);
-    }
-  };
-
-  const handleNavigate = (deviceId: string) => {
-    const device = devices.find((d) => d.id === deviceId);
+  const handleNavigate = (devicePort: string) => {
+    const device = devices.find((d) => d.port === devicePort);
     if (device) {
-      setSelectedDevice(device);
+      setSelectedScope({ port: device.port });
       setActiveTab("device-detail");
     }
   };
@@ -96,8 +91,8 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             devices={devices}
-            selectedDevice={selectedDevice}
-            setSelectedDevice={setSelectedDevice}
+            selectedScope={selectedScope}
+            setSelectedScope={setSelectedScope}
             selectedLayoutId={selectedLayoutId}
             setSelectedLayoutId={setSelectedLayoutId}
           />
@@ -138,10 +133,9 @@ export default function App() {
             >
               <DeviceDetail
                 device={selectedDevice}
+                scope={selectedScope ?? { port: selectedDevice.port }}
                 effects={effects}
-                onSetEffect={handleSetEffect}
-                onUpdateParams={updateDeviceParams}
-                onUpdateBrightness={updateDeviceBrightness}
+                onRefresh={refreshDevices}
               />
             </motion.div>
           )}

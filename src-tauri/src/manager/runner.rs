@@ -1,231 +1,532 @@
 use serde_json::Value;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Condvar, Mutex};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-use crate::interface::controller::{Color, Controller};
-use crate::manager::inventory::create_effect;
+use crate::interface::controller::{Color, MatrixMap, SegmentType};
+use crate::interface::effect::Effect;
 
-pub struct EffectRunner {
-    running: Arc<AtomicBool>,
-    brightness: Arc<AtomicU8>,
-    ticker_thread: Option<JoinHandle<()>>,
-    writer_thread: Option<JoinHandle<()>>,
-    shared_state: Arc<(Mutex<Option<Vec<Color>>>, Condvar)>,
-    param_tx: Sender<Value>,
+use super::inventory::create_effect;
+use super::{DeviceConfig, ResolvedEffect};
+
+type ControllerRef = Arc<Mutex<Box<dyn crate::interface::controller::Controller>>>;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct TargetKey {
+    output_id: String,
+    segment_id: Option<String>, // None = whole output
 }
 
-impl EffectRunner {
-    pub fn start(
+struct TargetRuntime {
+    effect_id: String,
+    origin_started_at: Instant,
+    origin_rev: u64,
+    width: usize,
+    height: usize,
+    effect: Box<dyn Effect>,
+    buffer: Vec<Color>,
+}
+
+impl TargetRuntime {
+    fn new(
         effect_id: &str,
-        controller_arc: Arc<Mutex<Box<dyn Controller>>>,
-        app_handle: AppHandle,
-        initial_brightness: u8,
+        width: usize,
+        height: usize,
+        origin_started_at: Instant,
+        origin_rev: u64,
+        params: &serde_json::Map<String, Value>,
     ) -> Result<Self, String> {
-        // Check if effect exists before spawning
-        if create_effect(effect_id).is_none() {
-            return Err(format!("Effect '{}' not found", effect_id));
+        let mut effect = create_effect(effect_id)
+            .ok_or_else(|| format!("Effect '{}' not found", effect_id))?;
+        effect.resize(width, height);
+        effect.update_params(Value::Object(params.clone()));
+
+        let len = width.checked_mul(height).unwrap_or(0).max(1);
+
+        Ok(Self {
+            effect_id: effect_id.to_string(),
+            origin_started_at,
+            origin_rev,
+            width,
+            height,
+            effect,
+            buffer: vec![Color::default(); len],
+        })
+    }
+
+    fn ensure_updated(
+        &mut self,
+        effect_id: &str,
+        width: usize,
+        height: usize,
+        origin_started_at: Instant,
+        origin_rev: u64,
+        params: &serde_json::Map<String, Value>,
+    ) -> Result<(), String> {
+        let needs_recreate = self.effect_id != effect_id
+            || self.origin_started_at != origin_started_at
+            || self.width != width
+            || self.height != height;
+
+        if needs_recreate {
+            *self = Self::new(effect_id, width, height, origin_started_at, origin_rev, params)?;
+            return Ok(());
         }
 
-        let port_name = {
-            let c = controller_arc.lock().unwrap();
-            c.port_name()
-        };
+        if self.origin_rev != origin_rev {
+            self.origin_rev = origin_rev;
+            self.effect.update_params(Value::Object(params.clone()));
+        }
 
+        Ok(())
+    }
+
+    fn tick(&mut self, elapsed: Duration) {
+        let len = self.width.checked_mul(self.height).unwrap_or(0).max(1);
+        if self.buffer.len() != len {
+            self.buffer.resize(len, Color::default());
+        }
+        self.effect.tick(elapsed, &mut self.buffer);
+    }
+}
+
+pub struct DeviceRunner {
+    running: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl DeviceRunner {
+    pub(super) fn start(
+        port: String,
+        controller: ControllerRef,
+        config: Arc<Mutex<DeviceConfig>>,
+        app_handle: AppHandle,
+    ) -> Result<Self, String> {
         let running = Arc::new(AtomicBool::new(true));
-        let brightness = Arc::new(AtomicU8::new(initial_brightness));
-        let shared_state = Arc::new((Mutex::new(None::<Vec<Color>>), Condvar::new()));
-        let (param_tx, param_rx) = mpsc::channel();
+        let running_thread = running.clone();
 
-        // Channel for recycling buffers to avoid allocation
-        let (recycle_tx, recycle_rx) = mpsc::channel();
+        let thread = thread::spawn(move || {
+            let frame_duration = Duration::from_micros(16666); // ~60 FPS
+            let mut next_frame = Instant::now();
 
-        // --- Writer Thread ---
-        let writer_running = running.clone();
-        let writer_brightness = brightness.clone();
-        let writer_state = shared_state.clone();
-        let writer_controller = controller_arc.clone();
-        let writer_recycle_tx = recycle_tx.clone();
+            let mut target_runtimes: HashMap<TargetKey, TargetRuntime> = HashMap::new();
+            let mut device_buffer: Vec<Color> = Vec::new();
 
-        let writer_thread = thread::spawn(move || {
-            let (lock, cvar) = &*writer_state;
-            let mut output_buffer = Vec::<Color>::new();
+            while running_thread.load(Ordering::Relaxed) {
+                let now = Instant::now();
 
-            loop {
-                let mut frame_guard = lock.lock().unwrap();
+                // Snapshot config for this tick.
+                let (brightness, tasks, total_len) = {
+                    let cfg = config.lock().unwrap();
+                    let brightness = cfg.brightness;
+                    let mut tasks = Vec::new();
 
-                // Wait for data or stop signal
-                while frame_guard.is_none() && writer_running.load(Ordering::Relaxed) {
-                    frame_guard = cvar.wait(frame_guard).unwrap();
-                }
+                    let mut offset: usize = 0;
+                    for out in &cfg.outputs {
+                        let out_len = out.leds_count.max(1);
 
-                // Check exit condition
-                if !writer_running.load(Ordering::Relaxed) && frame_guard.is_none() {
-                    break;
-                }
+                        // Segments are user-defined and only meaningful for linear outputs.
+                        // If there are no segments, render the output as a whole.
+                        let use_segments =
+                            out.output_type == SegmentType::Linear && !out.segments.is_empty();
 
-                // Take latest frame
-                let frame = frame_guard.take();
-                drop(frame_guard); // Unlock to allow Ticker to produce next frame
+                        if use_segments {
+                            let seg_total =
+                                out.segments.iter().map(|s| s.leds_count).sum::<usize>();
 
-                if let Some(colors) = frame {
-                    let b_val = writer_brightness.load(Ordering::Relaxed);
+                            // Safety fallback: if segments don't cover the output, ignore them.
+                            if seg_total != out_len {
+                                let resolved = resolve_effect_for_output(&cfg, &port, &out.id);
+                                tasks.push(TargetTask {
+                                    key: TargetKey {
+                                        output_id: out.id.clone(),
+                                        segment_id: None,
+                                    },
+                                    layout_type: out.output_type,
+                                    leds_count: out_len,
+                                    matrix: out.matrix.clone(),
+                                    physical_offset: offset,
+                                    resolved,
+                                });
+                                offset = offset.saturating_add(out_len);
+                            } else {
+                                for seg in &out.segments {
+                                    let resolved = resolve_effect_for_segment(
+                                        &cfg,
+                                        &port,
+                                        &out.id,
+                                        &seg.id,
+                                    );
 
-                    // Apply brightness if needed
-                    let target_slice = if b_val >= 100 {
-                        &colors[..]
-                    } else {
-                        let factor = b_val as f32 / 100.0;
-                        if output_buffer.len() != colors.len() {
-                            output_buffer.resize(colors.len(), Color::default());
+                                    tasks.push(TargetTask {
+                                        key: TargetKey {
+                                            output_id: out.id.clone(),
+                                            segment_id: Some(seg.id.clone()),
+                                        },
+                                        layout_type: seg.segment_type,
+                                        leds_count: seg.leds_count.max(1),
+                                        matrix: seg.matrix.clone(),
+                                        physical_offset: offset,
+                                        resolved,
+                                    });
+
+                                    offset = offset.saturating_add(seg.leds_count.max(1));
+                                }
+                            }
+                        } else {
+                            let resolved = resolve_effect_for_output(&cfg, &port, &out.id);
+                            tasks.push(TargetTask {
+                                key: TargetKey {
+                                    output_id: out.id.clone(),
+                                    segment_id: None,
+                                },
+                                layout_type: out.output_type,
+                                leds_count: out_len,
+                                matrix: out.matrix.clone(),
+                                physical_offset: offset,
+                                resolved,
+                            });
+
+                            offset = offset.saturating_add(out_len);
                         }
-                        for (i, c) in colors.iter().enumerate() {
-                            output_buffer[i] = Color {
-                                r: (c.r as f32 * factor).round() as u8,
-                                g: (c.g as f32 * factor).round() as u8,
-                                b: (c.b as f32 * factor).round() as u8,
-                            };
-                        }
-                        &output_buffer[..]
+                    }
+
+                    (brightness, tasks, offset)
+                };
+
+                // Prune runtimes for removed targets (config edits).
+                let task_keys: HashSet<TargetKey> =
+                    tasks.iter().map(|t| t.key.clone()).collect();
+                target_runtimes.retain(|k, _| task_keys.contains(k));
+
+                // Prepare device buffer in physical order.
+                if device_buffer.len() != total_len {
+                    device_buffer.resize(total_len, Color::default());
+                }
+                device_buffer.fill(Color::default());
+
+                // Render all targets.
+                for task in tasks {
+                    let Some(resolved) = task.resolved else {
+                        target_runtimes.remove(&task.key);
+                        continue;
                     };
 
-                    let mut c = writer_controller.lock().unwrap();
-                    if c.update(target_slice).is_err() {
-                        break; // Stop on hardware error
+                    let (width, height) =
+                        virtual_layout_for_segment(task.layout_type, task.leds_count, &task.matrix);
+                    if width == 0 || height == 0 {
+                        continue;
                     }
-                    // Recycle the buffer
-                    let _ = writer_recycle_tx.send(colors);
+
+                    let params = resolved.params.clone();
+                    let entry = target_runtimes.entry(task.key.clone());
+                    let runtime = match entry {
+                        std::collections::hash_map::Entry::Occupied(mut e) => {
+                            if let Err(err) = e.get_mut().ensure_updated(
+                                &resolved.effect_id,
+                                width,
+                                height,
+                                resolved.started_at,
+                                resolved.origin_rev,
+                                &params,
+                            ) {
+                                let seg = task
+                                    .key
+                                    .segment_id
+                                    .as_deref()
+                                    .unwrap_or("<output>");
+                                log::warn!(
+                                    port = port.as_str(),
+                                    output_id = task.key.output_id.as_str(),
+                                    segment_id = seg,
+                                    err:display = err;
+                                    "[runner] Failed to update segment runtime"
+                                );
+                                e.remove();
+                                continue;
+                            }
+                            e.into_mut()
+                        }
+                        std::collections::hash_map::Entry::Vacant(v) => match TargetRuntime::new(
+                            &resolved.effect_id,
+                            width,
+                            height,
+                            resolved.started_at,
+                            resolved.origin_rev,
+                            &params,
+                        ) {
+                            Ok(rt) => v.insert(rt),
+                            Err(err) => {
+                                let seg = task
+                                    .key
+                                    .segment_id
+                                    .as_deref()
+                                    .unwrap_or("<output>");
+                                log::warn!(
+                                    port = port.as_str(),
+                                    output_id = task.key.output_id.as_str(),
+                                    segment_id = seg,
+                                    err:display = err;
+                                    "[runner] Failed to create segment runtime"
+                                );
+                                continue;
+                            }
+                        },
+                    };
+
+                    let elapsed = now.duration_since(runtime.origin_started_at);
+                    runtime.tick(elapsed);
+
+                    map_segment_into_physical(
+                        &runtime.buffer,
+                        task.layout_type,
+                        task.leds_count,
+                        &task.matrix,
+                        task.physical_offset,
+                        &mut device_buffer,
+                    );
                 }
-            }
-        });
 
-        // --- Ticker Thread ---
-        let ticker_running = running.clone();
-        let ticker_state = shared_state.clone();
-        let effect_id = effect_id.to_string();
-        let ticker_controller = controller_arc.clone(); // For getting length
-        let ticker_recycle_tx = recycle_tx; // Move original tx here (or clone if needed later)
-        let ticker_app_handle = app_handle.clone();
-        let ticker_port_name = port_name.clone();
-
-        let ticker_thread = thread::spawn(move || {
-            let mut effect = match create_effect(&effect_id) {
-                Some(e) => e,
-                None => return,
-            };
-
-            let (virtual_width, virtual_height, virtual_len) = {
-                let c = ticker_controller.lock().unwrap();
-                let (w, h) = c.virtual_layout();
-                let len = w.checked_mul(h).unwrap_or(0).max(1);
-                (w, h, len)
-            };
-
-            // Inform effect of the current virtual layout
-            effect.resize(virtual_width, virtual_height);
-
-            let (lock, cvar) = &*ticker_state;
-            let start_time = Instant::now();
-            let frame_duration = Duration::from_micros(16666); // ~60 FPS
-            let mut next_frame_time = start_time;
-
-            while ticker_running.load(Ordering::Relaxed) {
-                // 0. Check for param updates
-                while let Ok(params) = param_rx.try_recv() {
-                    effect.update_params(params);
+                // Apply brightness (0..=100).
+                if brightness < 100 {
+                    let factor = (brightness as f32 / 100.0).clamp(0.0, 1.0);
+                    for c in &mut device_buffer {
+                        c.r = (c.r as f32 * factor).round() as u8;
+                        c.g = (c.g as f32 * factor).round() as u8;
+                        c.b = (c.b as f32 * factor).round() as u8;
+                    }
                 }
 
-                // 1. Get buffer (recycle or create)
-                let mut buffer = recycle_rx
-                    .try_recv()
-                    .unwrap_or_else(|_| vec![Color::default(); virtual_len]);
-
-                // Ensure size is correct (in case layout changed or new buffer)
-                if buffer.len() != virtual_len {
-                    buffer.resize(virtual_len, Color::default());
+                // Write to hardware.
+                {
+                    let mut c = controller.lock().unwrap();
+                    if let Err(err) = c.update(&device_buffer) {
+                        log::warn!(
+                            port = port.as_str(),
+                            err:display = err;
+                            "[runner] Controller update failed"
+                        );
+                        break;
+                    }
                 }
 
-                // 2. Tick Effect
-                let now = Instant::now();
-                effect.tick(now.duration_since(start_time), &mut buffer);
-
-                // Emit event to frontend
-                let _ = ticker_app_handle.emit(
+                // Emit preview event (flattened physical order for now).
+                let _ = app_handle.emit(
                     "device-led-update",
                     serde_json::json!({
-                        "port": ticker_port_name,
-                        "width": virtual_width,
-                        "height": virtual_height,
-                        "colors": buffer,
+                        "port": port.as_str(),
+                        "colors": device_buffer.clone(),
                     }),
                 );
 
-                // 3. Send to Writer (Overwrite existing)
-                {
-                    let mut frame_guard = lock.lock().unwrap();
-
-                    // If there was an unconsumed frame, recycle it
-                    if let Some(dropped_frame) = frame_guard.take() {
-                        let _ = ticker_recycle_tx.send(dropped_frame);
-                    }
-
-                    *frame_guard = Some(buffer);
-                    cvar.notify_one();
-                }
-
-                // 4. Precise Timing
-                next_frame_time += frame_duration;
-                let now_after = Instant::now();
-
-                if next_frame_time > now_after {
-                    thread::sleep(next_frame_time - now_after);
+                // Timing.
+                next_frame += frame_duration;
+                let after = Instant::now();
+                if next_frame > after {
+                    thread::sleep(next_frame - after);
                 } else {
-                    // Running behind: reset schedule to prevent catch-up bursts
-                    next_frame_time = now_after;
+                    next_frame = after;
                     thread::yield_now();
                 }
             }
-
-            // Ensure Writer wakes up to see running=false
-            let (_lock, cvar) = &*ticker_state;
-            cvar.notify_all();
         });
 
         Ok(Self {
             running,
-            ticker_thread: Some(ticker_thread),
-            writer_thread: Some(writer_thread),
-            shared_state,
-            param_tx,
-            brightness,
+            thread: Some(thread),
         })
     }
 
-    pub fn update_params(&self, params: Value) {
-        let _ = self.param_tx.send(params);
-    }
-
-    pub fn set_brightness(&self, brightness: u8) {
-        self.brightness.store(brightness, Ordering::Relaxed);
-    }
-
-    pub fn stop(mut self) {
+    pub(super) fn stop(mut self) {
         self.running.store(false, Ordering::Relaxed);
-
-        // Wake up writer in case it's waiting
-        {
-            let (_lock, cvar) = &*self.shared_state;
-            cvar.notify_all();
-        }
-
-        if let Some(handle) = self.ticker_thread.take() {
-            let _ = handle.join();
-        }
-        if let Some(handle) = self.writer_thread.take() {
+        if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
     }
 }
+
+// ============================================================================
+// Segment rendering helpers
+// ============================================================================
+
+#[derive(Clone)]
+struct TargetTask {
+    key: TargetKey,
+    layout_type: SegmentType,
+    leds_count: usize,
+    matrix: Option<MatrixMap>,
+    physical_offset: usize,
+    resolved: Option<ResolvedEffect>,
+}
+
+fn virtual_layout_for_segment(
+    segment_type: SegmentType,
+    leds_count: usize,
+    matrix: &Option<MatrixMap>,
+) -> (usize, usize) {
+    match segment_type {
+        SegmentType::Single => (1, 1),
+        SegmentType::Linear => (leds_count.max(1), 1),
+        SegmentType::Matrix => {
+            if let Some(m) = matrix {
+                (m.width.max(1), m.height.max(1))
+            } else {
+                // Fallback: treat as 1D.
+                (leds_count.max(1), 1)
+            }
+        }
+    }
+}
+
+fn map_segment_into_physical(
+    virtual_buffer: &[Color],
+    segment_type: SegmentType,
+    leds_count: usize,
+    matrix: &Option<MatrixMap>,
+    physical_offset: usize,
+    physical_out: &mut [Color],
+) {
+    match segment_type {
+        SegmentType::Single => {
+            if physical_offset < physical_out.len() && !virtual_buffer.is_empty() {
+                physical_out[physical_offset] = virtual_buffer[0];
+            }
+        }
+        SegmentType::Linear => {
+            let len = leds_count.min(virtual_buffer.len());
+            let end = (physical_offset + len).min(physical_out.len());
+            let write_len = end.saturating_sub(physical_offset);
+            if write_len > 0 {
+                physical_out[physical_offset..physical_offset + write_len]
+                    .copy_from_slice(&virtual_buffer[..write_len]);
+            }
+        }
+        SegmentType::Matrix => {
+            let Some(m) = matrix else {
+                // No map: fall back to linear mapping.
+                let len = leds_count.min(virtual_buffer.len());
+                let end = (physical_offset + len).min(physical_out.len());
+                let write_len = end.saturating_sub(physical_offset);
+                if write_len > 0 {
+                    physical_out[physical_offset..physical_offset + write_len]
+                        .copy_from_slice(&virtual_buffer[..write_len]);
+                }
+                return;
+            };
+
+            // Map virtual indices to physical indices within this segment.
+            for (virtual_idx, opt_phys_idx) in m.map.iter().enumerate() {
+                let Some(local_phys) = opt_phys_idx else { continue };
+                if virtual_idx >= virtual_buffer.len() {
+                    break;
+                }
+                if *local_phys >= leds_count {
+                    continue;
+                }
+                let dest = physical_offset.saturating_add(*local_phys);
+                if dest < physical_out.len() {
+                    physical_out[dest] = virtual_buffer[virtual_idx];
+                }
+            }
+        }
+    }
+}
+
+// Resolve effective effect for a segment by applying inheritance:
+// segment -> output -> device.
+fn resolve_effect_for_segment(
+    cfg: &DeviceConfig,
+    port: &str,
+    output_id: &str,
+    segment_id: &str,
+) -> Option<ResolvedEffect> {
+    let out = cfg.outputs.iter().find(|o| o.id == output_id)?;
+    let seg = out.segments.iter().find(|s| s.id == segment_id)?;
+
+    if let Some(active) = &seg.mode.active_effect {
+        return Some(ResolvedEffect {
+            effect_id: active.effect_id.clone(),
+            from: super::ScopeRef {
+                port: port.to_string(),
+                output_id: Some(out.id.clone()),
+                segment_id: Some(seg.id.clone()),
+            },
+            started_at: active.started_at,
+            params: seg.mode.params_for_effect(&active.effect_id)?,
+            origin_rev: seg.mode.rev,
+        });
+    }
+
+    if let Some(active) = &out.mode.active_effect {
+        return Some(ResolvedEffect {
+            effect_id: active.effect_id.clone(),
+            from: super::ScopeRef {
+                port: port.to_string(),
+                output_id: Some(out.id.clone()),
+                segment_id: None,
+            },
+            started_at: active.started_at,
+            params: out.mode.params_for_effect(&active.effect_id)?,
+            origin_rev: out.mode.rev,
+        });
+    }
+
+    if let Some(active) = &cfg.mode.active_effect {
+        return Some(ResolvedEffect {
+            effect_id: active.effect_id.clone(),
+            from: super::ScopeRef {
+                port: port.to_string(),
+                output_id: None,
+                segment_id: None,
+            },
+            started_at: active.started_at,
+            params: cfg.mode.params_for_effect(&active.effect_id)?,
+            origin_rev: cfg.mode.rev,
+        });
+    }
+
+    None
+}
+
+fn resolve_effect_for_output(
+    cfg: &DeviceConfig,
+    port: &str,
+    output_id: &str,
+) -> Option<ResolvedEffect> {
+    let out = cfg.outputs.iter().find(|o| o.id == output_id)?;
+
+    if let Some(active) = &out.mode.active_effect {
+        return Some(ResolvedEffect {
+            effect_id: active.effect_id.clone(),
+            from: super::ScopeRef {
+                port: port.to_string(),
+                output_id: Some(out.id.clone()),
+                segment_id: None,
+            },
+            started_at: active.started_at,
+            params: out.mode.params_for_effect(&active.effect_id)?,
+            origin_rev: out.mode.rev,
+        });
+    }
+
+    if let Some(active) = &cfg.mode.active_effect {
+        return Some(ResolvedEffect {
+            effect_id: active.effect_id.clone(),
+            from: super::ScopeRef {
+                port: port.to_string(),
+                output_id: None,
+                segment_id: None,
+            },
+            started_at: active.started_at,
+            params: cfg.mode.params_for_effect(&active.effect_id)?,
+            origin_rev: cfg.mode.rev,
+        });
+    }
+
+    None
+}
+
+

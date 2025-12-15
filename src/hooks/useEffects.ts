@@ -21,16 +21,6 @@ export function useEffects() {
       });
   }, []);
 
-  const applyEffect = async (port: string, effectId: string) => {
-    try {
-      await api.setEffect(port, effectId);
-      return true;
-    } catch (error) {
-      logger.error("effects.apply_failed", { port, effectId }, error);
-      return false;
-    }
-  };
-
-  return { effects, loading, error, applyEffect };
+  return { effects, loading, error };
 }
 

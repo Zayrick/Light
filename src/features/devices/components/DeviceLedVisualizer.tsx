@@ -111,17 +111,71 @@ export function DeviceLedVisualizer({ device }: Props) {
   const workerRef = useRef<Worker | null>(null);
   const workerReady = useRef(false);
 
-  const virtualWidth = device.virtual_layout?.[0] ?? device.length;
-  const virtualHeight = device.virtual_layout?.[1] ?? 1;
-  const totalLeds = virtualWidth * virtualHeight;
-  const isMatrix = virtualHeight > 1;
-  const matrixMap = device.zones.find((z) => z.zone_type === 'Matrix')?.matrix?.map ?? null;
+  const physicalLen = useMemo(() => {
+    const sum = device.outputs.reduce((acc, o) => {
+      const segSum =
+        o.output_type === "Linear" && o.segments.length > 0
+          ? o.segments.reduce((sAcc, s) => sAcc + (s.leds_count ?? 0), 0)
+          : 0;
 
-  const { colors, isDefault } = useLedColors(device.port, totalLeds);
+      return acc + (segSum > 0 ? segSum : (o.leds_count ?? 0));
+    }, 0);
+    return Math.max(1, sum);
+  }, [device.outputs]);
+
+  const singleOutput = device.outputs.length === 1 ? device.outputs[0] : null;
+
+  const isMatrix =
+    singleOutput?.output_type === "Matrix" &&
+    !!singleOutput.matrix &&
+    singleOutput.matrix.width > 1 &&
+    singleOutput.matrix.height > 1;
+
+  const virtualWidth = isMatrix ? singleOutput!.matrix!.width : physicalLen;
+  const virtualHeight = isMatrix ? singleOutput!.matrix!.height : 1;
+  const virtualLen = Math.max(1, virtualWidth * virtualHeight);
+  const matrixMap = isMatrix ? (singleOutput!.matrix!.map ?? null) : null;
+
+  const { colors: physicalColors, isDefault: isDefaultPhysical } = useLedColors(
+    device.port,
+    physicalLen
+  );
+
+  const { colors, isDefault } = useMemo(() => {
+    if (!isMatrix || !matrixMap) {
+      return { colors: physicalColors, isDefault: isDefaultPhysical };
+    }
+
+    // Reconstruct virtual (width*height) color buffer from physical LEDs using the matrix map.
+    const out: LedColor[] = Array.from({ length: virtualLen }, () => ({
+      r: 0,
+      g: 0,
+      b: 0,
+    }));
+
+    for (let i = 0; i < virtualLen; i++) {
+      const phys = matrixMap[i];
+      if (phys === null || phys === undefined) continue;
+      if (phys >= 0 && phys < physicalColors.length) {
+        out[i] = physicalColors[phys] as LedColor;
+      }
+    }
+
+    return { colors: out, isDefault: isDefaultPhysical };
+  }, [isMatrix, matrixMap, physicalColors, isDefaultPhysical, virtualLen]);
 
   const layout = useMemo(
-    () => computeLayout(bounds.width, bounds.height, totalLeds, isMatrix, virtualWidth, virtualHeight, matrixMap),
-    [bounds.width, bounds.height, totalLeds, isMatrix, virtualWidth, virtualHeight, matrixMap]
+    () =>
+      computeLayout(
+        bounds.width,
+        bounds.height,
+        virtualLen,
+        isMatrix,
+        virtualWidth,
+        virtualHeight,
+        matrixMap
+      ),
+    [bounds.width, bounds.height, virtualLen, isMatrix, virtualWidth, virtualHeight, matrixMap]
   );
 
   const isValidLayout = layout.cols > 0 && layout.rows > 0 && layout.size > 0;
@@ -192,7 +246,7 @@ export function DeviceLedVisualizer({ device }: Props) {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const i = row * cols + col;
-        if (!isMatrix && i >= totalLeds) continue;
+        if (!isMatrix && i >= virtualLen) continue;
 
         const x = offsetX + col * (size + gap);
         const y = offsetY + row * (size + gap);
@@ -208,7 +262,7 @@ export function DeviceLedVisualizer({ device }: Props) {
         drawRoundedRect(ctx, x, y, size, size, radius);
       }
     }
-  }, [layout, isValidLayout, colors, isDefault, isMatrix, totalLeds, matrixMap]);
+  }, [layout, isValidLayout, colors, isDefault, isMatrix, virtualLen, matrixMap]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>

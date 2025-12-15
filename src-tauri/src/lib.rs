@@ -155,10 +155,14 @@ pub fn run() {
         .manage(LightingManager::new())
         .invoke_handler(tauri::generate_handler![
             commands::scan_devices,
+            commands::get_devices,
             commands::get_effects,
             commands::get_displays,
             commands::set_effect,
             commands::update_effect_params,
+            commands::set_scope_effect,
+            commands::update_scope_effect_params,
+            commands::set_output_segments,
             commands::set_brightness,
             commands::set_capture_scale,
             commands::get_capture_scale,

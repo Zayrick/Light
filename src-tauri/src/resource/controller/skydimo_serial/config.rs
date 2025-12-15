@@ -1,4 +1,4 @@
-use crate::interface::controller::{MatrixMap, Zone};
+use crate::interface::controller::{MatrixMap, SegmentType};
 
 #[derive(Clone, Copy, Debug)]
 pub enum SkydimoLayoutType {
@@ -10,6 +10,7 @@ pub enum SkydimoLayoutType {
 
 #[derive(Clone, Copy, Debug)]
 pub struct SkydimoZoneConfig {
+    #[allow(dead_code)]
     pub name: &'static str,
     pub led_count: usize,
 }
@@ -542,12 +543,13 @@ pub fn extract_model_from_device_name(device_name: &str) -> Option<&str> {
     None
 }
 
-pub struct SkydimoMatrixLayout {
+pub struct SkydimoDefaultLayout {
     pub total_leds: usize,
-    pub zone: Zone,
+    pub segment_type: SegmentType,
+    pub matrix: Option<MatrixMap>,
 }
 
-fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixLayout> {
+fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoDefaultLayout> {
     use SkydimoLayoutType::*;
 
     let zone_count = config.zones.len();
@@ -576,8 +578,11 @@ fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixL
 
     // For pure strips, keep linear layout instead of a sparse matrix.
     if let Strip1 = config.layout {
-        let zone = Zone::linear(config.zones[0].name, 0, total_leds);
-        return Some(SkydimoMatrixLayout { total_leds, zone });
+        return Some(SkydimoDefaultLayout {
+            total_leds,
+            segment_type: SegmentType::Linear,
+            matrix: None,
+        });
     }
 
     let (height, width) = match config.layout {
@@ -708,13 +713,15 @@ fn build_matrix_for_config(config: &SkydimoModelConfig) -> Option<SkydimoMatrixL
 
     let matrix = MatrixMap { width, height, map };
 
-    let zone = Zone::matrix("Matrix", matrix, total_leds);
-
-    Some(SkydimoMatrixLayout { total_leds, zone })
+    Some(SkydimoDefaultLayout {
+        total_leds,
+        segment_type: SegmentType::Matrix,
+        matrix: Some(matrix),
+    })
 }
 
 /// Build the best-guess layout from a full device name string.
-pub fn build_layout_from_device_name(device_name: &str) -> Option<SkydimoMatrixLayout> {
+pub fn build_layout_from_device_name(device_name: &str) -> Option<SkydimoDefaultLayout> {
     // First try "Skydimo XXX" form.
     if let Some(model_id) = extract_model_from_device_name(device_name) {
         if let Some(config) = get_skydimo_model_config(model_id) {
