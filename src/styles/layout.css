@@ -105,10 +105,6 @@
 
 /* Active state styles for nav item handled dynamically by React/Framer Motion */
 
-.nav-item.active .icon {
-  color: var(--accent-color);
-}
-
 .nav-divider {
   height: 1px;
   background-color: var(--border-subtle);
@@ -193,8 +189,22 @@
 }
 
 .device-list-item.active .device-list-icon {
-  color: var(--accent-color);
   opacity: 1;
+}
+
+.sidebar-status-dot-wrap {
+  width: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--color-gray);
 }
 
 .active-highlight {
@@ -377,7 +387,6 @@
 
 .layout-tree-item.active .device-list-icon,
 .layout-branch-control.active .device-list-icon {
-  color: var(--accent-color);
   opacity: 1;
 }
 
