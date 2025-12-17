@@ -6,6 +6,8 @@
   
   --bg-card: rgba(255, 255, 255, 0.6); /* More frosted for readability */
   --bg-card-hover: rgba(255, 255, 255, 0.8);
+  /* Context Menu: less transparent, still frosted */
+  --bg-context-menu: rgba(255, 255, 255, 0.94);
   
   --text-primary: #1a1a1a;
   --text-secondary: #5f5f5f;
@@ -55,6 +57,8 @@
     
     --bg-card: rgba(45, 45, 45, 0.5); /* Slightly more opaque for contrast */
     --bg-card-hover: rgba(60, 60, 60, 0.7);
+    /* Context Menu: less transparent, still frosted */
+    --bg-context-menu: rgba(32, 32, 32, 0.92);
 
     --text-primary: #ffffff;
     --text-secondary: #d0d0d0;

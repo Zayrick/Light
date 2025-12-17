@@ -1,5 +1,6 @@
 import { TreeView, createTreeCollection } from "@ark-ui/react/tree-view";
-import { ChevronRight, PlugZap, Zap } from "lucide-react";
+import { Menu } from "@ark-ui/react/menu";
+import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
@@ -205,29 +206,49 @@ const DeviceTreeItem = ({
     });
   };
 
+  const ContextMenu = ({ children }: { children: React.ReactNode }) => (
+    <Menu.Root lazyMount unmountOnExit>
+      <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
+      <Menu.Positioner>
+        <Menu.Content>
+          <Menu.Item value="turn-off">
+            <Power />
+            关灯
+          </Menu.Item>
+          <Menu.Item value="settings">
+            <Settings />
+            设置设备
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Positioner>
+    </Menu.Root>
+  );
+
   return (
     <TreeView.NodeProvider key={node.id} node={node} indexPath={indexPath}>
       {node.children ? (
         <TreeView.Branch className="layout-tree-branch">
-          <TreeView.BranchControl
-            className={clsx("device-list-item layout-branch-control", isSelected && "active")}
-            style={indentStyle}
-            onClick={handleClick}
-            onMouseMove={onMouseMove}
-            onMouseLeave={onMouseLeave}
-          >
-            <Highlight />
-            {icon}
-            <div className="device-list-info">
-              <div className="device-list-item-name">{node.name}</div>
-              {node.kind === "device" && (
-                <div className="device-list-item-port">{node.port}</div>
-              )}
-            </div>
-            <TreeView.BranchIndicator className="layout-branch-indicator">
-              <ChevronRight size={14} />
-            </TreeView.BranchIndicator>
-          </TreeView.BranchControl>
+          <ContextMenu>
+            <TreeView.BranchControl
+              className={clsx("device-list-item layout-branch-control", isSelected && "active")}
+              style={indentStyle}
+              onClick={handleClick}
+              onMouseMove={onMouseMove}
+              onMouseLeave={onMouseLeave}
+            >
+              <Highlight />
+              {icon}
+              <div className="device-list-info">
+                <div className="device-list-item-name">{node.name}</div>
+                {node.kind === "device" && (
+                  <div className="device-list-item-port">{node.port}</div>
+                )}
+              </div>
+              <TreeView.BranchIndicator className="layout-branch-indicator">
+                <ChevronRight size={14} />
+              </TreeView.BranchIndicator>
+            </TreeView.BranchControl>
+          </ContextMenu>
           <TreeView.BranchContent className="layout-branch-content">
             {node.children.map((child, index) => (
               <DeviceTreeItem
@@ -243,19 +264,21 @@ const DeviceTreeItem = ({
           </TreeView.BranchContent>
         </TreeView.Branch>
       ) : (
-        <TreeView.Item
-          className={clsx("device-list-item layout-tree-item", isSelected && "active")}
-          style={indentStyle}
-          onClick={handleClick}
-          onMouseMove={onMouseMove}
-          onMouseLeave={onMouseLeave}
-        >
-          <Highlight />
-          <TreeView.ItemText className="layout-item-text">
-            {segmentDot ?? icon}
-            <span className="device-list-item-name">{node.name}</span>
-          </TreeView.ItemText>
-        </TreeView.Item>
+        <ContextMenu>
+          <TreeView.Item
+            className={clsx("device-list-item layout-tree-item", isSelected && "active")}
+            style={indentStyle}
+            onClick={handleClick}
+            onMouseMove={onMouseMove}
+            onMouseLeave={onMouseLeave}
+          >
+            <Highlight />
+            <TreeView.ItemText className="layout-item-text">
+              {segmentDot ?? icon}
+              <span className="device-list-item-name">{node.name}</span>
+            </TreeView.ItemText>
+          </TreeView.Item>
+        </ContextMenu>
       )}
     </TreeView.NodeProvider>
   );
