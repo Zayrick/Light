@@ -764,6 +764,15 @@ impl LightingManager {
         output_id: Option<&str>,
         segment_id: Option<&str>,
     ) -> Option<ResolvedEffect> {
+        Self::resolve_effect_for_scope_inner(cfg, port, output_id, segment_id)
+    }
+
+    fn resolve_effect_for_scope_inner(
+        cfg: &DeviceConfig,
+        port: &str,
+        output_id: Option<&str>,
+        segment_id: Option<&str>,
+    ) -> Option<ResolvedEffect> {
         match (output_id, segment_id) {
             (None, None) => cfg.mode.active_effect.as_ref().and_then(|active| {
                 let params = cfg.mode.params_for_effect(&active.effect_id)?;
@@ -795,7 +804,7 @@ impl LightingManager {
                         origin_rev: out.mode.rev,
                     })
                 } else {
-                    self.resolve_effect_for_scope(cfg, port, None, None)
+                    Self::resolve_effect_for_scope_inner(cfg, port, None, None)
                 }
             }
             (Some(out_id), Some(seg_id)) => {
@@ -816,7 +825,7 @@ impl LightingManager {
                         origin_rev: seg.mode.rev,
                     })
                 } else {
-                    self.resolve_effect_for_scope(cfg, port, Some(out_id), None)
+                    Self::resolve_effect_for_scope_inner(cfg, port, Some(out_id), None)
                 }
             }
             (None, Some(_)) => None,
