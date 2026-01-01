@@ -10,7 +10,7 @@ use crate::interface::controller::{Color, MatrixMap, SegmentType};
 use crate::interface::effect::Effect;
 
 use super::inventory::create_effect;
-use super::{DeviceConfig, ResolvedEffect};
+use super::{resolve_effect_for_scope, DeviceConfig, ResolvedEffect, Scope};
 
 type ControllerRef = Arc<Mutex<Box<dyn crate::interface::controller::Controller>>>;
 
@@ -139,7 +139,13 @@ impl DeviceRunner {
 
                             // Safety fallback: if segments don't cover the output, ignore them.
                             if seg_total != out_len {
-                                let resolved = resolve_effect_for_output(&cfg, &port, &out.id);
+                                let resolved = resolve_effect_for_scope(
+                                    &cfg,
+                                    &port,
+                                    Scope::Output {
+                                        output_id: out.id.as_str(),
+                                    },
+                                );
                                 tasks.push(TargetTask {
                                     key: TargetKey {
                                         output_id: out.id.clone(),
@@ -154,11 +160,13 @@ impl DeviceRunner {
                                 offset = offset.saturating_add(out_len);
                             } else {
                                 for seg in &out.segments {
-                                    let resolved = resolve_effect_for_segment(
+                                    let resolved = resolve_effect_for_scope(
                                         &cfg,
                                         &port,
-                                        &out.id,
-                                        &seg.id,
+                                        Scope::Segment {
+                                            output_id: out.id.as_str(),
+                                            segment_id: seg.id.as_str(),
+                                        },
                                     );
 
                                     tasks.push(TargetTask {
@@ -177,7 +185,13 @@ impl DeviceRunner {
                                 }
                             }
                         } else {
-                            let resolved = resolve_effect_for_output(&cfg, &port, &out.id);
+                            let resolved = resolve_effect_for_scope(
+                                &cfg,
+                                &port,
+                                Scope::Output {
+                                    output_id: out.id.as_str(),
+                                },
+                            );
                             tasks.push(TargetTask {
                                 key: TargetKey {
                                     output_id: out.id.clone(),
@@ -433,100 +447,6 @@ fn map_segment_into_physical(
             }
         }
     }
-}
-
-// Resolve effective effect for a segment by applying inheritance:
-// segment -> output -> device.
-fn resolve_effect_for_segment(
-    cfg: &DeviceConfig,
-    port: &str,
-    output_id: &str,
-    segment_id: &str,
-) -> Option<ResolvedEffect> {
-    let out = cfg.outputs.iter().find(|o| o.id == output_id)?;
-    let seg = out.segments.iter().find(|s| s.id == segment_id)?;
-
-    if let Some(active) = &seg.mode.active_effect {
-        return Some(ResolvedEffect {
-            effect_id: active.effect_id.clone(),
-            from: super::ScopeRef {
-                port: port.to_string(),
-                output_id: Some(out.id.clone()),
-                segment_id: Some(seg.id.clone()),
-            },
-            started_at: active.started_at,
-            params: seg.mode.params_for_effect(&active.effect_id)?,
-            origin_rev: seg.mode.rev,
-        });
-    }
-
-    if let Some(active) = &out.mode.active_effect {
-        return Some(ResolvedEffect {
-            effect_id: active.effect_id.clone(),
-            from: super::ScopeRef {
-                port: port.to_string(),
-                output_id: Some(out.id.clone()),
-                segment_id: None,
-            },
-            started_at: active.started_at,
-            params: out.mode.params_for_effect(&active.effect_id)?,
-            origin_rev: out.mode.rev,
-        });
-    }
-
-    if let Some(active) = &cfg.mode.active_effect {
-        return Some(ResolvedEffect {
-            effect_id: active.effect_id.clone(),
-            from: super::ScopeRef {
-                port: port.to_string(),
-                output_id: None,
-                segment_id: None,
-            },
-            started_at: active.started_at,
-            params: cfg.mode.params_for_effect(&active.effect_id)?,
-            origin_rev: cfg.mode.rev,
-        });
-    }
-
-    None
-}
-
-fn resolve_effect_for_output(
-    cfg: &DeviceConfig,
-    port: &str,
-    output_id: &str,
-) -> Option<ResolvedEffect> {
-    let out = cfg.outputs.iter().find(|o| o.id == output_id)?;
-
-    if let Some(active) = &out.mode.active_effect {
-        return Some(ResolvedEffect {
-            effect_id: active.effect_id.clone(),
-            from: super::ScopeRef {
-                port: port.to_string(),
-                output_id: Some(out.id.clone()),
-                segment_id: None,
-            },
-            started_at: active.started_at,
-            params: out.mode.params_for_effect(&active.effect_id)?,
-            origin_rev: out.mode.rev,
-        });
-    }
-
-    if let Some(active) = &cfg.mode.active_effect {
-        return Some(ResolvedEffect {
-            effect_id: active.effect_id.clone(),
-            from: super::ScopeRef {
-                port: port.to_string(),
-                output_id: None,
-                segment_id: None,
-            },
-            started_at: active.started_at,
-            params: cfg.mode.params_for_effect(&active.effect_id)?,
-            origin_rev: cfg.mode.rev,
-        });
-    }
-
-    None
 }
 
 
