@@ -12,6 +12,10 @@
 2.  **前端无关性 (Frontend Agnosticism)**：前端是一个动态渲染器。它应该只需极少的更改即可支持新的后端功能（例如，新的灯效或设备）。
 3.  **开闭原则 (Open/Closed Principle)**：系统设计为可扩展（添加新灯效/控制器），而无需修改核心逻辑。
 
+> 额外说明：当前主线目标是把 Tauri 端功能做完整。
+> 但为了未来可以支持“无 WebView / egui / CLI / headless”等替代前端，
+> 我们会用**最小成本**维持关键边界：核心逻辑与 UI 框架解耦、Tauri 类型不向内渗透。
+
 ---
 
 ## 后端设计 (Rust)
@@ -39,10 +43,35 @@
 -   **基于 Tick 更新**：实现 `tick(elapsed, buffer)` 来更新 LED 颜色。
 -   **可参数化**：通过 `EffectParam` 定义其自己的配置参数。
 
+#### Trait 设计约束（保证可移植性）
+-   **禁止**在 `src-tauri/src/interface/**` 的 trait 或公共数据结构中引入任何 Tauri 类型（如 `tauri::AppHandle` / `tauri::State` / `tauri::Window`）。
+-   `interface/` 只能依赖：标准库、`serde`/`serde_json`、以及与硬件/算法直接相关的 crate。
+-   如果核心逻辑需要“向 UI 通知事件/进度”，必须通过**抽象接口（trait）/回调/channel**表达，不能直接 `emit` UI 事件。
+
 ### 3. LightingManager
 `LightingManager` 充当中央协调器。
 -   **设备扫描**：使用 inventory 探测所有已注册的控制器驱动程序。
 -   **灯效执行**：管理活动的灯效循环并将更新分发到正确的控制器。
+
+#### Tauri 耦合点收敛（重要）
+目标：把 Tauri 相关类型与逻辑限定在“适配层”，避免向核心扩散。
+
+-   `tauri::State` / `#[tauri::command]`：只能出现在 `src-tauri/src/api/**`。
+-   `tauri::AppHandle` / `tauri::Emitter`：**期望只出现在**
+    - `src-tauri/src/api/commands.rs`（命令入口/权限/窗口相关能力）
+    - `src-tauri/src/manager/runner.rs`（运行时线程/向前端推送帧或状态）
+
+> 现状提示：当前 `src-tauri/src/manager/mod.rs` 也使用了 `tauri::AppHandle` 来管理 runner 生命周期。
+> 这是一个可接受的历史遗留点，但**新增代码禁止继续扩散**。
+> 后续若要进一步解耦，应把 runner 生命周期管理下沉到 `runner.rs` 或提炼一个 `EventEmitter`/`RuntimeHandle` trait（由 Tauri/egui 分别实现）。
+
+#### 依赖方向（必须遵守）
+为避免循环依赖与“UI 污染核心”，后端模块依赖只允许单向流动：
+
+- `resource/` → `interface/`（实现 Controller/Effect）
+- `manager/` → `interface/` + `resource/`（组合与调度）
+- `api/` → `manager/` + DTO（对外暴露命令，做参数校验与类型转换）
+- **禁止**：`interface/` 依赖 `manager/` 或 `api/`；`resource/` 依赖 `api/`。
 
 ---
 
@@ -79,6 +108,11 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 所有 IPC 调用都封装在 `src/services/api.ts` 中。
 -   **类型化接口**：提供强类型的异步函数（例如 `scanDevices`, `setEffect`），而不是原始的基于字符串的 `invoke` 调用。
 -   **单点故障处理**：集中的 IPC 错误处理和日志记录。
+
+#### IPC 设计约束（可扩展性）
+-   `src/services/api.ts` 是唯一允许出现 `invoke(...)` 的地方。
+-   组件/Hook 不得直接 `invoke`，避免散落的命令字符串与错误处理。
+-   DTO 变更必须同步更新 `src/types/**`，且保持后端 `dto.rs` 与前端类型严格一致。
 
 ### 5. UI 组件库 (Ark UI)
 
@@ -132,6 +166,23 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
     -   保持入口文件（`lib.rs`, `index.ts`）简洁，将具体实现拆分到模块中（如 `api/commands.rs`, `api/dto.rs`）。
 4.  **依赖管理**：
     -   安装外部库时候，请使用命令安装最新版本而不是直接修改package.json或者src-tauri\Cargo.toml文件。
+5.  **Rust 严格验证**：
+    -   任何涉及 Rust 后端（`src-tauri/`）的修改，在提交前必须进行严格验证：运行 `cargo check --manifest-path src-tauri/Cargo.toml`。
+    -   目标：尽早发现编译/类型/特性开关等问题，确保后端代码变更符合项目规范并可被正常构建。
 5.  **样式与主题 (Styling & Theming)**：
     -   **统一颜色管理**：所有的颜色必须从 `src/styles/theme.css` 中定义的 CSS 变量获取，以确保统一的视觉风格。
     -   **双模适配**：禁止在组件代码中硬编码颜色值（Hex/RGB）。若需使用新颜色，必须先在 `theme.css` 中定义，并确保其在 **深色 (Dark)** 和 **浅色 (Light)** 模式下均有良好的视觉表现。
+
+---
+
+## 变更评审清单（高扩展性自检）
+
+提交前，请快速过一遍：
+
+1. **Tauri 类型有没有渗透到 `interface/` 或 `resource/`？**（必须是“没有”）
+2. **`tauri::AppHandle` 的新增引用是否只发生在 `api/**` 或 `manager/runner.rs`？**
+    - 若不得不放在别处：必须在 PR 说明里解释原因，并提出后续收敛路径。
+3. **新增灯效/控制器是否只通过 `inventory::submit!` 注册？**（不改中心注册表）
+4. **前端是否仍然是后端驱动 UI？**（新增参数类型走 ParamRenderer 分发，不硬编码特定灯效 UI）
+5. **Rust 修改是否运行 `cargo check --manifest-path src-tauri/Cargo.toml`？**
+6. **前端颜色是否全部来自 `src/styles/theme.css` 变量？**
