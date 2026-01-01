@@ -18,6 +18,35 @@ use self::runner::DeviceRunner;
 type ControllerRef = Arc<Mutex<Box<dyn Controller>>>;
 
 // ============================================================================
+// Scope helpers (internal)
+// ============================================================================
+
+/// Internal representation of a configuration scope.
+///
+/// This replaces scattered `(output_id, segment_id)` branching and makes it harder
+/// to accidentally accept invalid combinations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Scope<'a> {
+    Device,
+    Output { output_id: &'a str },
+    Segment { output_id: &'a str, segment_id: &'a str },
+}
+
+impl<'a> Scope<'a> {
+    fn from_options(output_id: Option<&'a str>, segment_id: Option<&'a str>) -> Result<Self, String> {
+        match (output_id, segment_id) {
+            (None, None) => Ok(Scope::Device),
+            (Some(out_id), None) => Ok(Scope::Output { output_id: out_id }),
+            (Some(out_id), Some(seg_id)) => Ok(Scope::Segment {
+                output_id: out_id,
+                segment_id: seg_id,
+            }),
+            (None, Some(_)) => Err("Invalid scope: segment_id requires output_id".to_string()),
+        }
+    }
+}
+
+// ============================================================================
 // DTOs exposed to the frontend
 // ============================================================================
 
@@ -172,6 +201,8 @@ struct DeviceConfig {
     brightness: u8,
     mode: ModeConfig,
     outputs: Vec<OutputConfig>,
+    /// Fast lookup table for outputs by id. `outputs` remains the source of truth.
+    output_index: HashMap<String, usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -183,7 +214,150 @@ struct ResolvedEffect {
     origin_rev: u64,
 }
 
+fn mode_for_scope<'a>(cfg: &'a DeviceConfig, scope: Scope<'_>) -> Option<&'a ModeConfig> {
+    match scope {
+        Scope::Device => Some(&cfg.mode),
+        Scope::Output { output_id } => cfg.output(output_id).map(|o| &o.mode),
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => cfg
+            .output(output_id)
+            .and_then(|o| o.segments.iter().find(|s| s.id == segment_id))
+            .map(|s| &s.mode),
+    }
+}
+
+fn mode_for_scope_mut<'a>(
+    cfg: &'a mut DeviceConfig,
+    scope: Scope<'_>,
+) -> Result<&'a mut ModeConfig, String> {
+    match scope {
+        Scope::Device => Ok(&mut cfg.mode),
+        Scope::Output { output_id } => cfg
+            .output_mut(output_id)
+            .map(|o| &mut o.mode)
+            .ok_or_else(|| format!("Output '{}' not found", output_id)),
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => {
+            let out = cfg
+                .output_mut(output_id)
+                .ok_or_else(|| format!("Output '{}' not found", output_id))?;
+            let seg = out
+                .segments
+                .iter_mut()
+                .find(|s| s.id == segment_id)
+                .ok_or_else(|| format!("Segment '{}' not found", segment_id))?;
+            Ok(&mut seg.mode)
+        }
+    }
+}
+
+fn force_children_inherit(cfg: &mut DeviceConfig, scope: Scope<'_>) {
+    match scope {
+        Scope::Device => {
+            for out in &mut cfg.outputs {
+                out.mode.set_inherit();
+                for seg in &mut out.segments {
+                    seg.mode.set_inherit();
+                }
+            }
+        }
+        Scope::Output { output_id } => {
+            if let Some(out) = cfg.output_mut(output_id) {
+                for seg in &mut out.segments {
+                    seg.mode.set_inherit();
+                }
+            }
+        }
+        Scope::Segment { .. } => {}
+    }
+}
+
+/// Resolve the effective effect for a scope by applying inheritance:
+/// segment -> output -> device.
+fn resolve_effect_for_scope(cfg: &DeviceConfig, port: &str, scope: Scope<'_>) -> Option<ResolvedEffect> {
+    match scope {
+        Scope::Device => cfg.mode.active_effect.as_ref().and_then(|active| {
+            let params = cfg.mode.params_for_effect(&active.effect_id)?;
+            Some(ResolvedEffect {
+                effect_id: active.effect_id.clone(),
+                from: ScopeRef {
+                    port: port.to_string(),
+                    output_id: None,
+                    segment_id: None,
+                },
+                started_at: active.started_at,
+                params,
+                origin_rev: cfg.mode.rev,
+            })
+        }),
+        Scope::Output { output_id } => {
+            let out = cfg.output(output_id)?;
+            if let Some(active) = &out.mode.active_effect {
+                let params = out.mode.params_for_effect(&active.effect_id)?;
+                Some(ResolvedEffect {
+                    effect_id: active.effect_id.clone(),
+                    from: ScopeRef {
+                        port: port.to_string(),
+                        output_id: Some(out.id.clone()),
+                        segment_id: None,
+                    },
+                    started_at: active.started_at,
+                    params,
+                    origin_rev: out.mode.rev,
+                })
+            } else {
+                resolve_effect_for_scope(cfg, port, Scope::Device)
+            }
+        }
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => {
+            let out = cfg.output(output_id)?;
+            let seg = out.segments.iter().find(|s| s.id == segment_id)?;
+
+            if let Some(active) = &seg.mode.active_effect {
+                let params = seg.mode.params_for_effect(&active.effect_id)?;
+                Some(ResolvedEffect {
+                    effect_id: active.effect_id.clone(),
+                    from: ScopeRef {
+                        port: port.to_string(),
+                        output_id: Some(out.id.clone()),
+                        segment_id: Some(seg.id.clone()),
+                    },
+                    started_at: active.started_at,
+                    params,
+                    origin_rev: seg.mode.rev,
+                })
+            } else {
+                resolve_effect_for_scope(cfg, port, Scope::Output { output_id })
+            }
+        }
+    }
+}
+
 impl DeviceConfig {
+    fn rebuild_output_index(&mut self) {
+        self.output_index.clear();
+        for (idx, out) in self.outputs.iter().enumerate() {
+            self.output_index.insert(out.id.clone(), idx);
+        }
+    }
+
+    fn output(&self, output_id: &str) -> Option<&OutputConfig> {
+        let idx = self.output_index.get(output_id).copied()?;
+        self.outputs.get(idx)
+    }
+
+    fn output_mut(&mut self, output_id: &str) -> Option<&mut OutputConfig> {
+        let idx = self.output_index.get(output_id).copied()?;
+        self.outputs.get_mut(idx)
+    }
+
     fn from_output_defs(defs: Vec<OutputPortDefinition>) -> Self {
         let outputs = defs
             .into_iter()
@@ -200,11 +374,14 @@ impl DeviceConfig {
             })
             .collect();
 
-        Self {
+        let mut cfg = Self {
             brightness: 100,
             mode: ModeConfig::default(),
             outputs,
-        }
+            output_index: HashMap::new(),
+        };
+        cfg.rebuild_output_index();
+        cfg
     }
 
     fn sync_with_output_defs(&mut self, defs: Vec<OutputPortDefinition>) {
@@ -258,6 +435,7 @@ impl DeviceConfig {
         }
 
         self.outputs = new_outputs;
+        self.rebuild_output_index();
     }
 }
 
@@ -322,9 +500,9 @@ impl LightingManager {
 
     /// Set effect selection for a scope.
     ///
-    /// - `(None, None)` targets the device scope
-    /// - `(Some(output), None)` targets an output scope
-    /// - `(Some(output), Some(segment))` targets a segment scope
+    /// - `Scope::Device` targets the device scope
+    /// - `Scope::Output` targets an output scope
+    /// - `Scope::Segment` targets a segment scope
     pub fn set_scope_effect(
         &self,
         port: &str,
@@ -333,6 +511,8 @@ impl LightingManager {
         effect_id: Option<&str>,
         app_handle: AppHandle,
     ) -> Result<(), String> {
+        let scope = Scope::from_options(output_id, segment_id)?;
+
         let mut devices = self.devices.lock().unwrap();
         let md = devices
             .get_mut(port)
@@ -342,93 +522,28 @@ impl LightingManager {
             let mut cfg = md.config.lock().unwrap();
 
             // Resolve current effective effect for continuity (before mutation).
-            let current_resolved = self.resolve_effect_for_scope(&cfg, port, output_id, segment_id);
+            let current_resolved = resolve_effect_for_scope(&cfg, port, scope);
 
-            match (output_id, segment_id) {
-                (None, None) => {
-                    // Device scope: setting device-level should force children to inherit.
-                    if let Some(new_id) = effect_id {
-                        let started_at = if let Some(res) = &current_resolved {
-                            if res.effect_id == new_id {
-                                res.started_at
-                            } else {
-                                Instant::now()
-                            }
-                        } else {
-                            Instant::now()
-                        };
-
-                        cfg.mode.set_effect(new_id, started_at)?;
-
-                        // Force outputs + segments to inherit (per spec).
-                        for out in &mut cfg.outputs {
-                            out.mode.set_inherit();
-                            for seg in &mut out.segments {
-                                seg.mode.set_inherit();
-                            }
-                        }
+            let started_at = |new_id: &str| {
+                if let Some(res) = &current_resolved {
+                    if res.effect_id == new_id {
+                        res.started_at
                     } else {
-                        cfg.mode.set_inherit();
+                        Instant::now()
                     }
+                } else {
+                    Instant::now()
                 }
-                (Some(out_id), None) => {
-                    let out = cfg
-                        .outputs
-                        .iter_mut()
-                        .find(|o| o.id == out_id)
-                        .ok_or_else(|| format!("Output '{}' not found", out_id))?;
+            };
 
-                    if let Some(new_id) = effect_id {
-                        let started_at = if let Some(res) = &current_resolved {
-                            if res.effect_id == new_id {
-                                res.started_at
-                            } else {
-                                Instant::now()
-                            }
-                        } else {
-                            Instant::now()
-                        };
+            let mode = mode_for_scope_mut(&mut cfg, scope)?;
 
-                        out.mode.set_effect(new_id, started_at)?;
-
-                        // Force segments to inherit (per spec).
-                        for seg in &mut out.segments {
-                            seg.mode.set_inherit();
-                        }
-                    } else {
-                        out.mode.set_inherit();
-                    }
-                }
-                (Some(out_id), Some(seg_id)) => {
-                    let out = cfg
-                        .outputs
-                        .iter_mut()
-                        .find(|o| o.id == out_id)
-                        .ok_or_else(|| format!("Output '{}' not found", out_id))?;
-                    let seg = out
-                        .segments
-                        .iter_mut()
-                        .find(|s| s.id == seg_id)
-                        .ok_or_else(|| format!("Segment '{}' not found", seg_id))?;
-
-                    if let Some(new_id) = effect_id {
-                        let started_at = if let Some(res) = &current_resolved {
-                            if res.effect_id == new_id {
-                                res.started_at
-                            } else {
-                                Instant::now()
-                            }
-                        } else {
-                            Instant::now()
-                        };
-                        seg.mode.set_effect(new_id, started_at)?;
+            if let Some(new_id) = effect_id {
+                mode.set_effect(new_id, started_at(new_id))?;
+                // Per spec: when parent becomes explicit, force children to inherit.
+                force_children_inherit(&mut cfg, scope);
             } else {
-                        seg.mode.set_inherit();
-                    }
-                }
-                (None, Some(_)) => {
-                    return Err("Invalid scope: segment_id requires output_id".to_string())
-                }
+                mode.set_inherit();
             }
         }
 
@@ -443,6 +558,8 @@ impl LightingManager {
         segment_id: Option<&str>,
         params: Value,
     ) -> Result<(), String> {
+        let scope = Scope::from_options(output_id, segment_id)?;
+
         let params_obj = params
             .as_object()
             .ok_or_else(|| "Params must be a JSON object".to_string())?;
@@ -453,7 +570,7 @@ impl LightingManager {
             .ok_or_else(|| "Device not found".to_string())?;
 
         let mut cfg = md.config.lock().unwrap();
-        let resolved = self.resolve_effect_for_scope(&cfg, port, output_id, segment_id);
+        let resolved = resolve_effect_for_scope(&cfg, port, scope);
         let resolved = resolved.ok_or_else(|| "No active effect in this scope hierarchy".to_string())?;
 
         // Helper to promote a scope to explicit with continuity.
@@ -465,59 +582,15 @@ impl LightingManager {
             Ok(resolved.effect_id.clone())
         };
 
-        let target_effect_id = match (output_id, segment_id) {
-            (None, None) => ensure_explicit(&mut cfg.mode)?,
-            (Some(out_id), None) => {
-                let out = cfg
-                    .outputs
-                    .iter_mut()
-                    .find(|o| o.id == out_id)
-                    .ok_or_else(|| format!("Output '{}' not found", out_id))?;
-                ensure_explicit(&mut out.mode)?
-            }
-            (Some(out_id), Some(seg_id)) => {
-                let out = cfg
-                    .outputs
-                    .iter_mut()
-                    .find(|o| o.id == out_id)
-                    .ok_or_else(|| format!("Output '{}' not found", out_id))?;
-                let seg = out
-                    .segments
-                    .iter_mut()
-                    .find(|s| s.id == seg_id)
-                    .ok_or_else(|| format!("Segment '{}' not found", seg_id))?;
-                ensure_explicit(&mut seg.mode)?
-            }
-            (None, Some(_)) => {
-                return Err("Invalid scope: segment_id requires output_id".to_string())
-            }
+        let target_effect_id = {
+            let mode = mode_for_scope_mut(&mut cfg, scope)?;
+            ensure_explicit(mode)?
         };
 
         // Merge params into the target scope store.
-        match (output_id, segment_id) {
-            (None, None) => cfg.mode.merge_params(&target_effect_id, params_obj)?,
-            (Some(out_id), None) => {
-                let out = cfg
-                    .outputs
-                    .iter_mut()
-                    .find(|o| o.id == out_id)
-                    .ok_or_else(|| format!("Output '{}' not found", out_id))?;
-                out.mode.merge_params(&target_effect_id, params_obj)?;
-            }
-            (Some(out_id), Some(seg_id)) => {
-                let out = cfg
-                    .outputs
-                    .iter_mut()
-                    .find(|o| o.id == out_id)
-                    .ok_or_else(|| format!("Output '{}' not found", out_id))?;
-                let seg = out
-                    .segments
-                    .iter_mut()
-                    .find(|s| s.id == seg_id)
-                    .ok_or_else(|| format!("Segment '{}' not found", seg_id))?;
-                seg.mode.merge_params(&target_effect_id, params_obj)?;
-            }
-            (None, Some(_)) => unreachable!(),
+        {
+            let mode = mode_for_scope_mut(&mut cfg, scope)?;
+            mode.merge_params(&target_effect_id, params_obj)?;
         }
 
         Ok(())
@@ -546,9 +619,7 @@ impl LightingManager {
 
         let mut cfg = md.config.lock().unwrap();
         let out = cfg
-            .outputs
-            .iter_mut()
-            .find(|o| o.id == output_id)
+            .output_mut(output_id)
             .ok_or_else(|| format!("Output '{}' not found", output_id))?;
 
         if out.output_type != SegmentType::Linear {
@@ -711,9 +782,9 @@ impl LightingManager {
         }
     }
 
-    fn build_mode_state_for_device(&self, cfg: &DeviceConfig, port: &str) -> ScopeModeState {
-        let selected = cfg.mode.selected_effect_id();
-        let resolved = self.resolve_effect_for_scope(cfg, port, None, None);
+    fn build_mode_state(&self, cfg: &DeviceConfig, port: &str, scope: Scope<'_>) -> ScopeModeState {
+        let selected = mode_for_scope(cfg, scope).and_then(|m| m.selected_effect_id());
+        let resolved = resolve_effect_for_scope(cfg, port, scope);
         ScopeModeState {
             selected_effect_id: selected,
             effective_effect_id: resolved.as_ref().map(|r| r.effect_id.clone()),
@@ -722,16 +793,17 @@ impl LightingManager {
         }
     }
 
-    fn build_mode_state_for_output(&self, cfg: &DeviceConfig, port: &str, output_id: &str) -> ScopeModeState {
-        let out = cfg.outputs.iter().find(|o| o.id == output_id);
-        let selected = out.and_then(|o| o.mode.selected_effect_id());
-        let resolved = self.resolve_effect_for_scope(cfg, port, Some(output_id), None);
-        ScopeModeState {
-            selected_effect_id: selected,
-            effective_effect_id: resolved.as_ref().map(|r| r.effect_id.clone()),
-            effective_params: resolved.as_ref().map(|r| r.params.clone()),
-            effective_from: resolved.as_ref().map(|r| r.from.clone()),
-        }
+    fn build_mode_state_for_device(&self, cfg: &DeviceConfig, port: &str) -> ScopeModeState {
+        self.build_mode_state(cfg, port, Scope::Device)
+    }
+
+    fn build_mode_state_for_output(
+        &self,
+        cfg: &DeviceConfig,
+        port: &str,
+        output_id: &str,
+    ) -> ScopeModeState {
+        self.build_mode_state(cfg, port, Scope::Output { output_id })
     }
 
     fn build_mode_state_for_segment(
@@ -741,95 +813,7 @@ impl LightingManager {
         output_id: &str,
         segment_id: &str,
     ) -> ScopeModeState {
-        let selected = cfg
-            .outputs
-            .iter()
-            .find(|o| o.id == output_id)
-            .and_then(|o| o.segments.iter().find(|s| s.id == segment_id))
-            .and_then(|s| s.mode.selected_effect_id());
-
-        let resolved = self.resolve_effect_for_scope(cfg, port, Some(output_id), Some(segment_id));
-        ScopeModeState {
-            selected_effect_id: selected,
-            effective_effect_id: resolved.as_ref().map(|r| r.effect_id.clone()),
-            effective_params: resolved.as_ref().map(|r| r.params.clone()),
-            effective_from: resolved.as_ref().map(|r| r.from.clone()),
-        }
-    }
-
-    fn resolve_effect_for_scope(
-        &self,
-        cfg: &DeviceConfig,
-        port: &str,
-        output_id: Option<&str>,
-        segment_id: Option<&str>,
-    ) -> Option<ResolvedEffect> {
-        Self::resolve_effect_for_scope_inner(cfg, port, output_id, segment_id)
-    }
-
-    fn resolve_effect_for_scope_inner(
-        cfg: &DeviceConfig,
-        port: &str,
-        output_id: Option<&str>,
-        segment_id: Option<&str>,
-    ) -> Option<ResolvedEffect> {
-        match (output_id, segment_id) {
-            (None, None) => cfg.mode.active_effect.as_ref().and_then(|active| {
-                let params = cfg.mode.params_for_effect(&active.effect_id)?;
-                Some(ResolvedEffect {
-                    effect_id: active.effect_id.clone(),
-                    from: ScopeRef {
-                        port: port.to_string(),
-                        output_id: None,
-                        segment_id: None,
-                    },
-                    started_at: active.started_at,
-                    params,
-                    origin_rev: cfg.mode.rev,
-                })
-            }),
-            (Some(out_id), None) => {
-                let out = cfg.outputs.iter().find(|o| o.id == out_id)?;
-                if let Some(active) = &out.mode.active_effect {
-                    let params = out.mode.params_for_effect(&active.effect_id)?;
-                    Some(ResolvedEffect {
-                        effect_id: active.effect_id.clone(),
-                        from: ScopeRef {
-                            port: port.to_string(),
-                            output_id: Some(out.id.clone()),
-                            segment_id: None,
-                        },
-                        started_at: active.started_at,
-                        params,
-                        origin_rev: out.mode.rev,
-                    })
-                } else {
-                    Self::resolve_effect_for_scope_inner(cfg, port, None, None)
-                }
-            }
-            (Some(out_id), Some(seg_id)) => {
-                let out = cfg.outputs.iter().find(|o| o.id == out_id)?;
-                let seg = out.segments.iter().find(|s| s.id == seg_id)?;
-
-                if let Some(active) = &seg.mode.active_effect {
-                    let params = seg.mode.params_for_effect(&active.effect_id)?;
-                    Some(ResolvedEffect {
-                        effect_id: active.effect_id.clone(),
-                        from: ScopeRef {
-                            port: port.to_string(),
-                            output_id: Some(out.id.clone()),
-                            segment_id: Some(seg.id.clone()),
-                        },
-                        started_at: active.started_at,
-                        params,
-                        origin_rev: seg.mode.rev,
-                    })
-                } else {
-                    Self::resolve_effect_for_scope_inner(cfg, port, Some(out_id), None)
-                }
-            }
-            (None, Some(_)) => None,
-        }
+        self.build_mode_state(cfg, port, Scope::Segment { output_id, segment_id })
     }
 
     fn device_has_any_effect(&self, cfg: &DeviceConfig, _port: &str) -> bool {
