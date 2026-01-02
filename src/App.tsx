@@ -70,7 +70,13 @@ export default function App() {
   const handleNavigate = (devicePort: string) => {
     const device = devices.find((d) => d.port === devicePort);
     if (device) {
-      setSelectedScope({ port: device.port });
+      // Single-child compression selection rule:
+      // If the device has exactly one output, treat navigation as selecting the default output scope.
+      setSelectedScope(
+        device.outputs.length === 1
+          ? { port: device.port, outputId: device.outputs[0].id }
+          : { port: device.port }
+      );
       setActiveTab("device-detail");
     }
   };

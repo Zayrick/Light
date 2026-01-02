@@ -58,6 +58,18 @@ function resolveScopeMode(device: Device, scope: SelectedScope): {
   if (scope.outputId) {
     const out = device.outputs.find((o) => o.id === scope.outputId);
     if (out) {
+      // Single-child compression:
+      // If the device has only one output, show the device model as the title
+      // to match the sidebar tree behavior.
+      if (device.outputs.length === 1) {
+        return {
+          title: device.model,
+          subtitle: out.name,
+          mode: out.mode,
+          kind: "output",
+        };
+      }
+
       return {
         title: out.name,
         subtitle: device.model,

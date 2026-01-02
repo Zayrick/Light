@@ -46,9 +46,15 @@ export function Sidebar({
   }, []);
 
   const handleScopeSelect = useCallback((scope: SelectedScope) => {
-    setSelectedScope(scope);
+    const device = devices.find((d) => d.port === scope.port);
+    const normalizedScope =
+      !scope.outputId && !scope.segmentId && device?.outputs.length === 1
+        ? { port: scope.port, outputId: device.outputs[0].id }
+        : scope;
+
+    setSelectedScope(normalizedScope);
     setActiveTab("device-detail");
-  }, [setSelectedScope, setActiveTab]);
+  }, [devices, setSelectedScope, setActiveTab]);
 
   return (
     <aside className="sidebar">
