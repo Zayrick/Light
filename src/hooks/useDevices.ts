@@ -9,6 +9,33 @@ export interface SelectedScope {
   segmentId?: string;
 }
 
+function normalizeScope(scope: SelectedScope, devices: Device[]): SelectedScope {
+  const device = devices.find((d) => d.port === scope.port);
+  if (!device) return scope;
+
+  // If the device has a single output, always treat "device scope" as selecting the default output.
+  if (!scope.outputId && device.outputs.length === 1) {
+    return { port: scope.port, outputId: device.outputs[0].id };
+  }
+
+  if (scope.outputId) {
+    const out = device.outputs.find((o) => o.id === scope.outputId);
+    if (!out) {
+      // Output no longer exists. Fall back to a stable scope.
+      return device.outputs.length === 1
+        ? { port: scope.port, outputId: device.outputs[0].id }
+        : { port: scope.port };
+    }
+
+    if (scope.segmentId) {
+      const segExists = out.segments.some((s) => s.id === scope.segmentId);
+      if (!segExists) return { port: scope.port, outputId: scope.outputId };
+    }
+  }
+
+  return scope;
+}
+
 export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedScope, setSelectedScope] = useState<SelectedScope | null>(null);
@@ -26,7 +53,8 @@ export function useDevices() {
         // Preserve selection if still exists, otherwise select first device scope
         setSelectedScope((prev) => {
           const stillExists = prev && foundDevices.some((d) => d.port === prev.port);
-          return stillExists ? prev : { port: foundDevices[0].port };
+          const next = stillExists ? prev! : { port: foundDevices[0].port };
+          return normalizeScope(next, foundDevices);
         });
       } else {
         setSelectedScope(null);
@@ -51,7 +79,8 @@ export function useDevices() {
       if (current.length > 0) {
         setSelectedScope((prev) => {
           const stillExists = prev && current.some((d) => d.port === prev.port);
-          return stillExists ? prev : { port: current[0].port };
+          const next = stillExists ? prev! : { port: current[0].port };
+          return normalizeScope(next, current);
         });
       } else {
         setSelectedScope(null);

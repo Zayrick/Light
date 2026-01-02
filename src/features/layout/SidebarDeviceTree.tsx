@@ -38,34 +38,63 @@ function controlStateFromMode(mode: ScopeModeState): ControlState {
 }
 
 function buildTree(devices: Device[]): DeviceTreeNode[] {
-  return devices.map((d) => ({
-    id: `dev:${d.port}`,
-    name: d.model,
-    kind: "device",
-    port: d.port,
-    controlState: controlStateFromMode(d.mode),
-    children: d.outputs.map((o) => ({
-      id: `out:${d.port}:${o.id}`,
-      name: o.name,
-      kind: "output",
+  return devices.map((d) => {
+    // Single-child compression:
+    // If a device has exactly one output, we merge the device and output nodes.
+    // The node visually represents the device (name, icon, port),
+    // but functionally acts as the output (id, selection, control state).
+    if (d.outputs.length === 1) {
+      const o = d.outputs[0];
+      return {
+        id: `out:${d.port}:${o.id}`, // Use output ID so selection works for the output scope
+        name: d.model, // Use device name
+        kind: "device", // Visual style: Device
+        port: d.port,
+        outputId: o.id, // Functional scope: Output
+        controlState: controlStateFromMode(o.mode), // Status from output
+        children:
+          o.output_type === "Linear" && o.segments.length > 0
+            ? o.segments.map((s) => ({
+                id: `seg:${d.port}:${o.id}:${s.id}`,
+                name: s.name,
+                kind: "segment",
+                port: d.port,
+                outputId: o.id,
+                segmentId: s.id,
+                controlState: controlStateFromMode(s.mode),
+              }))
+            : undefined,
+      };
+    }
+
+    return {
+      id: `dev:${d.port}`,
+      name: d.model,
+      kind: "device",
       port: d.port,
-      outputId: o.id,
-      controlState: controlStateFromMode(o.mode),
-      // Segments are user-defined and only apply to linear outputs (future feature).
-      children:
-        o.output_type === "Linear" && o.segments.length > 0
-          ? o.segments.map((s) => ({
-              id: `seg:${d.port}:${o.id}:${s.id}`,
-              name: s.name,
-              kind: "segment",
-              port: d.port,
-              outputId: o.id,
-              segmentId: s.id,
-              controlState: controlStateFromMode(s.mode),
-            }))
-          : undefined,
-    })),
-  }));
+      controlState: controlStateFromMode(d.mode),
+      children: d.outputs.map((o) => ({
+        id: `out:${d.port}:${o.id}`,
+        name: o.name,
+        kind: "output",
+        port: d.port,
+        outputId: o.id,
+        controlState: controlStateFromMode(o.mode),
+        children:
+          o.output_type === "Linear" && o.segments.length > 0
+            ? o.segments.map((s) => ({
+                id: `seg:${d.port}:${o.id}:${s.id}`,
+                name: s.name,
+                kind: "segment",
+                port: d.port,
+                outputId: o.id,
+                segmentId: s.id,
+                controlState: controlStateFromMode(s.mode),
+              }))
+            : undefined,
+      })),
+    };
+  });
 }
 
 interface SidebarDeviceTreeProps {
@@ -163,7 +192,13 @@ const DeviceTreeItem = ({
     if (depth >= 3) return 20;
     return 0;
   };
-  const indentStyle = depth > 1 ? { marginLeft: `${getIndent()}px` } : undefined;
+
+  // Branch controls (device / output nodes with children) should not be indented at root.
+  const branchIndentStyle = depth > 1 ? { marginLeft: `${getIndent()}px` } : undefined;
+
+  // TreeView.Item has a default CSS margin-left (see `.layout-tree-item`) which makes
+  // root leaf nodes look like "children". We always set margin-left explicitly here.
+  const itemIndentStyle = { marginLeft: `${getIndent()}px` };
 
   const indicatorColor =
     node.controlState === "explicit"
@@ -231,7 +266,7 @@ const DeviceTreeItem = ({
           <ContextMenu>
             <TreeView.BranchControl
               className={clsx("device-list-item layout-branch-control", isSelected && "active")}
-              style={indentStyle}
+              style={branchIndentStyle}
               onClick={handleClick}
               onMouseMove={onMouseMove}
               onMouseLeave={onMouseLeave}
@@ -266,17 +301,31 @@ const DeviceTreeItem = ({
       ) : (
         <ContextMenu>
           <TreeView.Item
-            className={clsx("device-list-item layout-tree-item", isSelected && "active")}
-            style={indentStyle}
+            className={clsx(
+              "device-list-item",
+              node.kind === "device" ? "layout-branch-control" : "layout-tree-item",
+              isSelected && "active"
+            )}
+            style={itemIndentStyle}
             onClick={handleClick}
             onMouseMove={onMouseMove}
             onMouseLeave={onMouseLeave}
           >
             <Highlight />
-            <TreeView.ItemText className="layout-item-text">
-              {segmentDot ?? icon}
-              <span className="device-list-item-name">{node.name}</span>
-            </TreeView.ItemText>
+            {node.kind === "device" ? (
+              <>
+                {icon}
+                <div className="device-list-info">
+                  <div className="device-list-item-name">{node.name}</div>
+                  <div className="device-list-item-port">{node.port}</div>
+                </div>
+              </>
+            ) : (
+              <TreeView.ItemText className="layout-item-text">
+                {segmentDot ?? icon}
+                <span className="device-list-item-name">{node.name}</span>
+              </TreeView.ItemText>
+            )}
           </TreeView.Item>
         </ContextMenu>
       )}
