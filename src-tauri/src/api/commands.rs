@@ -8,6 +8,8 @@ use once_cell::sync::Lazy;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::Mutex;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tauri::Manager;
 
@@ -47,6 +49,26 @@ pub type DisplayInfoResponse = DisplayInfo;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static CURRENT_WINDOW_EFFECT: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+// ============================================================================
+// App UI Settings (runtime)
+// ============================================================================
+
+static MINIMIZE_TO_TRAY: AtomicBool = AtomicBool::new(false);
+
+pub fn minimize_to_tray_enabled() -> bool {
+    MINIMIZE_TO_TRAY.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+pub fn get_minimize_to_tray() -> bool {
+    MINIMIZE_TO_TRAY.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+pub fn set_minimize_to_tray(enabled: bool) {
+    MINIMIZE_TO_TRAY.store(enabled, Ordering::Relaxed);
+}
 
 #[tauri::command]
 pub async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>, String> {
