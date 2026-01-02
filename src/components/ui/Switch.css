@@ -1,0 +1,76 @@
+/* Ark UI Switch Component Styles */
+
+/* Root is a <label> */
+[data-scope="switch"][data-part="root"].ark-switch-root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  user-select: none;
+}
+
+.ark-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+[data-scope="switch"][data-part="label"].ark-switch-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.ark-switch-description {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+[data-scope="switch"][data-part="control"].ark-switch-control {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  flex: 0 0 auto;
+}
+
+/* Checked */
+[data-scope="switch"][data-part="control"][data-state="checked"].ark-switch-control {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+/* Disabled */
+[data-scope="switch"][data-part="root"][data-disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+[data-scope="switch"][data-part="thumb"].ark-switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background-color: var(--accent-text);
+  transform: translate(0, -50%);
+  transition: transform 0.15s ease;
+}
+
+[data-scope="switch"][data-part="thumb"][data-state="checked"].ark-switch-thumb {
+  transform: translate(18px, -50%);
+}
+
+/* Focus ring */
+[data-scope="switch"][data-part="control"].ark-switch-control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent);
+}

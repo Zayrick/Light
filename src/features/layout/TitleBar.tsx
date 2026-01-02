@@ -1,12 +1,20 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useMinimizeToTray } from '../../hooks/useMinimizeToTray';
 import './TitleBar.css';
 
 export function TitleBar() {
   const appWindow = getCurrentWindow();
   const { isMacOS } = usePlatform();
+  const { minimizeToTray } = useMinimizeToTray();
 
-  const minimize = () => appWindow.minimize();
+  const minimize = () => {
+    if (minimizeToTray) {
+      appWindow.hide();
+    } else {
+      appWindow.minimize();
+    }
+  };
   const maximize = async () => {
     if (await appWindow.isMaximized()) {
       appWindow.unmaximize();

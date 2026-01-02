@@ -7,6 +7,7 @@ use crate::manager::LightingManager;
 use crate::api::commands;
 use log::LevelFilter;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy, WEBVIEW_TARGET};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -174,7 +175,23 @@ pub fn run() {
             commands::get_window_effect,
             commands::set_window_effect,
             commands::get_system_info,
+            commands::get_minimize_to_tray,
+            commands::set_minimize_to_tray,
         ])
+        .on_window_event(|window, event| {
+            // 只处理主窗口
+            if window.label() != "main" {
+                return;
+            }
+
+            // 当开启“最小化到托盘”时，将关闭请求改为 hide。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if commands::minimize_to_tray_enabled() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             // Log panics (best-effort) instead of silent crash.
             std::panic::set_hook(Box::new(|panic| {
@@ -204,6 +221,49 @@ pub fn run() {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             {
                 commands::initialize_window_effect(app);
+            }
+
+            // System tray (用于“最小化到托盘”以及快速恢复/退出)
+            {
+                use tauri::menu::{MenuBuilder, MenuItemBuilder};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let show = MenuItemBuilder::with_id("show", "显示").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+                let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
             }
             Ok(())
         })

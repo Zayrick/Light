@@ -117,4 +117,12 @@ export const api = {
   getSystemInfo: async (): Promise<SystemInfo> => {
     return await invokeWithLog<SystemInfo>("get_system_info");
   },
+
+  getMinimizeToTray: async (): Promise<boolean> => {
+    return await invokeWithLog<boolean>("get_minimize_to_tray");
+  },
+
+  setMinimizeToTray: async (enabled: boolean): Promise<void> => {
+    return await invokeWithLog("set_minimize_to_tray", { enabled }, { enabled });
+  },
 };

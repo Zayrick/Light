@@ -3,9 +3,11 @@ import { getVersion as getAppVersion, getTauriVersion } from "@tauri-apps/api/ap
 import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
 import { Slider } from "../../components/ui/Slider";
+import { Switch } from "../../components/ui/Switch";
 import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/api";
 import { logger } from "../../services/logger";
 import { usePlatform } from "../../hooks/usePlatform";
+import { useMinimizeToTray } from "../../hooks/useMinimizeToTray";
 import "./Settings.css";
 
 // Windows-specific capture methods
@@ -135,6 +137,7 @@ const windowEffectMeta: Record<WindowEffectId, { label: string; description: str
 
 export function SettingsPage() {
   const { isWindows } = usePlatform();
+  const { minimizeToTray, setMinimizeToTray } = useMinimizeToTray();
   const [captureScale, setCaptureScale] = useState<number>(5);
   const [captureFps, setCaptureFps] = useState<number>(30);
   const [captureMethod, setCaptureMethod] = useState<CaptureMethod>(isWindows ? "dxgi" : "xcap");
@@ -446,6 +449,19 @@ export function SettingsPage() {
             {windowEffect && windowEffectMeta[windowEffect] && (
               <p>{windowEffectMeta[windowEffect].description}</p>
             )}
+          </div>
+        </Card>
+
+        <Card className="settings-card">
+          <h3>Window Behavior</h3>
+
+          <div className="setting-section">
+            <Switch
+              checked={minimizeToTray}
+              onChange={setMinimizeToTray}
+              label="最小化到托盘"
+              description="启用后，最小化/关闭将隐藏窗口并保留托盘入口；点击托盘图标可恢复窗口。"
+            />
           </div>
         </Card>
 
