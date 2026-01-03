@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
 import { Device, EffectInfo, EffectParam, ScopeModeState } from "../../../types";
 import type { SelectedScope } from "../../../hooks/useDevices";
@@ -103,6 +104,12 @@ function formatScopeFrom(mode: ScopeModeState): string | null {
 export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetailProps) {
   const resolvedScope = useMemo(() => resolveScopeMode(device, scope), [device, scope]);
   const scopeMode = resolvedScope.mode;
+
+  const scopeKey = useMemo(() => {
+    // Key used to animate transitions between scopes (device/output/segment) within the same device detail page.
+    // Keep it stable and deterministic.
+    return [scope.port, scope.outputId ?? "", scope.segmentId ?? ""].join("|");
+  }, [scope.port, scope.outputId, scope.segmentId]);
 
   const effectiveModeId = scopeMode.effective_effect_id ?? null;
   const isInheriting =
@@ -263,15 +270,21 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
   };
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        paddingTop: "56px",
-        paddingBottom: "24px",
-      }}
-    >
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={scopeKey}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          paddingTop: "56px",
+          paddingBottom: "24px",
+        }}
+      >
       <header
         className="page-header"
         style={{
@@ -505,7 +518,8 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
           )}
         </div>
       </div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
