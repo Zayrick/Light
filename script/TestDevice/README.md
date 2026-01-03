@@ -11,8 +11,6 @@
 
 ## 快速开始
 
-### 1) 启动虚拟设备
-
 在 `script/TestDevice` 下创建虚拟环境并安装依赖：
 
 ```bash
@@ -20,30 +18,28 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-启动（默认 48x27 单矩阵）：
+### 1) 启动一体化 UI（配置 / 预览 / 启动服务）
 
 ```bash
-.\.venv\Scripts\python virtual_led_device.py
+.\.venv\Scripts\python main.py
 ```
 
-使用 JSON 启动（多输出口 / 稀疏矩阵）：
+说明：
+- 左侧是 Presets 与输出口配置编辑器
+- 右侧是预览与服务控制（Start/Stop/Restart）
+- 预设文件位于 `script/TestDevice/presets/`（内置 `example.json`）
+- 可选：传入 `--config some.json` 作为初始配置载入
+
+### 2) 仅启动服务（Headless）
 
 ```bash
-.\.venv\Scripts\python virtual_led_device.py --config example_config.json
+.\.venv\Scripts\python main.py --headless
 ```
 
-### 2) 用 GUI 生成 JSON
-
-安装 GUI 依赖：
+使用指定 JSON 启动（多输出口 / 稀疏矩阵）：
 
 ```bash
-.\.venv\Scripts\python -m pip install -r requirements-gui.txt
-```
-
-启动生成器：
-
-```bash
-.\.venv\Scripts\python config_generator_gui.py
+.\.venv\Scripts\python main.py --headless --config example_config.json
 ```
 
 ## 配置格式（概要）

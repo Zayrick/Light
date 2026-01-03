@@ -1,3 +1,2 @@
-pygame
-zeroconf
 PySide6
+zeroconf
