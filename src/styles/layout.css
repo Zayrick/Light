@@ -314,41 +314,22 @@
   transform: rotate(90deg);
 }
 
+/* 
+ * Branch content styling.
+ * Height animation is now controlled by Framer Motion (AnimatePresence),
+ * so we remove CSS keyframe animations to avoid conflicts.
+ */
 .layout-branch-content {
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.layout-branch-content[data-state="open"] {
-  animation: slideDown 0.2s ease-out;
-}
-
-.layout-branch-content[data-state="closed"] {
-  animation: slideUp 0.15s ease-out forwards;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    height: 0;
-  }
-  to {
-    opacity: 1;
-    height: var(--height);
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 1;
-    height: var(--height);
-  }
-  to {
-    opacity: 0;
-    height: 0;
-  }
+/* Inner container for branch content when using Framer Motion wrapper */
+.layout-branch-content-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .layout-tree-item {

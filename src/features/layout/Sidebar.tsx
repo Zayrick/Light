@@ -1,21 +1,20 @@
 import { Home, Settings } from "lucide-react";
 import clsx from "clsx";
-import { motion } from "framer-motion";
-import { useCallback, memo } from "react";
+import { motion, LayoutGroup } from "framer-motion";
+import { useCallback } from "react";
 import { Device } from "../../types";
 import type { SelectedScope } from "../../hooks/useDevices";
 import { SidebarDeviceTree } from "./SidebarDeviceTree";
-import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "./constants";
+import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "../../motion/transitions";
 
-const ActiveHighlight = memo(() => (
+const ActiveHighlight = () => (
   <motion.div
-    layoutId="active-nav"
+    layoutId="sidebar-active-highlight"
     className="active-highlight"
     transition={HIGHLIGHT_TRANSITION}
+    style={{ zIndex: -1 }}
   />
-));
-
-ActiveHighlight.displayName = "ActiveHighlight";
+);
 
 interface SidebarProps {
   activeTab: string;
@@ -58,53 +57,53 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-content">
-        <div className="nav-group nav-group-main">
-          <div>
+      <LayoutGroup id="sidebar-nav">
+        <div className="sidebar-content">
+          <div className="nav-group nav-group-main">
+            <div>
+              <motion.div
+                layout
+                className={clsx("nav-item", activeTab === "home" && "active")}
+                onClick={() => setActiveTab("home")}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                animate={{ fontWeight: activeTab === "home" ? 600 : 400 }}
+                transition={NAV_TRANSITION}
+              >
+                {activeTab === "home" && <ActiveHighlight />}
+                <Home size={18} />
+                <span>Home</span>
+              </motion.div>
+              <div className="nav-divider" />
+            </div>
+            <div className="device-list">
+              <SidebarDeviceTree
+                activeTab={activeTab}
+                devices={devices}
+                selectedScope={selectedScope}
+                onSelectScope={handleScopeSelect}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+              />
+            </div>
+          </div>
+          <div className="nav-group nav-group-settings">
             <motion.div
-              className={clsx("nav-item", activeTab === "home" && "active")}
-              onClick={() => setActiveTab("home")}
+              layout
+              className={clsx("nav-item", activeTab === "settings" && "active")}
+              onClick={() => setActiveTab("settings")}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
-              animate={{
-                fontWeight: activeTab === "home" ? 600 : 400,
-              }}
+              animate={{ fontWeight: activeTab === "settings" ? 600 : 400 }}
               transition={NAV_TRANSITION}
             >
-              {activeTab === "home" && <ActiveHighlight />}
-              <Home size={18} />
-              <span>Home</span>
+              {activeTab === "settings" && <ActiveHighlight />}
+              <Settings size={18} />
+              <span>Settings</span>
             </motion.div>
-            <div className="nav-divider"></div>
-          </div>
-          <div className="device-list">
-            <SidebarDeviceTree
-              activeTab={activeTab}
-              devices={devices}
-              selectedScope={selectedScope}
-              onSelectScope={handleScopeSelect}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            />
           </div>
         </div>
-        <div className="nav-group nav-group-settings">
-          <motion.div
-            className={clsx("nav-item", activeTab === "settings" && "active")}
-            onClick={() => setActiveTab("settings")}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-            animate={{
-              fontWeight: activeTab === "settings" ? 600 : 400,
-            }}
-            transition={NAV_TRANSITION}
-          >
-            {activeTab === "settings" && <ActiveHighlight />}
-            <Settings size={18} />
-            <span>Settings</span>
-          </motion.div>
-        </div>
-      </div>
+      </LayoutGroup>
     </aside>
   );
 }

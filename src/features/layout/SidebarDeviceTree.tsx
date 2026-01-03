@@ -1,14 +1,38 @@
 import { TreeView, createTreeCollection } from "@ark-ui/react/tree-view";
 import { Menu } from "@ark-ui/react/menu";
 import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
 import type { Device, ScopeModeState } from "../../types";
 import type { SelectedScope } from "../../hooks/useDevices";
-import { HIGHLIGHT_TRANSITION } from "./constants";
+import { 
+  HIGHLIGHT_TRANSITION, 
+  BRANCH_TRANSITION,
+  branchContentVariants 
+} from "../../motion/transitions";
 
 type ControlState = "none" | "explicit" | "inherited";
+
+function DeviceContextMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <Menu.Root lazyMount unmountOnExit>
+      <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
+      <Menu.Positioner>
+        <Menu.Content>
+          <Menu.Item value="turn-off">
+            <Power />
+            关灯
+          </Menu.Item>
+          <Menu.Item value="settings">
+            <Settings />
+            设置设备
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Positioner>
+    </Menu.Root>
+  );
+}
 
 interface DeviceTreeNode {
   id: string;
@@ -137,11 +161,11 @@ export function SidebarDeviceTree({
 
   const expandedValue = useMemo(() => {
     if (activeTab !== "device-detail" || !selectedScope) return [];
-    const values: string[] = [];
-    values.push(`dev:${selectedScope.port}`);
-    if (selectedScope.outputId) values.push(`out:${selectedScope.port}:${selectedScope.outputId}`);
-    if (selectedScope.segmentId && selectedScope.outputId) {
-      values.push(`seg:${selectedScope.port}:${selectedScope.outputId}:${selectedScope.segmentId}`);
+    // Expand the path to the selected scope.
+    // Note: segment is a leaf node, so it does not need to be in expandedValue.
+    const values: string[] = [`dev:${selectedScope.port}`];
+    if (selectedScope.outputId) {
+      values.push(`out:${selectedScope.port}:${selectedScope.outputId}`);
     }
     return values;
   }, [activeTab, selectedScope]);
@@ -162,6 +186,7 @@ export function SidebarDeviceTree({
             onSelectScope={onSelectScope}
             onMouseMove={onMouseMove}
             onMouseLeave={onMouseLeave}
+            expandedValue={expandedValue}
           />
         ))}
       </TreeView.Tree>
@@ -174,6 +199,7 @@ interface DeviceTreeItemProps extends TreeView.NodeProviderProps<DeviceTreeNode>
   onSelectScope: (scope: SelectedScope) => void;
   onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
   onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => void;
+  expandedValue: string[];
 }
 
 const DeviceTreeItem = ({
@@ -183,22 +209,20 @@ const DeviceTreeItem = ({
   onSelectScope,
   onMouseMove,
   onMouseLeave,
+  expandedValue,
 }: DeviceTreeItemProps) => {
   const isSelected = selectedNodeId === node.id;
   const depth = indexPath.length;
+  const isExpanded = expandedValue.includes(node.id);
 
-  const getIndent = () => {
-    if (depth === 2) return 8;
-    if (depth >= 3) return 20;
-    return 0;
-  };
+  const indent = depth === 2 ? 8 : depth >= 3 ? 20 : 0;
 
   // Branch controls (device / output nodes with children) should not be indented at root.
-  const branchIndentStyle = depth > 1 ? { marginLeft: `${getIndent()}px` } : undefined;
+  const branchIndentStyle = depth > 1 ? { marginLeft: `${indent}px` } : undefined;
 
   // TreeView.Item has a default CSS margin-left (see `.layout-tree-item`) which makes
   // root leaf nodes look like "children". We always set margin-left explicitly here.
-  const itemIndentStyle = { marginLeft: `${getIndent()}px` };
+  const itemIndentStyle = { marginLeft: `${indent}px` };
 
   const indicatorColor =
     node.controlState === "explicit"
@@ -221,14 +245,14 @@ const DeviceTreeItem = ({
       </span>
     ) : null;
 
-  const Highlight = () =>
-    isSelected ? (
-      <motion.div
-        layoutId="active-nav"
-        className="active-highlight"
-        transition={HIGHLIGHT_TRANSITION}
-      />
-    ) : null;
+  const Highlight = isSelected ? (
+    <motion.div
+      layoutId="sidebar-active-highlight"
+      className="active-highlight"
+      transition={HIGHLIGHT_TRANSITION}
+      style={{ zIndex: -1 }}
+    />
+  ) : null;
 
   const handleClick = () => {
     onSelectScope({
@@ -238,93 +262,95 @@ const DeviceTreeItem = ({
     });
   };
 
-  const ContextMenu = ({ children }: { children: React.ReactNode }) => (
-    <Menu.Root lazyMount unmountOnExit>
-      <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
-      <Menu.Positioner>
-        <Menu.Content>
-          <Menu.Item value="turn-off">
-            <Power />
-            关灯
-          </Menu.Item>
-          <Menu.Item value="settings">
-            <Settings />
-            设置设备
-          </Menu.Item>
-        </Menu.Content>
-      </Menu.Positioner>
-    </Menu.Root>
-  );
-
   return (
-    <TreeView.NodeProvider key={node.id} node={node} indexPath={indexPath}>
+    <TreeView.NodeProvider node={node} indexPath={indexPath}>
       {node.children ? (
         <TreeView.Branch className="layout-tree-branch">
-          <ContextMenu>
-            <TreeView.BranchControl
-              className={clsx("device-list-item layout-branch-control", isSelected && "active")}
-              style={branchIndentStyle}
+          <DeviceContextMenu>
+            <motion.div layout>
+              <TreeView.BranchControl
+                className={clsx("device-list-item layout-branch-control", isSelected && "active")}
+                style={branchIndentStyle}
+                onClick={handleClick}
+                onMouseMove={onMouseMove}
+                onMouseLeave={onMouseLeave}
+              >
+                {Highlight}
+                {icon}
+                <div className="device-list-info">
+                  <div className="device-list-item-name">{node.name}</div>
+                  {node.kind === "device" && (
+                    <div className="device-list-item-port">{node.port}</div>
+                  )}
+                </div>
+                <TreeView.BranchIndicator className="layout-branch-indicator">
+                  <ChevronRight size={14} />
+                </TreeView.BranchIndicator>
+              </TreeView.BranchControl>
+            </motion.div>
+          </DeviceContextMenu>
+          {/* Use AnimatePresence + motion.div for smooth height animation */}
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div
+                key={`branch-content-${node.id}`}
+                variants={branchContentVariants}
+                initial="collapsed"
+                animate="expanded"
+                exit="collapsed"
+                transition={BRANCH_TRANSITION}
+                style={{ overflow: "hidden" }}
+              >
+                <TreeView.BranchContent className="layout-branch-content-inner">
+                  {node.children.map((child, index) => (
+                    <DeviceTreeItem
+                      key={child.id}
+                      node={child}
+                      indexPath={[...indexPath, index]}
+                      selectedNodeId={selectedNodeId}
+                      onSelectScope={onSelectScope}
+                      onMouseMove={onMouseMove}
+                      onMouseLeave={onMouseLeave}
+                      expandedValue={expandedValue}
+                    />
+                  ))}
+                </TreeView.BranchContent>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </TreeView.Branch>
+      ) : (
+        <DeviceContextMenu>
+          <motion.div layout>
+            <TreeView.Item
+              className={clsx(
+                "device-list-item",
+                node.kind === "device" ? "layout-branch-control" : "layout-tree-item",
+                isSelected && "active"
+              )}
+              style={itemIndentStyle}
               onClick={handleClick}
               onMouseMove={onMouseMove}
               onMouseLeave={onMouseLeave}
             >
-              <Highlight />
-              {icon}
-              <div className="device-list-info">
-                <div className="device-list-item-name">{node.name}</div>
-                {node.kind === "device" && (
-                  <div className="device-list-item-port">{node.port}</div>
-                )}
-              </div>
-              <TreeView.BranchIndicator className="layout-branch-indicator">
-                <ChevronRight size={14} />
-              </TreeView.BranchIndicator>
-            </TreeView.BranchControl>
-          </ContextMenu>
-          <TreeView.BranchContent className="layout-branch-content">
-            {node.children.map((child, index) => (
-              <DeviceTreeItem
-                key={child.id}
-                node={child}
-                indexPath={[...indexPath, index]}
-                selectedNodeId={selectedNodeId}
-                onSelectScope={onSelectScope}
-                onMouseMove={onMouseMove}
-                onMouseLeave={onMouseLeave}
-              />
-            ))}
-          </TreeView.BranchContent>
-        </TreeView.Branch>
-      ) : (
-        <ContextMenu>
-          <TreeView.Item
-            className={clsx(
-              "device-list-item",
-              node.kind === "device" ? "layout-branch-control" : "layout-tree-item",
-              isSelected && "active"
-            )}
-            style={itemIndentStyle}
-            onClick={handleClick}
-            onMouseMove={onMouseMove}
-            onMouseLeave={onMouseLeave}
-          >
-            <Highlight />
-            {node.kind === "device" ? (
-              <>
-                {icon}
-                <div className="device-list-info">
-                  <div className="device-list-item-name">{node.name}</div>
-                  <div className="device-list-item-port">{node.port}</div>
-                </div>
-              </>
-            ) : (
-              <TreeView.ItemText className="layout-item-text">
-                {segmentDot ?? icon}
-                <span className="device-list-item-name">{node.name}</span>
-              </TreeView.ItemText>
-            )}
-          </TreeView.Item>
-        </ContextMenu>
+              {Highlight}
+              {node.kind === "device" ? (
+                <>
+                  {icon}
+                  <div className="device-list-info">
+                    <div className="device-list-item-name">{node.name}</div>
+                    <div className="device-list-item-port">{node.port}</div>
+                  </div>
+                </>
+              ) : (
+                <TreeView.ItemText className="layout-item-text">
+                  {segmentDot ?? icon}
+                  <span className="device-list-item-name">{node.name}</span>
+                </TreeView.ItemText>
+              )}
+            </TreeView.Item>
+          </motion.div>
+        </DeviceContextMenu>
       )}
     </TreeView.NodeProvider>
   );
