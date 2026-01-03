@@ -209,10 +209,8 @@ impl LedMatrixUdpController {
 
                         if fragments.iter().all(|p| p.is_some()) {
                             let mut bytes = Vec::new();
-                            for part in fragments.into_iter() {
-                                if let Some(mut p) = part {
-                                    bytes.append(&mut p);
-                                }
+                            for mut p in fragments.into_iter().flatten() {
+                                bytes.append(&mut p);
                             }
 
                             let cfg: DeviceConfigDto = serde_json::from_slice(&bytes)
@@ -353,10 +351,8 @@ impl LedMatrixUdpController {
         }
 
         let mut max_idx: Option<usize> = None;
-        for opt in &matrix.map {
-            if let Some(idx) = opt {
-                max_idx = Some(max_idx.map_or(*idx, |m| m.max(*idx)));
-            }
+        for idx in matrix.map.iter().flatten() {
+            max_idx = Some(max_idx.map_or(*idx, |m| m.max(*idx)));
         }
 
         let Some(max_idx) = max_idx else {
