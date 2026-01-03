@@ -1,7 +1,7 @@
 import { TreeView, createTreeCollection } from "@ark-ui/react/tree-view";
 import { Menu } from "@ark-ui/react/menu";
 import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
 import type { Device, ScopeModeState } from "../../types";
@@ -221,17 +221,14 @@ const DeviceTreeItem = ({
       </span>
     ) : null;
 
-  const Highlight = () => (
-    <AnimatePresence>
-      {isSelected && (
-        <motion.div
-          layoutId="active-device-node"
-          className="active-highlight"
-          transition={HIGHLIGHT_TRANSITION}
-        />
-      )}
-    </AnimatePresence>
-  );
+  const Highlight = () =>
+    isSelected ? (
+      <motion.div
+        layoutId="active-nav"
+        className="active-highlight"
+        transition={HIGHLIGHT_TRANSITION}
+      />
+    ) : null;
 
   const handleClick = () => {
     onSelectScope({
