@@ -2,11 +2,13 @@
 
 /// 查询设备信息
 pub const CMD_QUERY_INFO: u8 = 0x10;
+/// 查询设备输出口/布局配置（JSON，可能分片）
+pub const CMD_QUERY_CONFIG: u8 = 0x14;
 /// 分片帧数据（唯一支持的写入命令）
 pub const CMD_FRAGMENT_PIXELS: u8 = 0x12;
 
 /// 当前协议版本
-pub const PROTOCOL_VERSION: u8 = 3;
+pub const PROTOCOL_VERSION: u8 = 4;
 /// 推荐的最大UDP负载（字节），与虚拟设备保持一致
 pub const MAX_UDP_PAYLOAD: usize = 1400;
 
@@ -22,6 +24,17 @@ pub struct QueryInfo {
     pub name: String,
 }
 
+/// 配置查询分片
+///
+/// 响应格式:
+/// [cmd, msg_id, total_fragments, fragment_index, data_len_lo, data_len_hi, data_bytes...]
+pub struct ConfigFragment<'a> {
+    pub msg_id: u8,
+    pub total_fragments: u8,
+    pub fragment_index: u8,
+    pub data: &'a [u8],
+}
+
 /// LED矩阵UDP协议编码器/解码器
 pub struct LedMatrixProtocol;
 
@@ -30,6 +43,12 @@ impl LedMatrixProtocol {
     #[inline]
     pub fn encode_query_info() -> [u8; 1] {
         [CMD_QUERY_INFO]
+    }
+
+    /// 编码查询设备配置命令
+    #[inline]
+    pub fn encode_query_config() -> [u8; 1] {
+        [CMD_QUERY_CONFIG]
     }
 
     /// 解析设备信息响应
@@ -58,6 +77,29 @@ impl LedMatrixProtocol {
             height,
             pixel_size,
             name,
+        })
+    }
+
+    /// 解析配置分片响应
+    pub fn decode_config_fragment(data: &[u8]) -> Option<ConfigFragment<'_>> {
+        if data.len() < 6 || data[0] != CMD_QUERY_CONFIG {
+            return None;
+        }
+
+        let msg_id = data[1];
+        let total_fragments = data[2];
+        let fragment_index = data[3];
+        let data_len = u16::from_le_bytes([data[4], data[5]]) as usize;
+
+        if data.len() < 6 + data_len {
+            return None;
+        }
+
+        Some(ConfigFragment {
+            msg_id,
+            total_fragments,
+            fragment_index,
+            data: &data[6..6 + data_len],
         })
     }
 

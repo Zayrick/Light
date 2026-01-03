@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 *.3d
+
+# Python
+__pycache__/
+*.pyc
