@@ -429,7 +429,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
 
         {/* Right Column: Configuration */}
         <div
-          className="no-scrollbar"
+          className="no-scrollbar fade-edges"
           style={{
             width: "280px",
             flex: "0 0 280px",
@@ -439,7 +439,8 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
             gap: "12px",
             minHeight: 0,
             overflowY: "auto",
-            paddingBottom: "20px",
+            paddingTop: "12px",
+            paddingBottom: "12px",
           }}
         >
           {/* Global Device Settings */}
