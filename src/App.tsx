@@ -8,28 +8,9 @@ import { SettingsPage } from "./features/settings/SettingsPage";
 import { useDevices } from "./hooks/useDevices";
 import { useEffects } from "./hooks/useEffects";
 import { PlatformProvider } from "./hooks/usePlatform";
+import { pageVariants, PAGE_TRANSITION } from "./motion/transitions";
 import "./styles/theme.css";
 import "./styles/layout.css";
-
-const variants = {
-  enter: (direction: number) => ({
-    y: direction > 0 ? 20 : -20,
-    opacity: 0,
-  }),
-  center: {
-    y: 0,
-    opacity: 1,
-  },
-  exit: (direction: number) => ({
-    y: direction > 0 ? -20 : 20,
-    opacity: 0,
-  }),
-};
-
-const ANIMATION_TRANSITION = {
-  duration: 0.3,
-  ease: [0.16, 1, 0.3, 1] as const,
-};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
@@ -102,11 +83,11 @@ export default function App() {
             <motion.div
               key="home"
               custom={direction}
-              variants={variants}
+              variants={pageVariants}
               initial="enter"
               animate="center"
               exit="exit"
-              transition={ANIMATION_TRANSITION}
+              transition={PAGE_TRANSITION}
               style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
             >
               <HomePage
@@ -123,11 +104,11 @@ export default function App() {
             <motion.div
               key={`device-detail-${selectedDevice.id}`}
               custom={direction}
-              variants={variants}
+              variants={pageVariants}
               initial="enter"
               animate="center"
               exit="exit"
-              transition={ANIMATION_TRANSITION}
+              transition={PAGE_TRANSITION}
               style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
             >
               <DeviceDetail
@@ -143,11 +124,11 @@ export default function App() {
             <motion.div
               key="settings"
               custom={direction}
-              variants={variants}
+              variants={pageVariants}
               initial="enter"
               animate="center"
               exit="exit"
-              transition={ANIMATION_TRANSITION}
+              transition={PAGE_TRANSITION}
               style={{ width: "100%", flex: 1, display: "flex", flexDirection: "column" }}
             >
               <SettingsPage />
