@@ -1,4 +1,10 @@
-import { forwardRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useRef,
+  type MutableRefObject,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import {
   Tabs as ArkTabs,
   type TabContentProps,
@@ -22,13 +28,63 @@ const Root = forwardRef<HTMLDivElement, WithClassName<TabsRootProps>>(
 Root.displayName = "TabsRoot";
 
 const List = forwardRef<HTMLDivElement, WithClassName<TabListProps>>(
-  ({ className, ...props }, ref) => (
-    <ArkTabs.List
-      ref={ref}
-      {...props}
-      className={cx("ui-tabs__list", className)}
-    />
-  )
+  ({ className, onWheel, ...props }, ref) => {
+    const elRef = useRef<HTMLDivElement | null>(null);
+
+    const setRefs = useCallback(
+      (node: HTMLDivElement | null) => {
+        elRef.current = node;
+        if (!ref) return;
+        if (typeof ref === "function") {
+          ref(node);
+          return;
+        }
+        (ref as MutableRefObject<HTMLDivElement | null>).current = node;
+      },
+      [ref]
+    );
+
+    const handleWheel = useCallback(
+      (e: ReactWheelEvent<HTMLDivElement>) => {
+        // Let consumers run first (and potentially preventDefault)
+        onWheel?.(e);
+        if (e.defaultPrevented) return;
+
+        // Only translate vertical wheel to horizontal scroll when:
+        // - the list actually overflows horizontally
+        // - user isn't already requesting horizontal scroll (shift)
+        // - the gesture is primarily vertical (deltaY)
+        if (e.shiftKey) return;
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+
+        const el = elRef.current;
+        if (!el) return;
+        if (el.scrollWidth <= el.clientWidth) return;
+
+        const maxLeft = el.scrollWidth - el.clientWidth;
+        if (maxLeft <= 0) return;
+
+        const prevLeft = el.scrollLeft;
+        const nextLeft = Math.max(0, Math.min(maxLeft, prevLeft + e.deltaY));
+
+        // Only prevent page scroll if we actually moved horizontally.
+        if (nextLeft !== prevLeft) {
+          el.scrollLeft = nextLeft;
+          e.preventDefault();
+        }
+      },
+      [onWheel]
+    );
+
+    return (
+      <ArkTabs.List
+        ref={setRefs}
+        {...props}
+        onWheel={handleWheel}
+        className={cx("ui-tabs__list", className)}
+      />
+    );
+  }
 );
 List.displayName = "TabsList";
 
