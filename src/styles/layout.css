@@ -193,6 +193,7 @@
 .device-list-icon {
   color: var(--text-primary);
   opacity: 0.8;
+  flex: 0 0 auto;
 }
 
 .device-list-item.active .device-list-icon {
