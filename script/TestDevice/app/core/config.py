@@ -40,22 +40,10 @@ class DeviceConfig:
 
 
 def normalize_output_type(value: Any) -> str:
-    if not isinstance(value, str):
-        raise ValueError("output_type must be a string")
-    v = value.strip()
-    if not v:
-        raise ValueError("output_type cannot be empty")
-
-    lowered = v.lower()
-    if lowered in ("single",):
-        return "Single"
-    if lowered in ("linear", "strip", "ledstrip"):
-        return "Linear"
-    if lowered in ("matrix", "grid"):
-        return "Matrix"
-    if v in ("Single", "Linear", "Matrix"):
-        return v
-    raise ValueError(f"Unsupported output_type: {value}")
+    # Test device: strict, no backward-compatible aliases.
+    if value not in ("Single", "Linear", "Matrix"):
+        raise ValueError("output_type must be one of: 'Single' | 'Linear' | 'Matrix'")
+    return value
 
 
 def leds_count_from_matrix_map(output_id: str, m: MatrixMapConfig) -> int:
@@ -125,9 +113,6 @@ def parse_output(raw: Any) -> OutputConfig:
     output_type = normalize_output_type(raw.get("output_type"))
 
     if output_type == "Single":
-        leds_count = int(raw.get("leds_count", 1))
-        if leds_count != 1:
-            raise ValueError(f"Output '{output_id}' is Single but leds_count != 1")
         return OutputConfig(
             id=output_id,
             name=name,
@@ -138,14 +123,11 @@ def parse_output(raw: Any) -> OutputConfig:
 
     if output_type == "Linear":
         length_raw = raw.get("length", None)
-        leds_count_raw = raw.get("leds_count", None)
-        if length_raw is None and leds_count_raw is None:
+        if length_raw is None:
             raise ValueError(f"Output '{output_id}' is Linear but missing length")
-        length = int(length_raw if length_raw is not None else leds_count_raw)
+        length = int(length_raw)
         if length <= 0:
             raise ValueError(f"Output '{output_id}' has invalid length={length}")
-        if length_raw is not None and leds_count_raw is not None and int(length_raw) != int(leds_count_raw):
-            raise ValueError(f"Output '{output_id}' has conflicting length and leds_count")
         return OutputConfig(
             id=output_id,
             name=name,
@@ -156,11 +138,6 @@ def parse_output(raw: Any) -> OutputConfig:
 
     matrix = parse_matrix_map(output_id, raw.get("matrix"))
     derived = leds_count_from_matrix_map(output_id, matrix)
-    hinted = raw.get("leds_count", None)
-    if hinted is not None and int(hinted) != derived:
-        raise ValueError(
-            f"Output '{output_id}' leds_count mismatch: provided={hinted}, derived={derived}"
-        )
     return OutputConfig(
         id=output_id,
         name=name,
@@ -208,7 +185,6 @@ def device_config_to_dict(config: DeviceConfig) -> dict[str, Any]:
             "id": out.id,
             "name": out.name,
             "output_type": out.output_type,
-            "leds_count": out.leds_count,
         }
         if out.output_type == "Single":
             outputs.append(item)

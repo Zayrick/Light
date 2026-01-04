@@ -36,9 +36,6 @@ struct OutputPortConfigDto {
     name: String,
     output_type: SegmentType,
     #[serde(default)]
-    leds_count: Option<usize>,
-    /// Alias for `leds_count` for `Linear` outputs (matches the user's mental model).
-    #[serde(default)]
     length: Option<usize>,
     #[serde(default)]
     matrix: Option<MatrixMap>,
@@ -47,7 +44,8 @@ struct OutputPortConfigDto {
 /// LED矩阵UDP控制器
 pub struct LedMatrixUdpController {
     device_name: String,
-    protocol_version: u8,
+    device_description: String,
+    serial: String,
     addr: SocketAddr,
     socket: UdpSocket,
     outputs: Vec<OutputPortDefinition>,
@@ -75,34 +73,24 @@ impl LedMatrixUdpController {
             .map_err(|e| format!("Failed to set socket timeout: {}", e))?;
 
         // 查询设备详细信息（必须成功，否则报错）
+        // TestDevice is intentionally not backward-compatible.
         let info = Self::fetch_device_info(&socket, addr)?;
 
-        if info.version < 3 || info.version > PROTOCOL_VERSION {
+        if info.version != PROTOCOL_VERSION {
             return Err(format!(
-                "Unsupported protocol version: device={}, supported=3..={}",
+                "Unsupported protocol version: device={}, supported={}",
                 info.version, PROTOCOL_VERSION
             ));
         }
 
-        let protocol_version = info.version;
         let device_name = info.name.clone();
+        let device_description = info.description.clone();
+        let serial = info.serial.clone();
 
-        let outputs = if protocol_version >= 4 {
-            match Self::fetch_device_config(&socket, addr) {
-                Ok(outputs) if !outputs.is_empty() => outputs,
-                Ok(_) => Self::fallback_outputs_from_query_info(&info)?,
-                Err(err) => {
-                    log::warn!(
-                        device = device_name.as_str(),
-                        err:display = err;
-                        "Failed to fetch config from UDP device, falling back to query-info layout"
-                    );
-                    Self::fallback_outputs_from_query_info(&info)?
-                }
-            }
-        } else {
-            Self::fallback_outputs_from_query_info(&info)?
-        };
+        let outputs = Self::fetch_device_config(&socket, addr)?;
+        if outputs.is_empty() {
+            return Err("Device config is empty".to_string());
+        }
 
         let led_count: usize = outputs.iter().map(|o| o.leds_count).sum();
         if led_count == 0 {
@@ -126,7 +114,8 @@ impl LedMatrixUdpController {
 
         Ok(Self {
             device_name,
-            protocol_version,
+            device_description,
+            serial,
             addr,
             socket,
             outputs,
@@ -273,29 +262,14 @@ impl LedMatrixUdpController {
                 if dto.matrix.is_some() {
                     return Err(format!("Output '{}' is Single but has matrix data", id));
                 }
-                let hinted = dto.leds_count.or(dto.length);
-                if let Some(v) = hinted {
-                    if v != 1 {
-                        return Err(format!("Output '{}' is Single but leds_count != 1", id));
-                    }
-                }
                 (1usize, None)
             }
             SegmentType::Linear => {
                 if dto.matrix.is_some() {
                     return Err(format!("Output '{}' is Linear but has matrix data", id));
                 }
-                if let (Some(a), Some(b)) = (dto.leds_count, dto.length) {
-                    if a != b {
-                        return Err(format!(
-                            "Output '{}' has conflicting leds_count={} and length={}",
-                            id, a, b
-                        ));
-                    }
-                }
                 let len = dto
-                    .leds_count
-                    .or(dto.length)
+                    .length
                     .ok_or_else(|| format!("Output '{}' is Linear but missing length", id))?;
                 if len == 0 {
                     return Err(format!("Output '{}' has invalid length=0", id));
@@ -303,21 +277,10 @@ impl LedMatrixUdpController {
                 (len, None)
             }
             SegmentType::Matrix => {
-                if dto.length.is_some() {
-                    return Err(format!("Output '{}' is Matrix but has length", id));
-                }
                 let matrix = dto
                     .matrix
                     .ok_or_else(|| format!("Output '{}' is Matrix but missing matrix data", id))?;
                 let derived = Self::leds_count_from_matrix_map(&id, &matrix)?;
-                if let Some(hinted) = dto.leds_count {
-                    if hinted != derived {
-                        return Err(format!(
-                            "Output '{}' leds_count mismatch: provided={}, derived={}",
-                            id, hinted, derived
-                        ));
-                    }
-                }
                 (derived, Some(matrix))
             }
         };
@@ -400,26 +363,6 @@ impl LedMatrixUdpController {
         }
     }
 
-    fn fallback_outputs_from_query_info(info: &protocol::QueryInfo) -> Result<Vec<OutputPortDefinition>, String> {
-        let width = (info.width as usize).max(1);
-        let height = (info.height as usize).max(1);
-        let leds_count = width
-            .checked_mul(height)
-            .ok_or_else(|| "Matrix LED count overflow".to_string())?;
-
-        let map = (0..leds_count).map(Some).collect::<Vec<_>>();
-        let matrix_map = MatrixMap { width, height, map };
-
-        Ok(vec![OutputPortDefinition {
-            id: "matrix".to_string(),
-            name: "LED Matrix".to_string(),
-            output_type: SegmentType::Matrix,
-            leds_count,
-            matrix: Some(matrix_map),
-            capabilities: Self::capabilities_for_output(SegmentType::Matrix, leds_count),
-        }])
-    }
-
     /// 发送UDP数据包
     fn send(&self, data: &[u8]) -> Result<(), String> {
         self.socket
@@ -435,34 +378,16 @@ impl Controller for LedMatrixUdpController {
     }
 
     fn model(&self) -> String {
-        if self.outputs.len() == 1 {
-            let o = &self.outputs[0];
-            return match o.output_type {
-                SegmentType::Single => "LED".to_string(),
-                SegmentType::Linear => format!("LED Strip ({})", o.leds_count),
-                SegmentType::Matrix => o
-                    .matrix
-                    .as_ref()
-                    .map(|m| format!("LED Matrix {}x{}", m.width, m.height))
-                    .unwrap_or_else(|| format!("LED Matrix ({})", o.leds_count)),
-            };
-        }
-
-        format!("UDP Virtual LEDs ({} outputs)", self.outputs.len())
+        // Device identity is defined by Python.
+        self.device_name.clone()
     }
 
     fn description(&self) -> String {
-        format!(
-            "UDP Virtual LED Device [v{}] - {} ({} outputs, {} LEDs)",
-            self.protocol_version,
-            self.device_name,
-            self.outputs.len(),
-            self.led_count
-        )
+        self.device_description.clone()
     }
 
     fn serial_id(&self) -> String {
-        self.device_name.clone()
+        self.serial.clone()
     }
 
     fn device_type(&self) -> DeviceType {

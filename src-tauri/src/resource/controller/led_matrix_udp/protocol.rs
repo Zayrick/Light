@@ -22,6 +22,8 @@ pub struct QueryInfo {
     pub height: u16,
     pub pixel_size: u16,
     pub name: String,
+    pub description: String,
+    pub serial: String,
 }
 
 /// 配置查询分片
@@ -52,7 +54,11 @@ impl LedMatrixProtocol {
     }
 
     /// 解析设备信息响应
-    /// 格式: [cmd, version, width_lo, width_hi, height_lo, height_hi, pixel_size_lo, pixel_size_hi, name_len, name_bytes]
+    /// 格式 (strict, v4):
+    /// [cmd, version, width_lo, width_hi, height_lo, height_hi, pixel_size_lo, pixel_size_hi,
+    ///  name_len, name_bytes,
+    ///  desc_len, desc_bytes,
+    ///  sn_len, sn_bytes]
     pub fn decode_query_response(data: &[u8]) -> Option<QueryInfo> {
         if data.len() < 9 || data[0] != CMD_QUERY_INFO {
             return None;
@@ -62,14 +68,25 @@ impl LedMatrixProtocol {
         let width = u16::from_le_bytes([data[2], data[3]]);
         let height = u16::from_le_bytes([data[4], data[5]]);
         let pixel_size = u16::from_le_bytes([data[6], data[7]]);
-        let name_len = data[8] as usize;
+        let mut offset = 8;
 
-        if data.len() < 9 + name_len {
-            return None;
-        }
+        let name_len = *data.get(offset)? as usize;
+        offset += 1;
+        let name_bytes = data.get(offset..offset + name_len)?;
+        offset += name_len;
 
-        let name_bytes = &data[9..9 + name_len];
+        let desc_len = *data.get(offset)? as usize;
+        offset += 1;
+        let desc_bytes = data.get(offset..offset + desc_len)?;
+        offset += desc_len;
+
+        let sn_len = *data.get(offset)? as usize;
+        offset += 1;
+        let sn_bytes = data.get(offset..offset + sn_len)?;
+
         let name = String::from_utf8_lossy(name_bytes).to_string();
+        let description = String::from_utf8_lossy(desc_bytes).to_string();
+        let serial = String::from_utf8_lossy(sn_bytes).to_string();
 
         Some(QueryInfo {
             version,
@@ -77,6 +94,8 @@ impl LedMatrixProtocol {
             height,
             pixel_size,
             name,
+            description,
+            serial,
         })
     }
 

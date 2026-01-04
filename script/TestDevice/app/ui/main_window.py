@@ -41,6 +41,7 @@ from ..core.config import (
     load_device_config,
 )
 from ..core.runtime import DeviceRuntime
+from ..core.protocol import PROTOCOL_VERSION
 from ..presets import PresetStore
 from ..services.virtual_device import VirtualDeviceServer
 from .editors import (
@@ -166,7 +167,9 @@ class MainWindow(QMainWindow):
 
         device_box = QGroupBox("Device")
         device_form = QFormLayout(device_box)
-        self.device_name_edit = QLineEdit(DEFAULT_DEVICE_NAME)
+        fixed_name = f"TestDevice V{PROTOCOL_VERSION}"
+        self.device_name_edit = QLineEdit(fixed_name)
+        self.device_name_edit.setReadOnly(True)
         self.udp_port_spin = QSpinBox()
         self.udp_port_spin.setRange(1, 65535)
         self.udp_port_spin.setValue(DEFAULT_UDP_PORT)
@@ -253,7 +256,7 @@ class MainWindow(QMainWindow):
         self.preset_save_as_btn.clicked.connect(self._save_preset_as)
         self.preset_delete_btn.clicked.connect(self._delete_preset)
 
-        self.device_name_edit.textEdited.connect(self._on_config_changed)
+        # Name is fixed for the test device; no config edits.
         self.udp_port_spin.valueChanged.connect(self._on_config_changed)
         self.pixel_size_spin.valueChanged.connect(self._on_config_changed)
         self.import_btn.clicked.connect(self._import_json)
@@ -289,7 +292,7 @@ class MainWindow(QMainWindow):
     def _apply_device_config(self, config) -> None:
         self._loading = True
         try:
-            self.device_name_edit.setText(config.device_name)
+            self.device_name_edit.setText(f"TestDevice V{PROTOCOL_VERSION}")
             self.udp_port_spin.setValue(config.udp_port)
             self.pixel_size_spin.setValue(config.pixel_size)
             self._outputs = self._config_to_models(config)
@@ -342,7 +345,8 @@ class MainWindow(QMainWindow):
 
         data = {
             "schema_version": SCHEMA_VERSION,
-            "device_name": self.device_name_edit.text().strip() or DEFAULT_DEVICE_NAME,
+            # Kept in config for UI/presets, but runtime identity is fixed & defined by Python.
+            "device_name": f"TestDevice V{PROTOCOL_VERSION}",
             "udp_port": int(self.udp_port_spin.value()),
             "pixel_size": int(self.pixel_size_spin.value()),
             "outputs": outputs,

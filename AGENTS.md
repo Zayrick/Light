@@ -176,7 +176,7 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 4.  **依赖管理**：
     -   安装外部库时候，请使用命令安装最新版本而不是直接修改package.json或者src-tauri\Cargo.toml文件。
 5.  **Rust 严格验证**：
-    -   任何涉及 Rust 后端（`src-tauri/`）的修改，在提交前必须进行严格验证：运行 `cargo check --manifest-path src-tauri/Cargo.toml`。
+    -   任何涉及 Rust 后端（`src-tauri/`）的修改，在提交前必须进行严格验证：运行 `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`。
     -   目标：尽早发现编译/类型/特性开关等问题，确保后端代码变更符合项目规范并可被正常构建。
 5.  **样式与主题 (Styling & Theming)**：
     -   **统一颜色管理**：所有的颜色必须从 `src/styles/theme.css` 中定义的 CSS 变量获取，以确保统一的视觉风格。
@@ -193,5 +193,5 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
     - 若不得不放在别处：必须在 PR 说明里解释原因，并提出后续收敛路径。
 3. **新增灯效/控制器是否只通过 `inventory::submit!` 注册？**（不改中心注册表）
 4. **前端是否仍然是后端驱动 UI？**（新增参数类型走 ParamRenderer 分发，不硬编码特定灯效 UI）
-5. **Rust 修改是否运行 `cargo check --manifest-path src-tauri/Cargo.toml`？**
+5. **Rust 修改是否运行 `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`？**
 6. **前端颜色是否全部来自 `src/styles/theme.css` 变量？**

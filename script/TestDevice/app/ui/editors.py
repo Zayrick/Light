@@ -87,7 +87,6 @@ class MatrixOutputModel:
             "id": self.id,
             "name": self.name,
             "output_type": "Matrix",
-            "leds_count": led_idx,
             "matrix": {
                 "width": w,
                 "height": h,
@@ -107,7 +106,6 @@ class LinearOutputModel:
             "id": self.id,
             "name": self.name,
             "output_type": "Linear",
-            "leds_count": int(self.length),
             "length": int(self.length),
         }
 
@@ -122,7 +120,6 @@ class SingleOutputModel:
             "id": self.id,
             "name": self.name,
             "output_type": "Single",
-            "leds_count": 1,
         }
 
 
