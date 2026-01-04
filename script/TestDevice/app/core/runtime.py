@@ -4,7 +4,10 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
+import secrets
+
 from .config import DeviceConfig, OutputConfig, MatrixMapConfig
+from .protocol import PROTOCOL_VERSION
 
 LINEAR_DISPLAY_HEIGHT = 1
 OUTPUT_GAP = 2
@@ -28,7 +31,11 @@ class OutputRuntime:
 class DeviceRuntime:
     def __init__(self, config: DeviceConfig):
         self.config = config
-        self.name = config.device_name
+        # Identity is defined by Python (test-only, no backward compatibility).
+        self.name = f"TestDevice V{PROTOCOL_VERSION}"
+        self.description = "TestDevice by Python mDNS"
+        # 16 hex chars, randomized for every process start (UPPERCASE).
+        self.serial = secrets.token_hex(8).upper()
         self.udp_port = config.udp_port
         self.pixel_size = config.pixel_size
 
@@ -156,18 +163,7 @@ class DeviceRuntime:
             return False
 
     def apply_updates(self, updates: list[tuple[int, int, int, int]]) -> None:
-        with self.buffer_lock:
-            back_buf = self.back_buffer
-            buf_size = self.buffer_size
-            for index, r, g, b in updates:
-                idx = index * 3
-                if 0 <= idx < buf_size - 2:
-                    back_buf[idx] = r
-                    back_buf[idx + 1] = g
-                    back_buf[idx + 2] = b
-
-            self.front_buffer, self.back_buffer = self.back_buffer, self.front_buffer
-            self.dirty = True
+        raise RuntimeError("CMD_UPDATE_PIXELS is not supported in the TestDevice protocol")
 
     def apply_fragment_updates(
         self,

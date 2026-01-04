@@ -7,11 +7,9 @@ from typing import Callable, Optional
 
 from ..core.config import DeviceConfig, build_config_payload
 from ..core.protocol import (
-    CMD_FRAME_END,
     CMD_FRAGMENT_PIXELS,
     CMD_QUERY_CONFIG,
     CMD_QUERY_INFO,
-    CMD_UPDATE_PIXELS,
     MAX_UDP_PAYLOAD,
     PROTOCOL_VERSION,
 )
@@ -59,7 +57,9 @@ class VirtualDeviceServer:
         self._thread.start()
 
         self._register_mdns()
-        self._log(f"Virtual device started: {self.runtime.name} UDP={self.runtime.udp_port}")
+        self._log(
+            f"Virtual device started: {self.runtime.name} (SN={self.runtime.serial}) UDP={self.runtime.udp_port}"
+        )
 
     def stop(self) -> None:
         if not self._running:
@@ -113,12 +113,15 @@ class VirtualDeviceServer:
             "protocol": "udp",
             "version": str(PROTOCOL_VERSION),
             "name": self.runtime.name,
+            "description": self.runtime.description,
+            "sn": self.runtime.serial,
             "outputs": str(len(self.runtime.outputs)),
             "leds": str(self.runtime.total_leds),
         }
 
         service_type = "_testdevice._udp.local."
-        service_name = f"{self.runtime.name}.{service_type}"
+        # Use SN to keep the service instance name unique across restarts.
+        service_name = f"{self.runtime.serial}.{service_type}"
 
         self._service_info = ServiceInfo(
             service_type,
@@ -167,12 +170,6 @@ class VirtualDeviceServer:
             self._send_device_config(addr)
             return
 
-        if cmd == CMD_UPDATE_PIXELS:
-            updates = self._parse_updates(payload)
-            if updates:
-                self.runtime.apply_updates(updates)
-            return
-
         if cmd == CMD_FRAGMENT_PIXELS:
             if len(payload) < 5:
                 return
@@ -183,12 +180,6 @@ class VirtualDeviceServer:
             updates = self._parse_updates(payload[5:], count)
             if updates:
                 self.runtime.apply_fragment_updates(frame_id, total_fragments, fragment_index, updates)
-            return
-
-        if cmd == CMD_FRAME_END:
-            if len(payload) < 1:
-                return
-            self.runtime.apply_frame_end(payload[0])
             return
 
     def _parse_updates(self, payload: bytes, count_hint: Optional[int] = None) -> list[tuple[int, int, int, int]]:
@@ -223,16 +214,34 @@ class VirtualDeviceServer:
         try:
             primary_w, primary_h = self.runtime.primary_dimensions()
             name_bytes = self.runtime.name.encode("utf-8")
+            desc_bytes = self.runtime.description.encode("utf-8")
+            sn_bytes = self.runtime.serial.encode("ascii")
+
             name_len = min(len(name_bytes), 255)
-            response = struct.pack(
-                "<BBHHHB",
-                CMD_QUERY_INFO,
-                PROTOCOL_VERSION,
-                int(primary_w),
-                int(primary_h),
-                int(self.runtime.pixel_size),
-                name_len,
-            ) + name_bytes[:name_len]
+            desc_len = min(len(desc_bytes), 255)
+            sn_len = min(len(sn_bytes), 255)
+
+            # Response format (strict, v4):
+            # [cmd, version, width_lo, width_hi, height_lo, height_hi, pixel_size_lo, pixel_size_hi,
+            #  name_len, name_bytes,
+            #  desc_len, desc_bytes,
+            #  sn_len, sn_bytes]
+            response = (
+                struct.pack(
+                    "<BBHHH",
+                    CMD_QUERY_INFO,
+                    PROTOCOL_VERSION,
+                    int(primary_w),
+                    int(primary_h),
+                    int(self.runtime.pixel_size),
+                )
+                + bytes([name_len])
+                + name_bytes[:name_len]
+                + bytes([desc_len])
+                + desc_bytes[:desc_len]
+                + bytes([sn_len])
+                + sn_bytes[:sn_len]
+            )
             self._udp_socket.sendto(response, addr)
         except Exception:
             return
