@@ -10,6 +10,10 @@ interface SliderRendererProps {
   onCommit: (value: number) => void;
 }
 
+/**
+ * 纯渲染组件：只负责渲染 Slider 并转发事件。
+ * draft 状态由上层 ParamRenderer 统一管理。
+ */
 export function SliderRenderer({
   param,
   value,
@@ -17,15 +21,9 @@ export function SliderRenderer({
   onChange,
   onCommit,
 }: SliderRendererProps) {
-  const handleChange = (details: Slider.ValueChangeDetails) => {
-    const nextValue = details.value[0];
-    onChange(nextValue);
-    onCommit(nextValue);
-  };
-
-  const formatParamValue = (param: SliderParam, value: number) => {
-    if (param.step < 1) return value.toFixed(1);
-    return Math.round(value).toString();
+  const formatParamValue = (p: SliderParam, v: number) => {
+    if (p.step < 1) return v.toFixed(1);
+    return Math.round(v).toString();
   };
 
   return (
@@ -34,7 +32,8 @@ export function SliderRenderer({
       max={param.max}
       step={param.step}
       value={[value]}
-      onValueChange={handleChange}
+      onValueChange={(d) => onChange(d.value[0])}
+      onValueChangeEnd={(d) => onCommit(d.value[0])}
       disabled={disabled}
     >
       <HStack justify="space-between">

@@ -3,6 +3,9 @@
   --bg-app: transparent;
   --bg-sidebar: rgba(243, 243, 243, 0); /* Fully transparent to show Mica */
   --bg-content: rgba(255, 255, 255, 0); /* Fully transparent */
+
+  /* Solid surfaces (non-transparent) */
+  --bg-popover: #ffffff;
   
   --bg-card: rgba(255, 255, 255, 0.6); /* More frosted for readability */
   --bg-card-hover: rgba(255, 255, 255, 0.8);
@@ -64,6 +67,9 @@
     /* Dark Mode */
     --bg-sidebar: rgba(32, 32, 32, 0); /* Fully transparent */
     --bg-content: rgba(0, 0, 0, 0); /* Fully transparent */
+
+    /* Solid surfaces (non-transparent) */
+    --bg-popover: #202020;
     
     --bg-card: rgba(45, 45, 45, 0.5); /* Slightly more opaque for contrast */
     --bg-card-hover: rgba(60, 60, 60, 0.7);

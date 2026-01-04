@@ -223,7 +223,12 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     return paramValues[key] ?? param.default;
   };
 
-  const handleBrightnessChange = async (value: number) => {
+  const handleBrightnessChange = (value: number) => {
+    // 拖动期仅更新本地 UI 状态，避免每帧都触发 IPC。
+    setBrightness(value);
+  };
+
+  const handleBrightnessCommit = async (value: number) => {
     setBrightness(value);
     try {
       await api.setBrightness(device.port, value);
@@ -252,12 +257,11 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     }
   };
 
-  const handleParamChange = (mode: DisplayMode, param: EffectParam, value: EffectParamValue) => {
+  const handleParamCommit = async (mode: DisplayMode, param: EffectParam, value: EffectParamValue) => {
+    // 同步本地状态，确保依赖项判断等后续计算的准确性
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
-  };
 
-  const handleParamCommit = async (mode: DisplayMode, param: EffectParam, value: EffectParamValue) => {
     try {
       await api.updateScopeEffectParams({
         port: scope.port,
@@ -527,6 +531,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
               step={1}
               value={[brightness]}
               onValueChange={(details) => handleBrightnessChange(details.value[0])}
+              onValueChangeEnd={(details) => handleBrightnessCommit(details.value[0])}
             >
               <HStack justify="space-between">
                 <Slider.Label>
@@ -566,7 +571,6 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                       param={param}
                       value={value}
                       disabled={disabled || isInheriting}
-                      onChange={(val) => handleParamChange(selectedMode, param, val)}
                       onCommit={(val) => handleParamCommit(selectedMode, param, val)}
                     />
                   );

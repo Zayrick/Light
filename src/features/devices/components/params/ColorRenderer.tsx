@@ -10,6 +10,10 @@ interface ColorRendererProps {
   onCommit: (value: string) => void;
 }
 
+/**
+ * 纯渲染组件：只负责渲染 ColorPicker 并转发事件。
+ * draft 状态由上层 ParamRenderer 统一管理。
+ */
 export function ColorRenderer({
   param,
   value,

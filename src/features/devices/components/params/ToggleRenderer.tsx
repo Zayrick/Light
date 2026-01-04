@@ -5,15 +5,16 @@ interface ToggleRendererProps {
   param: ToggleParam;
   value: boolean;
   disabled: boolean;
-  onChange: (value: boolean) => void;
   onCommit: (value: boolean) => void;
 }
 
+/**
+ * 纯渲染组件：Toggle 是离散切换，无拖动，直接 commit。
+ */
 export function ToggleRenderer({
   param,
   value,
   disabled,
-  onChange,
   onCommit,
 }: ToggleRendererProps) {
   const height = 24;
@@ -23,17 +24,12 @@ export function ToggleRenderer({
   const knobSize = height - visualPadding * 2;
   
   const innerOffset = visualPadding - borderWidth;
-  // The container is box-sizing: border-box, so available width is width - 2*borderWidth
-  // We want the visual gap from outer edge to be visualPadding.
-  // So the gap from inner edge (border) is innerOffset.
   const leftClosed = innerOffset;
   const leftOpen = width - borderWidth * 2 - innerOffset - knobSize;
 
   const handleClick = () => {
     if (disabled) return;
-    const newValue = !value;
-    onChange(newValue);
-    onCommit(newValue);
+    onCommit(!value);
   };
 
   return (
