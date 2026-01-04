@@ -2,16 +2,22 @@ import { useEffect, useMemo, useRef } from 'react';
 import useMeasure from 'react-use-measure';
 import { useLedColors } from '../../../hooks/useLedStream';
 import { Device } from '../../../types';
-import type { LayoutData, LedColor } from './ledPreviewTypes';
 
-// Static feature detection (never changes at runtime)
-const SUPPORTS_OFFSCREEN =
-  typeof OffscreenCanvas !== 'undefined' &&
-  typeof HTMLCanvasElement !== 'undefined' &&
-  'transferControlToOffscreen' in HTMLCanvasElement.prototype;
+type LedColor = { r: number; g: number; b: number };
 
-const DEFAULT_FILL = 'rgba(128, 128, 128, 0.2)';
-const EMPTY_CELL_FILL = 'rgba(255, 255, 255, 0.06)';
+type LayoutData = {
+  width: number;
+  height: number;
+  cols: number;
+  rows: number;
+  gap: number;
+  size: number;
+  offsetX: number;
+  offsetY: number;
+  isMatrix: boolean;
+  matrixMap: (number | null)[] | null;
+  totalLeds: number;
+};
 
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -49,39 +55,27 @@ function computeLayout(
     return { width, height, cols: 0, rows: 0, gap: 0, size: 0, offsetX: 0, offsetY: 0, isMatrix, matrixMap, totalLeds };
   }
 
-  // Dynamic gap
-  let gap = 2;
-  if (isMatrix) {
-    const maxDim = Math.max(virtualWidth, virtualHeight);
-    if (maxDim > 40) gap = 0;
-    else if (maxDim > 20) gap = 1;
-  } else if (totalLeds > 100) {
-    gap = 1;
-  }
+  // Keep the preview stable and cheap to compute.
+  // Gap is intentionally simple: matrix tighter, linear slightly wider.
+  const gap = isMatrix ? 1 : totalLeds > 200 ? 1 : 2;
 
-  let cols: number, rows: number, size: number;
+  let cols: number;
+  let rows: number;
 
   if (isMatrix) {
-    cols = virtualWidth;
-    rows = virtualHeight;
-    const wAvail = width - (cols - 1) * gap;
-    const hAvail = height - (rows - 1) * gap;
-    size = wAvail > 0 && hAvail > 0 ? Math.max(0, Math.min(wAvail / cols, hAvail / rows)) : 0;
+    cols = Math.max(1, virtualWidth);
+    rows = Math.max(1, virtualHeight);
   } else {
-    // Smart wrapping for linear strips
-    let best = { size: 0, cols: 1, rows: 1 };
-    for (let c = 1; c <= totalLeds; c++) {
-      const r = Math.ceil(totalLeds / c);
-      const wAvail = width - (c - 1) * gap;
-      const hAvail = height - (r - 1) * gap;
-      if (wAvail <= 0 || hAvail <= 0) continue;
-      const s = Math.min(wAvail / c, hAvail / r);
-      if (s > best.size) best = { size: s, cols: c, rows: r };
-    }
-    cols = best.cols;
-    rows = best.rows;
-    size = Math.max(0, best.size);
+    // Choose a grid whose aspect ratio roughly matches the container.
+    // cols ~= sqrt(totalLeds * (width/height))
+    const aspect = height > 0 ? width / height : 1;
+    cols = Math.max(1, Math.min(totalLeds, Math.ceil(Math.sqrt(totalLeds * aspect))));
+    rows = Math.max(1, Math.ceil(totalLeds / cols));
   }
+
+  const wAvail = width - (cols - 1) * gap;
+  const hAvail = height - (rows - 1) * gap;
+  const size = wAvail > 0 && hAvail > 0 ? Math.max(0, Math.min(wAvail / cols, hAvail / rows)) : 0;
 
   const gridW = cols * size + (cols - 1) * gap;
   const gridH = rows * size + (rows - 1) * gap;
@@ -93,7 +87,10 @@ function computeLayout(
     rows,
     gap,
     size,
-    offsetX: Math.max(0, width - gridW),
+    // Align rules:
+    // - Matrix: right aligned (matches "panel preview" expectation)
+    // - Linear: centered (looks balanced when wrapping)
+    offsetX: isMatrix ? Math.max(0, width - gridW) : Math.max(0, (width - gridW) / 2),
     offsetY: Math.max(0, (height - gridH) / 2),
     isMatrix,
     matrixMap,
@@ -108,8 +105,6 @@ interface Props {
 export function DeviceLedVisualizer({ device }: Props) {
   const [containerRef, bounds] = useMeasure();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const workerRef = useRef<Worker | null>(null);
-  const workerReady = useRef(false);
 
   const physicalLen = useMemo(() => {
     const sum = device.outputs.reduce((acc, o) => {
@@ -180,55 +175,21 @@ export function DeviceLedVisualizer({ device }: Props) {
 
   const isValidLayout = layout.cols > 0 && layout.rows > 0 && layout.size > 0;
 
-  // Worker path: init + layout updates
+  // Main-thread rendering (simple + robust).
+  // Key behavior: redraw on BOTH color updates and layout updates, so resize never leaves a stretched bitmap.
   useEffect(() => {
-    if (!SUPPORTS_OFFSCREEN) return;
-    const canvas = canvasRef.current;
-    if (!canvas || !isValidLayout) return;
-
-    if (!workerRef.current) {
-      workerRef.current = new Worker(new URL('./ledPreview.worker.ts', import.meta.url), { type: 'module' });
-      workerReady.current = false;
-    }
-
-    if (!workerReady.current) {
-      const offscreen = canvas.transferControlToOffscreen();
-      workerRef.current.postMessage({ type: 'init', canvas: offscreen, dpr: devicePixelRatio }, [offscreen]);
-      workerReady.current = true;
-    }
-
-    // Set CSS size on main thread (OffscreenCanvas cannot access style)
-    canvas.style.width = `${layout.width}px`;
-    canvas.style.height = `${layout.height}px`;
-
-    workerRef.current.postMessage({ type: 'layout', ...layout });
-  }, [layout, isValidLayout]);
-
-  // Worker path: frame updates
-  useEffect(() => {
-    if (!SUPPORTS_OFFSCREEN || !workerRef.current || !isValidLayout) return;
-    workerRef.current.postMessage({ type: 'frame', colors, isDefault });
-  }, [colors, isDefault, isValidLayout]);
-
-  // Worker cleanup
-  useEffect(() => {
-    if (!SUPPORTS_OFFSCREEN) return;
-    return () => {
-      workerRef.current?.postMessage({ type: 'dispose' });
-      workerRef.current?.terminate();
-      workerRef.current = null;
-      workerReady.current = false;
-    };
-  }, []);
-
-  // Fallback: main-thread rendering
-  useEffect(() => {
-    if (SUPPORTS_OFFSCREEN) return;
     const canvas = canvasRef.current;
     if (!canvas || !isValidLayout) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const container = canvas.parentElement;
+    const styles = container ? getComputedStyle(container) : null;
+    const defaultFill = styles?.getPropertyValue('--led-preview-default-fill')?.trim();
+    const emptyFill = styles?.getPropertyValue('--led-preview-empty-fill')?.trim();
+    const fallbackDefaultFill = 'rgba(128, 128, 128, 0.2)';
+    const fallbackEmptyFill = 'rgba(255, 255, 255, 0.06)';
 
     const { width, height, cols, rows, gap, size, offsetX, offsetY } = layout;
     const dpr = devicePixelRatio;
@@ -252,13 +213,13 @@ export function DeviceLedVisualizer({ device }: Props) {
         const y = offsetY + row * (size + gap);
 
         if (isMatrix && matrixMap?.[i] === null) {
-          ctx.fillStyle = EMPTY_CELL_FILL;
+          ctx.fillStyle = emptyFill || fallbackEmptyFill;
           drawRoundedRect(ctx, x, y, size, size, radius);
           continue;
         }
 
         const c = (colors?.[i] as LedColor | undefined) ?? { r: 0, g: 0, b: 0 };
-        ctx.fillStyle = isDefault ? DEFAULT_FILL : `rgb(${c.r},${c.g},${c.b})`;
+        ctx.fillStyle = isDefault ? (defaultFill || fallbackDefaultFill) : `rgb(${c.r},${c.g},${c.b})`;
         drawRoundedRect(ctx, x, y, size, size, radius);
       }
     }
@@ -270,12 +231,10 @@ export function DeviceLedVisualizer({ device }: Props) {
         ref={canvasRef}
         style={{
           position: 'absolute',
-          top: '50%',
-          right: 0,
-          transform: 'translateY(-50%)',
+          inset: 0,
           display: 'block',
-          width: bounds.width > 0 ? `${bounds.width}px` : '100%',
-          height: bounds.height > 0 ? `${bounds.height}px` : '100%',
+          width: '100%',
+          height: '100%',
         }}
       />
     </div>

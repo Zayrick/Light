@@ -47,6 +47,10 @@
   --color-gray-4: #D1D1D6;
   --color-gray-5: #E5E5EA;
   --color-gray-6: #F2F2F7;
+
+  /* LED Preview */
+  --led-preview-default-fill: rgba(128, 128, 128, 0.20);
+  --led-preview-empty-fill: rgba(0, 0, 0, 0.06);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -92,6 +96,10 @@
     --color-gray-4: #3A3A3C;
     --color-gray-5: #2C2C2E;
     --color-gray-6: #1C1C1E;
+
+    /* LED Preview */
+    --led-preview-default-fill: rgba(128, 128, 128, 0.20);
+    --led-preview-empty-fill: rgba(255, 255, 255, 0.06);
   }
 }
 
