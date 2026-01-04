@@ -4,13 +4,45 @@ import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
-import type { Device, ScopeModeState } from "../../types";
+import type { Device, DeviceType, ScopeModeState } from "../../types";
 import type { SelectedScope } from "../../hooks/useDevices";
 import { 
   HIGHLIGHT_TRANSITION, 
   BRANCH_TRANSITION,
   branchContentVariants 
 } from "../../motion/transitions";
+
+function formatDeviceTypeLabel(deviceType?: DeviceType): string {
+  if (!deviceType) return "Unknown";
+
+  // Keep it compact for sidebar; fall back to raw enum string.
+  const map: Partial<Record<DeviceType, string>> = {
+    Motherboard: "主板",
+    Dram: "内存",
+    Gpu: "显卡",
+    Cooler: "散热",
+    LedStrip: "灯带",
+    Keyboard: "键盘",
+    Mouse: "鼠标",
+    MouseMat: "鼠标垫",
+    Headset: "耳机",
+    HeadsetStand: "耳机架",
+    Gamepad: "手柄",
+    Light: "灯",
+    Speaker: "音箱",
+    Virtual: "虚拟设备",
+    Storage: "存储",
+    Case: "机箱",
+    Microphone: "麦克风",
+    Accessory: "配件",
+    Keypad: "小键盘",
+    Laptop: "笔记本",
+    Monitor: "显示器",
+    Unknown: "未知",
+  };
+
+  return map[deviceType] ?? deviceType;
+}
 
 type ControlState = "none" | "explicit" | "inherited";
 
@@ -39,6 +71,7 @@ interface DeviceTreeNode {
   name: string;
   kind: "device" | "output" | "segment";
   port: string;
+  deviceType?: DeviceType;
   outputId?: string;
   segmentId?: string;
   controlState: ControlState;
@@ -74,6 +107,7 @@ function buildTree(devices: Device[]): DeviceTreeNode[] {
         name: d.model, // Use device name
         kind: "device", // Visual style: Device
         port: d.port,
+        deviceType: d.device_type,
         outputId: o.id, // Functional scope: Output
         controlState: controlStateFromMode(o.mode), // Status from output
         children:
@@ -96,12 +130,14 @@ function buildTree(devices: Device[]): DeviceTreeNode[] {
       name: d.model,
       kind: "device",
       port: d.port,
+      deviceType: d.device_type,
       controlState: controlStateFromMode(d.mode),
       children: d.outputs.map((o) => ({
         id: `out:${d.port}:${o.id}`,
         name: o.name,
         kind: "output",
         port: d.port,
+        deviceType: d.device_type,
         outputId: o.id,
         controlState: controlStateFromMode(o.mode),
         children:
@@ -280,7 +316,9 @@ const DeviceTreeItem = ({
                 <div className="device-list-info">
                   <div className="device-list-item-name">{node.name}</div>
                   {node.kind === "device" && (
-                    <div className="device-list-item-port">{node.port}</div>
+                    <div className="device-list-item-port" title={node.port}>
+                      {formatDeviceTypeLabel(node.deviceType)}
+                    </div>
                   )}
                 </div>
                 <TreeView.BranchIndicator className="layout-branch-indicator">
@@ -339,7 +377,9 @@ const DeviceTreeItem = ({
                   {icon}
                   <div className="device-list-info">
                     <div className="device-list-item-name">{node.name}</div>
-                    <div className="device-list-item-port">{node.port}</div>
+                    <div className="device-list-item-port" title={node.port}>
+                      {formatDeviceTypeLabel(node.deviceType)}
+                    </div>
                   </div>
                 </>
               ) : (
