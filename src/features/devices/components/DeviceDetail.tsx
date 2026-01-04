@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
-import { Device, EffectInfo, EffectParam, ScopeModeState } from "../../../types";
+import { Device, EffectInfo, EffectParam, EffectParamValue, ScopeModeState } from "../../../types";
 import type { SelectedScope } from "../../../types";
 import { api } from "../../../services/api";
 import { logger } from "../../../services/logger";
@@ -27,11 +27,11 @@ interface DisplayMode extends EffectInfo {
   category: ModeCategory;
 }
 
-function buildParamState(effectId?: string, params?: Record<string, number | boolean>) {
-  const initial: Record<string, number | boolean> = {};
+function buildParamState(effectId?: string, params?: Record<string, EffectParamValue>) {
+  const initial: Record<string, EffectParamValue> = {};
   if (!effectId || !params) return initial;
   for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "number" || typeof value === "boolean") {
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "string") {
       initial[`${effectId}:${key}`] = value;
     }
   }
@@ -133,7 +133,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
 
   const [selectedModeId, setSelectedModeId] = useState<string | null>(effectiveModeId);
   const [brightness, setBrightness] = useState(device.brightness ?? 100);
-  const [paramValues, setParamValues] = useState<Record<string, number | boolean>>(() =>
+  const [paramValues, setParamValues] = useState<Record<string, EffectParamValue>>(() =>
     buildParamState(scopeMode.effective_effect_id, scopeMode.effective_params)
   );
 
@@ -252,12 +252,12 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     }
   };
 
-  const handleParamChange = (mode: DisplayMode, param: EffectParam, value: number | boolean) => {
+  const handleParamChange = (mode: DisplayMode, param: EffectParam, value: EffectParamValue) => {
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
   };
 
-  const handleParamCommit = async (mode: DisplayMode, param: EffectParam, value: number | boolean) => {
+  const handleParamCommit = async (mode: DisplayMode, param: EffectParam, value: EffectParamValue) => {
     try {
       await api.updateScopeEffectParams({
         port: scope.port,

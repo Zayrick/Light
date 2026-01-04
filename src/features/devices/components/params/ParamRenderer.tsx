@@ -1,14 +1,15 @@
-import { EffectParam } from "../../../../types";
+import { EffectParam, EffectParamValue } from "../../../../types";
+import { ColorRenderer } from "./ColorRenderer";
 import { SelectRenderer } from "./SelectRenderer";
 import { SliderRenderer } from "./SliderRenderer";
 import { ToggleRenderer } from "./ToggleRenderer";
 
 interface ParamRendererProps {
   param: EffectParam;
-  value: number | boolean;
+  value: EffectParamValue;
   disabled: boolean;
-  onChange: (value: number | boolean) => void;
-  onCommit: (value: number | boolean) => void;
+  onChange: (value: EffectParamValue) => void;
+  onCommit: (value: EffectParamValue) => void;
 }
 
 /**
@@ -47,6 +48,16 @@ export function ParamRenderer(props: ParamRendererProps) {
           disabled={disabled}
           onChange={onChange as (v: boolean) => void}
           onCommit={onCommit as (v: boolean) => void}
+        />
+      );
+    case "color":
+      return (
+        <ColorRenderer
+          param={param}
+          value={value as string}
+          disabled={disabled}
+          onChange={onChange as (v: string) => void}
+          onCommit={onCommit as (v: string) => void}
         />
       );
     default:

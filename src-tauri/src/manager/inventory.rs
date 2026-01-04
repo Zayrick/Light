@@ -34,6 +34,7 @@ pub fn default_params_for_effect(id: &str) -> Option<Map<String, Value>> {
             EffectParamKind::Slider { default, .. } => Value::from(*default),
             EffectParamKind::Select { default, .. } => Value::from(*default),
             EffectParamKind::Toggle { default } => Value::from(*default),
+            EffectParamKind::Color { default } => Value::from(*default),
         };
         map.insert(param.key.to_string(), value);
     }

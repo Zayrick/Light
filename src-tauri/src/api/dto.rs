@@ -83,6 +83,14 @@ pub enum EffectParamInfo {
         #[serde(skip_serializing_if = "Option::is_none")]
         dependency: Option<ParamDependencyInfo>,
     },
+    #[serde(rename = "color")]
+    Color {
+        key: &'static str,
+        label: &'static str,
+        default: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dependency: Option<ParamDependencyInfo>,
+    },
 }
 
 #[derive(Serialize)]
@@ -152,6 +160,12 @@ impl From<&'static EffectParam> for EffectParamInfo {
                 key: param.key,
                 label: param.label,
                 default: *default,
+                dependency,
+            },
+            EffectParamKind::Color { default } => EffectParamInfo::Color {
+                key: param.key,
+                label: param.label,
+                default,
                 dependency,
             },
         }

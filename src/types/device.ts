@@ -48,7 +48,7 @@ export interface ScopeModeState {
   /** Resolved selection after inheritance */
   effective_effect_id?: string;
   /** Resolved params for effective effect (from origin scope) */
-  effective_params?: Record<string, number | boolean>;
+  effective_params?: Record<string, number | boolean | string>;
   /** Where the effective effect comes from */
   effective_from?: ScopeRef;
 }

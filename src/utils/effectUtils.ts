@@ -1,4 +1,4 @@
-import { EffectParam, ParamDependency } from "../types";
+import { EffectParam, EffectParamValue, ParamDependency } from "../types";
 
 // Helper type for the display mode which includes params
 interface EffectMode {
@@ -13,7 +13,7 @@ interface EffectMode {
 export function checkDependency(
   mode: EffectMode,
   dependency: ParamDependency | undefined,
-  currentValues: Record<string, number | boolean>
+  currentValues: Record<string, EffectParamValue>
 ): { visible: boolean; disabled: boolean } {
   if (!dependency) {
     return { visible: true, disabled: false };
@@ -39,9 +39,13 @@ export function checkDependency(
   const storageKey = `${mode.id}:${controlling.key}`;
   const controllingValue = currentValues[storageKey] ?? controlling.default;
 
+  if (typeof controllingValue !== "number" && typeof controllingValue !== "boolean") {
+    return { visible: true, disabled: false };
+  }
+
   // Normalize value for comparison (handle boolean -> number)
   let val: number;
-  if (typeof controllingValue === 'boolean') {
+  if (typeof controllingValue === "boolean") {
     val = controllingValue ? 1.0 : 0.0;
   } else {
     val = controllingValue;

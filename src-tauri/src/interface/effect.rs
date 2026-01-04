@@ -63,6 +63,9 @@ pub enum EffectParamKind {
     Toggle {
         default: bool,
     },
+    Color {
+        default: &'static str,
+    },
 }
 
 pub enum SelectOptions {

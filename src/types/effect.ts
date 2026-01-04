@@ -7,10 +7,12 @@ export interface ParamDependency {
   behavior?: ParamDependencyBehavior;
 }
 
+export type EffectParamValue = number | boolean | string;
+
 interface EffectParamBase {
   key: string;
   label: string;
-  default: number | boolean;
+  default: EffectParamValue;
   dependency?: ParamDependency;
 }
 
@@ -38,7 +40,12 @@ export interface ToggleParam extends EffectParamBase {
   default: boolean;
 }
 
-export type EffectParam = SliderParam | SelectParam | ToggleParam;
+export interface ColorParam extends EffectParamBase {
+  type: 'color';
+  default: string;
+}
+
+export type EffectParam = SliderParam | SelectParam | ToggleParam | ColorParam;
 
 export interface EffectInfo {
   id: string;
