@@ -117,6 +117,11 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
     !scopeMode.selected_effect_id &&
     !!scopeMode.effective_effect_id;
   const fromLabel = formatScopeFrom(scopeMode);
+  const showEffectiveFrom = !!fromLabel;
+  // Reserve a fixed slot so the header height doesn't jump when Effective From appears.
+  // The title/subtitle block will animate its vertical position to look vertically centered
+  // when the slot is empty, and slide up when the slot is filled.
+  const EFFECTIVE_FROM_SLOT_PX = 18;
 
   const [selectedCategory, setSelectedCategory] = useState<ModeCategory>(() => {
     const initialEffect = effects.find((e) => e.id === effectiveModeId);
@@ -294,20 +299,60 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
           gap: "16px",
         }}
       >
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>
-            {resolvedScope.title}
-          </h1>
-          {resolvedScope.subtitle && <p className="page-subtitle">{resolvedScope.subtitle}</p>}
-          <p className="page-subtitle" style={{ fontSize: "12px", opacity: 0.7 }}>
-            SN: {device.id}
-          </p>
-          {fromLabel && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <motion.div
+            layout="position"
+            animate={showEffectiveFrom ? "expanded" : "collapsed"}
+            variants={{
+              collapsed: { y: EFFECTIVE_FROM_SLOT_PX / 2 },
+              expanded: { y: 0 },
+            }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <h1 className="page-title" style={{ marginBottom: 0 }}>
+              {resolvedScope.title}
+            </h1>
+            {resolvedScope.subtitle && <p className="page-subtitle">{resolvedScope.subtitle}</p>}
             <p className="page-subtitle" style={{ fontSize: "12px", opacity: 0.7 }}>
-              Effective From: {fromLabel}
-              {isInheriting ? " (inheriting)" : ""}
+              SN: {device.id}
             </p>
-          )}
+          </motion.div>
+
+          {/* Always reserve height for the Effective From line to prevent header reflow. */}
+          <div
+            style={{
+              height: `${EFFECTIVE_FROM_SLOT_PX}px`,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <AnimatePresence initial={false}>
+              {showEffectiveFrom && (
+                <motion.p
+                  key="effective-from"
+                  className="page-subtitle"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                  style={{
+                    margin: 0,
+                    fontSize: "12px",
+                    opacity: 0.7,
+                    lineHeight: `${EFFECTIVE_FROM_SLOT_PX}px`,
+                  }}
+                >
+                  Effective From: {fromLabel}
+                  {isInheriting ? " (inheriting)" : ""}
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
         <div
           style={{
