@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
+import { HStack, Slider, Text } from "@chakra-ui/react";
 import { Device, EffectInfo, EffectParam, EffectParamValue, ScopeModeState } from "../../../types";
 import type { SelectedScope } from "../../../types";
 import { api } from "../../../services/api";
 import { logger } from "../../../services/logger";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { Card } from "../../../components/ui/Card";
-import { Slider } from "../../../components/ui/Slider";
 import { Tabs } from "../../../components/ui/Tabs";
 import { ParamRenderer } from "./params/ParamRenderer";
 import { checkDependency } from "../../../utils/effectUtils";
@@ -521,22 +521,29 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
               <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Device Settings</h3>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "13px",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Sun size={16} /> Brightness
-                </span>
-                <span>{brightness}%</span>
-              </div>
-              <Slider value={brightness} min={0} max={100} step={1} onChange={handleBrightnessChange} />
-            </div>
+            <Slider.Root
+              min={0}
+              max={100}
+              step={1}
+              value={[brightness]}
+              onValueChange={(details) => handleBrightnessChange(details.value[0])}
+            >
+              <HStack justify="space-between">
+                <Slider.Label>
+                  <HStack gap="1.5">
+                    <Sun size={16} />
+                    <Text>Brightness</Text>
+                  </HStack>
+                </Slider.Label>
+                <Slider.ValueText>{brightness}%</Slider.ValueText>
+              </HStack>
+              <Slider.Control>
+                <Slider.Track>
+                  <Slider.Range />
+                </Slider.Track>
+                <Slider.Thumbs />
+              </Slider.Control>
+            </Slider.Root>
           </Card>
 
           {/* Current Mode Settings */}

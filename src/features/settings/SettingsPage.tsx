@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion as getAppVersion, getTauriVersion } from "@tauri-apps/api/app";
+import { HStack, Slider } from "@chakra-ui/react";
 import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
-import { Slider } from "../../components/ui/Slider";
 import { Switch } from "../../components/ui/Switch";
 import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/api";
 import { logger } from "../../services/logger";
@@ -491,18 +491,26 @@ export function SettingsPage() {
 
           {/* Resolution Scale Slider */}
           <div className="setting-section">
-            <Slider
+            <Slider.Root
               min={1}
               max={100}
               step={0.1}
-              value={captureScale}
-              onChange={handleScaleChange}
-              onCommit={handleScaleCommit}
-              markers={isGpuAccelerated ? mipScalePoints : undefined}
+              value={[captureScale]}
+              onValueChange={(details) => handleScaleChange(details.value[0])}
+              onValueChangeEnd={(details) => handleScaleCommit(details.value[0])}
               disabled={loading}
-              label="Resolution Scale"
-              valueText={displayScaleText()}
-            />
+            >
+              <HStack justify="space-between">
+                <Slider.Label>Resolution Scale</Slider.Label>
+                <Slider.ValueText>{displayScaleText()}</Slider.ValueText>
+              </HStack>
+              <Slider.Control>
+                <Slider.Track>
+                  <Slider.Range />
+                </Slider.Track>
+                <Slider.Thumbs />
+              </Slider.Control>
+            </Slider.Root>
             <p>
               Lowering resolution improves performance. 100% matches native quality.
             </p>
@@ -515,15 +523,24 @@ export function SettingsPage() {
 
           {/* Frame Rate Slider */}
           <div className="setting-section">
-            <Slider
+            <Slider.Root
               min={1}
               max={60}
-              value={captureFps}
-              onChange={handleFpsChange}
+              value={[captureFps]}
+              onValueChange={(details) => handleFpsChange(details.value[0])}
               disabled={loading}
-              label="Sampling Frame Rate"
-              valueText={`${captureFps} FPS`}
-            />
+            >
+              <HStack justify="space-between">
+                <Slider.Label>Sampling Frame Rate</Slider.Label>
+                <Slider.ValueText>{captureFps} FPS</Slider.ValueText>
+              </HStack>
+              <Slider.Control>
+                <Slider.Track>
+                  <Slider.Range />
+                </Slider.Track>
+                <Slider.Thumbs />
+              </Slider.Control>
+            </Slider.Root>
             <p>
               Control how often the screen is sampled per second. Lower FPS reduces CPU/GPU usage but may look less smooth.
             </p>

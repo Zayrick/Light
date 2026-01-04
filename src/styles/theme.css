@@ -54,6 +54,9 @@
   --led-preview-active-border: var(--accent-color);
   --led-preview-hover-bg: rgba(255, 255, 255, 0.55);
   --led-preview-hover-text: var(--text-primary);
+
+  /* Slider */
+  --slider-thumb-bg: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -106,6 +109,9 @@
     --led-preview-active-border: var(--accent-color);
     --led-preview-hover-bg: rgba(0, 0, 0, 0.35);
     --led-preview-hover-text: var(--text-primary);
+
+    /* Slider */
+    --slider-thumb-bg: #2d2d2d;
   }
 }
 

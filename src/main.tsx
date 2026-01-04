@@ -3,7 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { initLogging } from "./services/logger";
-import { chakraSystem } from "./styles/chakraSystem";
+import { chakraSystem } from "./styles/theme";
 
 async function bootstrap() {
   await initLogging();

@@ -1,5 +1,5 @@
+import { HStack, Slider, Text } from "@chakra-ui/react";
 import { Gauge } from "lucide-react";
-import { Slider } from "../../../../components/ui/Slider";
 import { SliderParam } from "../../../../types";
 
 interface SliderRendererProps {
@@ -17,7 +17,8 @@ export function SliderRenderer({
   onChange,
   onCommit,
 }: SliderRendererProps) {
-  const handleChange = (nextValue: number) => {
+  const handleChange = (details: Slider.ValueChangeDetails) => {
+    const nextValue = details.value[0];
     onChange(nextValue);
     onCommit(nextValue);
   };
@@ -28,20 +29,30 @@ export function SliderRenderer({
   };
 
   return (
-    <Slider
-      value={value}
+    <Slider.Root
       min={param.min}
       max={param.max}
       step={param.step}
+      value={[value]}
+      onValueChange={handleChange}
       disabled={disabled}
-      onChange={handleChange}
-      label={
-        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <Gauge size={16} /> {param.label}
-        </span>
-      }
-      valueText={formatParamValue(param, value)}
-    />
+    >
+      <HStack justify="space-between">
+        <Slider.Label>
+          <HStack gap="1.5">
+            <Gauge size={16} />
+            <Text>{param.label}</Text>
+          </HStack>
+        </Slider.Label>
+        <Slider.ValueText>{formatParamValue(param, value)}</Slider.ValueText>
+      </HStack>
+      <Slider.Control>
+        <Slider.Track>
+          <Slider.Range />
+        </Slider.Track>
+        <Slider.Thumbs />
+      </Slider.Control>
+    </Slider.Root>
   );
 }
 

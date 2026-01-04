@@ -1,6 +1,5 @@
-import { Slider as ArkSlider } from "@ark-ui/react/slider";
+import { HStack, Slider as ChakraSlider, For } from "@chakra-ui/react";
 import { ReactNode } from "react";
-import "./Slider.css";
 
 export interface SliderProps {
   /** 当前值 */
@@ -41,17 +40,17 @@ export function Slider({
     ?.filter((marker) => marker >= min && marker <= max)
     .sort((a, b) => a - b);
 
-  const handleValueChange = (details: ArkSlider.ValueChangeDetails) => {
+  const handleValueChange = (details: ChakraSlider.ValueChangeDetails) => {
     onChange?.(details.value[0]);
   };
 
-  const handleValueChangeEnd = (details: ArkSlider.ValueChangeDetails) => {
+  const handleValueChangeEnd = (details: ChakraSlider.ValueChangeDetails) => {
     // 始终传递原始值，让调用方决定是否吸附及如何吸附（如带动画）
     onCommit?.(details.value[0]);
   };
 
   return (
-    <ArkSlider.Root
+    <ChakraSlider.Root
       min={min}
       max={max}
       step={step}
@@ -59,27 +58,30 @@ export function Slider({
       onValueChange={handleValueChange}
       onValueChangeEnd={handleValueChangeEnd}
       disabled={disabled}
+      colorPalette="blue"
     >
       {(label || valueText) && (
-        <div className="ark-slider-header">
-          {label && <ArkSlider.Label>{label}</ArkSlider.Label>}
-          {valueText && <span className="ark-slider-value">{valueText}</span>}
-        </div>
+        <HStack justify="space-between">
+          {label && <ChakraSlider.Label>{label}</ChakraSlider.Label>}
+          {valueText && <ChakraSlider.ValueText>{valueText}</ChakraSlider.ValueText>}
+        </HStack>
       )}
-      <ArkSlider.Control>
-        <ArkSlider.Track>
-          <ArkSlider.Range />
-          {markerValues && markerValues.length > 0 && (
-            <ArkSlider.MarkerGroup>
-              {markerValues.map((marker) => (
-                <ArkSlider.Marker key={marker} value={marker} />
-              ))}
-            </ArkSlider.MarkerGroup>
+      <ChakraSlider.Control>
+        <ChakraSlider.Track>
+          <ChakraSlider.Range />
+        </ChakraSlider.Track>
+        <For each={[value]}>
+          {(_, index) => (
+            <ChakraSlider.Thumb key={index} index={index}>
+              <ChakraSlider.HiddenInput />
+            </ChakraSlider.Thumb>
           )}
-        </ArkSlider.Track>
-        <ArkSlider.Thumb index={0} />
-      </ArkSlider.Control>
-    </ArkSlider.Root>
+        </For>
+        {markerValues && markerValues.length > 0 && (
+          <ChakraSlider.Marks marks={markerValues} />
+        )}
+      </ChakraSlider.Control>
+    </ChakraSlider.Root>
   );
 }
 
