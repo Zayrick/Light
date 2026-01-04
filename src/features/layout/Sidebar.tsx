@@ -2,10 +2,10 @@ import { Home, Settings } from "lucide-react";
 import clsx from "clsx";
 import { motion, LayoutGroup } from "framer-motion";
 import { useCallback } from "react";
-import { Device } from "../../types";
-import type { SelectedScope } from "../../hooks/useDevices";
+import type { Device, SelectedScope } from "../../types";
 import { SidebarDeviceTree } from "./SidebarDeviceTree";
 import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "../../motion/transitions";
+import { normalizeSelectedScope } from "../../utils/scope";
 
 const ActiveHighlight = () => (
   <motion.div
@@ -45,13 +45,7 @@ export function Sidebar({
   }, []);
 
   const handleScopeSelect = useCallback((scope: SelectedScope) => {
-    const device = devices.find((d) => d.port === scope.port);
-    const normalizedScope =
-      !scope.outputId && !scope.segmentId && device?.outputs.length === 1
-        ? { port: scope.port, outputId: device.outputs[0].id }
-        : scope;
-
-    setSelectedScope(normalizedScope);
+    setSelectedScope(normalizeSelectedScope(scope, devices));
     setActiveTab("device-detail");
   }, [devices, setSelectedScope, setActiveTab]);
 

@@ -4,45 +4,13 @@ import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useMemo } from "react";
-import type { Device, DeviceType, ScopeModeState } from "../../types";
-import type { SelectedScope } from "../../hooks/useDevices";
+import type { Device, DeviceType, ScopeModeState, SelectedScope } from "../../types";
+import { formatDeviceTypeLabel } from "../../utils/deviceDisplay";
 import { 
   HIGHLIGHT_TRANSITION, 
   BRANCH_TRANSITION,
   branchContentVariants 
 } from "../../motion/transitions";
-
-function formatDeviceTypeLabel(deviceType?: DeviceType): string {
-  if (!deviceType) return "Unknown";
-
-  // Keep it compact for sidebar; fall back to raw enum string.
-  const map: Partial<Record<DeviceType, string>> = {
-    Motherboard: "主板",
-    Dram: "内存",
-    Gpu: "显卡",
-    Cooler: "散热",
-    LedStrip: "灯带",
-    Keyboard: "键盘",
-    Mouse: "鼠标",
-    MouseMat: "鼠标垫",
-    Headset: "耳机",
-    HeadsetStand: "耳机架",
-    Gamepad: "手柄",
-    Light: "灯",
-    Speaker: "音箱",
-    Virtual: "虚拟设备",
-    Storage: "存储",
-    Case: "机箱",
-    Microphone: "麦克风",
-    Accessory: "配件",
-    Keypad: "小键盘",
-    Laptop: "笔记本",
-    Monitor: "显示器",
-    Unknown: "未知",
-  };
-
-  return map[deviceType] ?? deviceType;
-}
 
 type ControlState = "none" | "explicit" | "inherited";
 

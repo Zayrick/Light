@@ -1,40 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Device } from "../types";
+import type { Device, SelectedScope } from "../types";
 import { api } from "../services/api";
 import { logger } from "../services/logger";
-
-export interface SelectedScope {
-  port: string;
-  outputId?: string;
-  segmentId?: string;
-}
-
-function normalizeScope(scope: SelectedScope, devices: Device[]): SelectedScope {
-  const device = devices.find((d) => d.port === scope.port);
-  if (!device) return scope;
-
-  // If the device has a single output, always treat "device scope" as selecting the default output.
-  if (!scope.outputId && device.outputs.length === 1) {
-    return { port: scope.port, outputId: device.outputs[0].id };
-  }
-
-  if (scope.outputId) {
-    const out = device.outputs.find((o) => o.id === scope.outputId);
-    if (!out) {
-      // Output no longer exists. Fall back to a stable scope.
-      return device.outputs.length === 1
-        ? { port: scope.port, outputId: device.outputs[0].id }
-        : { port: scope.port };
-    }
-
-    if (scope.segmentId) {
-      const segExists = out.segments.some((s) => s.id === scope.segmentId);
-      if (!segExists) return { port: scope.port, outputId: scope.outputId };
-    }
-  }
-
-  return scope;
-}
+import { normalizeSelectedScope } from "../utils/scope";
 
 export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -54,7 +22,7 @@ export function useDevices() {
         setSelectedScope((prev) => {
           const stillExists = prev && foundDevices.some((d) => d.port === prev.port);
           const next = stillExists ? prev! : { port: foundDevices[0].port };
-          return normalizeScope(next, foundDevices);
+          return normalizeSelectedScope(next, foundDevices);
         });
       } else {
         setSelectedScope(null);
@@ -80,7 +48,7 @@ export function useDevices() {
         setSelectedScope((prev) => {
           const stillExists = prev && current.some((d) => d.port === prev.port);
           const next = stillExists ? prev! : { port: current[0].port };
-          return normalizeScope(next, current);
+          return normalizeSelectedScope(next, current);
         });
       } else {
         setSelectedScope(null);
