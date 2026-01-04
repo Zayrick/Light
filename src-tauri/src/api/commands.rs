@@ -81,6 +81,11 @@ pub fn get_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>, S
 }
 
 #[tauri::command]
+pub fn get_device(port: String, manager: State<'_, LightingManager>) -> Result<Device, String> {
+    manager.get_device(&port)
+}
+
+#[tauri::command]
 pub fn get_effects() -> Vec<EffectInfo> {
     list_effects()
         .into_iter()

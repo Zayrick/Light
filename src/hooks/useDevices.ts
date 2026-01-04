@@ -65,6 +65,29 @@ export function useDevices() {
     }
   }, []);
 
+  const refreshDevice = useCallback(async (port: string) => {
+    try {
+      const updated = await api.getDevice(port);
+      setDevices((prev) => {
+        const idx = prev.findIndex((d) => d.port === port);
+        if (idx < 0) return prev;
+
+        // Keep references stable for untouched devices to minimize re-renders.
+        const next = prev.slice();
+        next[idx] = updated;
+
+        setSelectedScope((prevScope) => {
+          if (!prevScope) return null;
+          return normalizeSelectedScope(prevScope, next);
+        });
+
+        return next;
+      });
+    } catch (error) {
+      logger.error("devices.refresh_device_failed", { port }, error);
+    }
+  }, []);
+
   // Initial scan
   useEffect(() => {
     scanDevices();
@@ -78,6 +101,7 @@ export function useDevices() {
     statusMsg,
     scanDevices,
     refreshDevices,
+    refreshDevice,
   };
 }
 

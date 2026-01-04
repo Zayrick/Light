@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
 import { HStack, Slider, Text } from "@chakra-ui/react";
@@ -6,6 +6,7 @@ import { Device, EffectInfo, EffectParam, EffectParamValue, ScopeModeState } fro
 import type { SelectedScope } from "../../../types";
 import { api } from "../../../services/api";
 import { logger } from "../../../services/logger";
+import { useLatestThrottledInvoker } from "../../../hooks/useLatestThrottledInvoker";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";
 import { Card } from "../../../components/ui/Card";
 import { Tabs } from "../../../components/ui/Tabs";
@@ -102,6 +103,57 @@ function formatScopeFrom(mode: ScopeModeState): string | null {
   return "Device";
 }
 
+interface DeviceBrightnessSliderProps {
+  value: number;
+  onChange?: (value: number) => void;
+  onCommit: (value: number) => Promise<void> | void;
+}
+
+const DeviceBrightnessSlider = memo(function DeviceBrightnessSlider({
+  value,
+  onChange,
+  onCommit,
+}: DeviceBrightnessSliderProps) {
+  // 在 DeviceDetail 里直接 setBrightness 会导致整页重渲染（包括模式列表与动画），
+  // 从而让拖动与页面动画一起“变卡”。这里把拖动期状态下沉到子组件。
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <Slider.Root
+      min={0}
+      max={100}
+      step={1}
+      value={[draft]}
+      onValueChange={(details) => {
+        const next = details.value[0];
+        setDraft(next);
+        onChange?.(next);
+      }}
+      onValueChangeEnd={(details) => onCommit(details.value[0])}
+    >
+      <HStack justify="space-between">
+        <Slider.Label>
+          <HStack gap="1.5">
+            <Sun size={16} />
+            <Text>Brightness</Text>
+          </HStack>
+        </Slider.Label>
+        <Slider.ValueText>{Math.round(draft)}%</Slider.ValueText>
+      </HStack>
+      <Slider.Control>
+        <Slider.Track>
+          <Slider.Range />
+        </Slider.Track>
+        <Slider.Thumbs />
+      </Slider.Control>
+    </Slider.Root>
+  );
+});
+
 export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope }: DeviceDetailProps) {
   const resolvedScope = useMemo(() => resolveScopeMode(device, scope), [device, scope]);
   const scopeMode = resolvedScope.mode;
@@ -132,7 +184,6 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
   });
 
   const [selectedModeId, setSelectedModeId] = useState<string | null>(effectiveModeId);
-  const [brightness, setBrightness] = useState(device.brightness ?? 100);
   const [paramValues, setParamValues] = useState<Record<string, EffectParamValue>>(() =>
     buildParamState(scopeMode.effective_effect_id, scopeMode.effective_params)
   );
@@ -185,11 +236,6 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     }
   }, [categories, selectedCategory]);
 
-  // Sync brightness from backend device state
-  useEffect(() => {
-    setBrightness(device.brightness ?? 100);
-  }, [device.brightness, device.port]);
-
   // Hydrate params from backend effective params
   useEffect(() => {
     setParamValues(buildParamState(scopeMode.effective_effect_id, scopeMode.effective_params));
@@ -223,20 +269,82 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     return paramValues[key] ?? param.default;
   };
 
-  const handleBrightnessChange = (value: number) => {
-    // 拖动期仅更新本地 UI 状态，避免每帧都触发 IPC。
-    setBrightness(value);
-  };
+  const backendBrightness = device.brightness ?? 100;
 
-  const handleBrightnessCommit = async (value: number) => {
-    setBrightness(value);
+  // Live sync for brightness (slider drag). Latest-wins + throttled.
+  const brightnessLive = useLatestThrottledInvoker<number>(
+    (value) => api.setBrightness(device.port, value),
+    0,
+    {
+      areEqual: (a, b) => a === b,
+      onError: (err) =>
+        logger.error("device.brightness.live_failed", { port: device.port }, err),
+    },
+  );
+
+  // Live sync for effect params (slider/color drag). Latest-wins + throttled.
+  // We intentionally do NOT call onRefresh here to avoid re-render jank and IPC spam.
+  const paramsLive = useLatestThrottledInvoker<{
+    key: string;
+    value: EffectParamValue;
+  }>(
+    ({ key, value }) =>
+      api.updateScopeEffectParams({
+        port: scope.port,
+        outputId: scope.outputId,
+        segmentId: scope.segmentId,
+        params: { [key]: value },
+      }),
+    0,
+    {
+      areEqual: (a, b) => a.key === b.key && a.value === b.value,
+      onError: (err) =>
+        logger.error(
+          "scope.effectParams.live_failed",
+          { port: scope.port, outputId: scope.outputId, segmentId: scope.segmentId },
+          err,
+        ),
+    },
+  );
+
+  // When scope/mode changes, drop any pending live update to avoid leaking updates to a new target.
+  const liveResetKey = useMemo(
+    () => [scope.port, scope.outputId ?? "", scope.segmentId ?? "", effectiveModeId ?? ""].join("|"),
+    [scope.port, scope.outputId, scope.segmentId, effectiveModeId],
+  );
+
+  useEffect(() => {
+    brightnessLive.cancel();
+    paramsLive.cancel();
+  }, [brightnessLive, paramsLive, liveResetKey]);
+
+  const handleBrightnessChange = useCallback(
+    (value: number) => {
+      // Fire-and-forget; throttled; do not refresh.
+      brightnessLive.schedule(value);
+    },
+    [brightnessLive],
+  );
+
+  const handleBrightnessCommit = useCallback(async (value: number) => {
     try {
+      // Ensure no pending live value remains; commit is authoritative.
+      brightnessLive.cancel();
       await api.setBrightness(device.port, value);
       await onRefresh();
     } catch (err) {
       logger.error("device.brightness.set_failed", { port: device.port, brightness: value }, err);
     }
-  };
+  }, [brightnessLive, device.port, onRefresh]);
+
+  const handleParamLiveChange = useCallback(
+    (param: EffectParam, value: EffectParamValue) => {
+      // Fire-and-forget; throttled; do not refresh; do not set parent state.
+      // (UI uses ParamRenderer local draft state, so no extra re-render pressure here.)
+      paramsLive.schedule({ key: param.key, value });
+    },
+    [paramsLive],
+  );
 
   const handleModeClick = async (modeId: string) => {
     setSelectedModeId(modeId);
@@ -261,6 +369,9 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     // 同步本地状态，确保依赖项判断等后续计算的准确性
     const storageKey = `${mode.id}:${param.key}`;
     setParamValues((prev) => ({ ...prev, [storageKey]: value }));
+
+    // Commit is authoritative; drop pending live updates to avoid out-of-order writes.
+    paramsLive.cancel();
 
     try {
       await api.updateScopeEffectParams({
@@ -525,30 +636,11 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
               <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Device Settings</h3>
             </div>
 
-            <Slider.Root
-              min={0}
-              max={100}
-              step={1}
-              value={[brightness]}
-              onValueChange={(details) => handleBrightnessChange(details.value[0])}
-              onValueChangeEnd={(details) => handleBrightnessCommit(details.value[0])}
-            >
-              <HStack justify="space-between">
-                <Slider.Label>
-                  <HStack gap="1.5">
-                    <Sun size={16} />
-                    <Text>Brightness</Text>
-                  </HStack>
-                </Slider.Label>
-                <Slider.ValueText>{brightness}%</Slider.ValueText>
-              </HStack>
-              <Slider.Control>
-                <Slider.Track>
-                  <Slider.Range />
-                </Slider.Track>
-                <Slider.Thumbs />
-              </Slider.Control>
-            </Slider.Root>
+            <DeviceBrightnessSlider
+              value={backendBrightness}
+              onChange={handleBrightnessChange}
+              onCommit={handleBrightnessCommit}
+            />
           </Card>
 
           {/* Current Mode Settings */}
@@ -571,6 +663,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                       param={param}
                       value={value}
                       disabled={disabled || isInheriting}
+                      onChange={(val) => handleParamLiveChange(param, val)}
                       onCommit={(val) => handleParamCommit(selectedMode, param, val)}
                     />
                   );

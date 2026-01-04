@@ -498,6 +498,15 @@ impl LightingManager {
             .collect()
     }
 
+    /// Return a single device snapshot without probing.
+    pub fn get_device(&self, port: &str) -> Result<Device, String> {
+        let devices = self.devices.lock().unwrap();
+        let md = devices
+            .get(port)
+            .ok_or_else(|| "Device not found".to_string())?;
+        Ok(self.build_device_dto(port, md))
+    }
+
     /// Set effect selection for a scope.
     ///
     /// - `Scope::Device` targets the device scope

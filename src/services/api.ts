@@ -34,6 +34,10 @@ export const api = {
     return await invokeWithLog<Device[]>("get_devices");
   },
 
+  getDevice: async (port: string): Promise<Device> => {
+    return await invokeWithLog<Device>("get_device", { port }, { port });
+  },
+
   getEffects: async (): Promise<EffectInfo[]> => {
     return await invokeWithLog<EffectInfo[]>("get_effects");
   },

@@ -20,7 +20,7 @@ export default function App() {
     selectScope,
     isScanning,
     scanDevices,
-    refreshDevices,
+    refreshDevice,
   } = useDevices();
   
   const { effects } = useEffects();
@@ -109,7 +109,7 @@ export default function App() {
                 device={selectedDevice}
                 scope={selectedScope ?? { port: selectedDevice.port }}
                 effects={effects}
-                onRefresh={refreshDevices}
+                onRefresh={() => refreshDevice(selectedDevice.port)}
                 onSelectScope={selectScope}
               />
             </motion.div>

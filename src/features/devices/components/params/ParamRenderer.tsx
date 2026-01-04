@@ -9,6 +9,11 @@ interface ParamRendererProps {
   param: EffectParam;
   value: EffectParamValue;
   disabled: boolean;
+  /**
+   * 高频实时变更（如 slider/颜色拖动）。
+   * 注意：调用方应避免在这里 setState 触发大范围重渲染；推荐仅做节流后的后端同步。
+   */
+  onChange?: (value: EffectParamValue) => void;
   onCommit: (value: EffectParamValue) => void;
 }
 
@@ -18,9 +23,10 @@ interface ParamRendererProps {
  * 架构说明：
  * - ParamRenderer 统一管理 draft 状态，隔离拖动期的高频更新
  * - 各 Renderer 保持纯粹，只负责渲染与事件转发
- * - 只有 onCommit 才会冒泡到 DeviceDetail，避免拖动时触发整页重渲染
+ * - 默认只有 onCommit 才会冒泡到 DeviceDetail，避免拖动时触发整页重渲染
+ * - 若传入 onChange，则用于“实时刷新”：在不阻塞 UI 的前提下，将高频变更节流同步到后端
  */
-export function ParamRenderer({ param, value, disabled, onCommit }: ParamRendererProps) {
+export function ParamRenderer({ param, value, disabled, onChange, onCommit }: ParamRendererProps) {
   // 本地 draft 状态：拖动期的高频更新只在这里消化，不冒泡到父组件
   const [draft, setDraft] = useState<EffectParamValue>(value);
 
@@ -31,6 +37,7 @@ export function ParamRenderer({ param, value, disabled, onCommit }: ParamRendere
 
   const handleChange = (next: EffectParamValue) => {
     setDraft(next);
+    onChange?.(next);
   };
 
   const handleCommit = (next: EffectParamValue) => {

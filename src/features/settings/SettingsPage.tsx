@@ -8,6 +8,7 @@ import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/a
 import { logger } from "../../services/logger";
 import { usePlatform } from "../../hooks/usePlatform";
 import { useMinimizeToTray } from "../../hooks/useMinimizeToTray";
+import { useLatestThrottledInvoker } from "../../hooks/useLatestThrottledInvoker";
 import "./Settings.css";
 
 // Windows-specific capture methods
@@ -34,7 +35,7 @@ const buildMipScalePoints = () => {
 const formatPercent = (value: number) =>
   Number.isInteger(value) ? value.toString() : value.toFixed(1);
 
-const LIVE_SYNC_INTERVAL = 90; // ms throttle for live capture scale sync
+// Live sync is handled via a ready/busy gate (latest-wins), so no timer-based throttling is needed.
 
 const windowEffectMeta: Record<WindowEffectId, { label: string; description: string }> = {
   // macOS materials
@@ -176,9 +177,8 @@ export function SettingsPage() {
   const animationFromRef = useRef<number>(0);
   const animationToRef = useRef<number>(0);
   const animationDuration = 220; // ms
-  const liveSyncTimerRef = useRef<number | null>(null);
-  const pendingLiveScaleRef = useRef<number | null>(null);
   const lastSyncedScaleRef = useRef<number | null>(null);
+  const lastSyncedFpsRef = useRef<number | null>(null);
 
   const cancelAnimation = () => {
     if (animationFrameRef.current !== null) {
@@ -187,46 +187,44 @@ export function SettingsPage() {
     }
   };
 
-  const cancelLiveSync = () => {
-    if (liveSyncTimerRef.current !== null) {
-      window.clearTimeout(liveSyncTimerRef.current);
-      liveSyncTimerRef.current = null;
-    }
-    pendingLiveScaleRef.current = null;
-  };
+  const scaleLive = useLatestThrottledInvoker<number>(
+    (percent) => api.setCaptureScale(percent),
+    0,
+    {
+      areEqual: (a, b) => a === b,
+      onError: (err) => logger.error("settings.captureScale.live_failed", {}, err),
+    },
+  );
+
+  const fpsLive = useLatestThrottledInvoker<number>(
+    (fps) => api.setCaptureFps(fps),
+    0,
+    {
+      areEqual: (a, b) => a === b,
+      onError: (err) => logger.error("settings.captureFps.live_failed", {}, err),
+    },
+  );
 
   const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
 
   const syncLiveScale = useCallback(
     (value: number, options?: { force?: boolean }) => {
       const target = isGpuAccelerated ? snapToMipScale(value) : value;
-      pendingLiveScaleRef.current = target;
-
-      if (options?.force) {
-        cancelLiveSync();
-        if (lastSyncedScaleRef.current !== target) {
-          lastSyncedScaleRef.current = target;
-          api.setCaptureScale(target);
-        }
-        return;
-      }
-
-      if (liveSyncTimerRef.current !== null) {
-        return;
-      }
-
-      liveSyncTimerRef.current = window.setTimeout(() => {
-        liveSyncTimerRef.current = null;
-        const next = pendingLiveScaleRef.current;
-        pendingLiveScaleRef.current = null;
-        if (next === null || next === lastSyncedScaleRef.current) {
-          return;
-        }
-        lastSyncedScaleRef.current = next;
-        api.setCaptureScale(next);
-      }, LIVE_SYNC_INTERVAL);
+      if (lastSyncedScaleRef.current === target && !options?.force) return;
+      lastSyncedScaleRef.current = target;
+      scaleLive.schedule(target, { force: options?.force });
     },
-    [isGpuAccelerated, snapToMipScale],
+    [isGpuAccelerated, scaleLive, snapToMipScale],
+  );
+
+  const syncLiveFps = useCallback(
+    (value: number, options?: { force?: boolean }) => {
+      const target = Math.round(value);
+      if (lastSyncedFpsRef.current === target && !options?.force) return;
+      lastSyncedFpsRef.current = target;
+      fpsLive.schedule(target, { force: options?.force });
+    },
+    [fpsLive],
   );
 
   // 吸附到最近有效点并同步后端（无动画，用于初始化/切换模式）
@@ -236,10 +234,10 @@ export function SettingsPage() {
       setCaptureScale(snapped);
       lastSyncedScaleRef.current = snapped;
       if (snapped !== value) {
-        api.setCaptureScale(snapped);
+        scaleLive.schedule(snapped, { force: true });
       }
     },
-    [snapToMipScale],
+    [scaleLive, snapToMipScale],
   );
 
   // 带动画吸附到最近有效点
@@ -251,7 +249,7 @@ export function SettingsPage() {
       if (Math.abs(snapped - from) < 0.01) {
         setCaptureScale(snapped);
         lastSyncedScaleRef.current = snapped;
-        api.setCaptureScale(snapped);
+        scaleLive.schedule(snapped, { force: true });
         return;
       }
 
@@ -275,13 +273,13 @@ export function SettingsPage() {
           animationFrameRef.current = null;
           setCaptureScale(animationToRef.current);
           lastSyncedScaleRef.current = animationToRef.current;
-          api.setCaptureScale(animationToRef.current);
+          scaleLive.schedule(animationToRef.current, { force: true });
         }
       };
 
       animationFrameRef.current = requestAnimationFrame(step);
     },
-    [snapToMipScale, animationDuration],
+    [scaleLive, snapToMipScale, animationDuration],
   );
 
   useEffect(() => {
@@ -293,6 +291,7 @@ export function SettingsPage() {
       api.getWindowEffect(),
     ]).then(([scale, fps, method, windowEffects, currentEffect]) => {
       setCaptureFps(fps);
+      lastSyncedFpsRef.current = fps;
       setCaptureMethod(method);
       setAvailableWindowEffects(windowEffects);
 
@@ -319,7 +318,8 @@ export function SettingsPage() {
     });
     return () => {
       cancelAnimation();
-      cancelLiveSync();
+      scaleLive.cancel();
+      fpsLive.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -346,7 +346,8 @@ export function SettingsPage() {
 
   const handleMethodChange = (value: CaptureMethod) => {
     cancelAnimation();
-    cancelLiveSync();
+    scaleLive.cancel();
+    fpsLive.cancel();
     setCaptureMethod(value);
     api.setCaptureMethod(value);
 
@@ -377,7 +378,12 @@ export function SettingsPage() {
 
   const handleFpsChange = (value: number) => {
     setCaptureFps(value);
-    api.setCaptureFps(value);
+    syncLiveFps(value);
+  };
+
+  const handleFpsCommit = (value: number) => {
+    setCaptureFps(value);
+    syncLiveFps(value, { force: true });
   };
 
   const handleWindowEffectChange = (value: WindowEffectId) => {
@@ -528,6 +534,7 @@ export function SettingsPage() {
               max={60}
               value={[captureFps]}
               onValueChange={(details) => handleFpsChange(details.value[0])}
+              onValueChangeEnd={(details) => handleFpsCommit(details.value[0])}
               disabled={loading}
             >
               <HStack justify="space-between">

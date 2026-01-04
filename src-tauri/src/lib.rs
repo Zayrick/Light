@@ -157,6 +157,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scan_devices,
             commands::get_devices,
+            commands::get_device,
             commands::get_effects,
             commands::get_displays,
             commands::set_effect,
