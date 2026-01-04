@@ -51,6 +51,9 @@
   /* LED Preview */
   --led-preview-default-fill: rgba(128, 128, 128, 0.20);
   --led-preview-empty-fill: rgba(0, 0, 0, 0.06);
+  --led-preview-active-border: var(--accent-color);
+  --led-preview-hover-bg: rgba(255, 255, 255, 0.55);
+  --led-preview-hover-text: var(--text-primary);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -100,6 +103,9 @@
     /* LED Preview */
     --led-preview-default-fill: rgba(128, 128, 128, 0.20);
     --led-preview-empty-fill: rgba(255, 255, 255, 0.06);
+    --led-preview-active-border: var(--accent-color);
+    --led-preview-hover-bg: rgba(0, 0, 0, 0.35);
+    --led-preview-hover-text: var(--text-primary);
   }
 }
 

@@ -18,6 +18,7 @@ interface DeviceDetailProps {
   scope: SelectedScope;
   effects: EffectInfo[];
   onRefresh: () => Promise<void>;
+  onSelectScope?: (scope: SelectedScope) => void;
 }
 
 type ModeCategory = string;
@@ -101,7 +102,7 @@ function formatScopeFrom(mode: ScopeModeState): string | null {
   return "Device";
 }
 
-export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetailProps) {
+export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope }: DeviceDetailProps) {
   const resolvedScope = useMemo(() => resolveScopeMode(device, scope), [device, scope]);
   const scopeMode = resolvedScope.mode;
 
@@ -362,7 +363,12 @@ export function DeviceDetail({ device, scope, effects, onRefresh }: DeviceDetail
             maxWidth: "600px",
           }}
         >
-          <DeviceLedVisualizer key={device.port} device={device} />
+          <DeviceLedVisualizer
+            key={device.port}
+            device={device}
+            scope={scope}
+            onSelectScope={onSelectScope}
+          />
         </div>
       </header>
 

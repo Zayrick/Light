@@ -9,7 +9,6 @@ import { useDevices } from "./hooks/useDevices";
 import { useEffects } from "./hooks/useEffects";
 import { PlatformProvider } from "./hooks/usePlatform";
 import { pageVariants, PAGE_TRANSITION } from "./motion/transitions";
-import { normalizeSelectedScope } from "./utils/scope";
 import "./styles/theme.css";
 import "./styles/layout.css";
 
@@ -18,7 +17,7 @@ export default function App() {
   const {
     devices,
     selectedScope,
-    setSelectedScope,
+    selectScope,
     isScanning,
     scanDevices,
     refreshDevices,
@@ -52,7 +51,7 @@ export default function App() {
   const handleNavigate = (devicePort: string) => {
     const device = devices.find((d) => d.port === devicePort);
     if (device) {
-      setSelectedScope(normalizeSelectedScope({ port: device.port }, devices));
+      selectScope({ port: device.port });
       setActiveTab("device-detail");
     }
   };
@@ -69,7 +68,7 @@ export default function App() {
             setActiveTab={setActiveTab}
             devices={devices}
             selectedScope={selectedScope}
-            setSelectedScope={setSelectedScope}
+            selectScope={selectScope}
           />
         }
       >
@@ -111,6 +110,7 @@ export default function App() {
                 scope={selectedScope ?? { port: selectedDevice.port }}
                 effects={effects}
                 onRefresh={refreshDevices}
+                onSelectScope={selectScope}
               />
             </motion.div>
           )}

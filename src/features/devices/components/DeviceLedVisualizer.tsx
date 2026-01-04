@@ -1,25 +1,23 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useMeasure from 'react-use-measure';
 import { useLedColors } from '../../../hooks/useLedStream';
-import { Device } from '../../../types';
+import { Device, SelectedScope } from '../../../types';
+import { computeMultiLayout, processDeviceZones, filterVisibleZones } from '../../../utils/visualizerLayout';
 
 type LedColor = { r: number; g: number; b: number };
 
-type LayoutData = {
-  width: number;
-  height: number;
-  cols: number;
-  rows: number;
-  gap: number;
-  size: number;
-  offsetX: number;
-  offsetY: number;
-  isMatrix: boolean;
-  matrixMap: (number | null)[] | null;
-  totalLeds: number;
-};
+/** Helper: draw a single LED cell */
+function drawLedCell(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, size: number, radius: number,
+  color: LedColor, isDefault: boolean, defaultFill: string
+) {
+  ctx.fillStyle = isDefault ? defaultFill : `rgb(${color.r},${color.g},${color.b})`;
+  roundedRectPath(ctx, x, y, size, size, radius);
+  ctx.fill();
+}
 
-function drawRoundedRect(
+function roundedRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -39,144 +37,43 @@ function drawRoundedRect(
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
-  ctx.fill();
-}
-
-function computeLayout(
-  width: number,
-  height: number,
-  totalLeds: number,
-  isMatrix: boolean,
-  virtualWidth: number,
-  virtualHeight: number,
-  matrixMap: (number | null)[] | null
-): LayoutData {
-  if (width === 0 || height === 0 || totalLeds === 0) {
-    return { width, height, cols: 0, rows: 0, gap: 0, size: 0, offsetX: 0, offsetY: 0, isMatrix, matrixMap, totalLeds };
-  }
-
-  // Keep the preview stable and cheap to compute.
-  // Gap is intentionally simple: matrix tighter, linear slightly wider.
-  const gap = isMatrix ? 1 : totalLeds > 200 ? 1 : 2;
-
-  let cols: number;
-  let rows: number;
-
-  if (isMatrix) {
-    cols = Math.max(1, virtualWidth);
-    rows = Math.max(1, virtualHeight);
-  } else {
-    // Choose a grid whose aspect ratio roughly matches the container.
-    // cols ~= sqrt(totalLeds * (width/height))
-    const aspect = height > 0 ? width / height : 1;
-    cols = Math.max(1, Math.min(totalLeds, Math.ceil(Math.sqrt(totalLeds * aspect))));
-    rows = Math.max(1, Math.ceil(totalLeds / cols));
-  }
-
-  const wAvail = width - (cols - 1) * gap;
-  const hAvail = height - (rows - 1) * gap;
-  const size = wAvail > 0 && hAvail > 0 ? Math.max(0, Math.min(wAvail / cols, hAvail / rows)) : 0;
-
-  const gridW = cols * size + (cols - 1) * gap;
-  const gridH = rows * size + (rows - 1) * gap;
-
-  return {
-    width,
-    height,
-    cols,
-    rows,
-    gap,
-    size,
-    // Align rules:
-    // - Matrix: right aligned (matches "panel preview" expectation)
-    // - Linear: centered (looks balanced when wrapping)
-    offsetX: isMatrix ? Math.max(0, width - gridW) : Math.max(0, (width - gridW) / 2),
-    offsetY: Math.max(0, (height - gridH) / 2),
-    isMatrix,
-    matrixMap,
-    totalLeds,
-  };
 }
 
 interface Props {
   device: Device;
+  scope?: SelectedScope;
+  onSelectScope?: (scope: SelectedScope) => void;
 }
 
-export function DeviceLedVisualizer({ device }: Props) {
+export function DeviceLedVisualizer({ device, scope, onSelectScope }: Props) {
   const [containerRef, bounds] = useMeasure();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
-  const physicalLen = useMemo(() => {
-    const sum = device.outputs.reduce((acc, o) => {
-      const segSum =
-        o.output_type === "Linear" && o.segments.length > 0
-          ? o.segments.reduce((sAcc, s) => sAcc + (s.leds_count ?? 0), 0)
-          : 0;
-
-      return acc + (segSum > 0 ? segSum : (o.leds_count ?? 0));
-    }, 0);
-    return Math.max(1, sum);
-  }, [device.outputs]);
-
-  const singleOutput = device.outputs.length === 1 ? device.outputs[0] : null;
-
-  const isMatrix =
-    singleOutput?.output_type === "Matrix" &&
-    !!singleOutput.matrix &&
-    singleOutput.matrix.width > 1 &&
-    singleOutput.matrix.height > 1;
-
-  const virtualWidth = isMatrix ? singleOutput!.matrix!.width : physicalLen;
-  const virtualHeight = isMatrix ? singleOutput!.matrix!.height : 1;
-  const virtualLen = Math.max(1, virtualWidth * virtualHeight);
-  const matrixMap = isMatrix ? (singleOutput!.matrix!.map ?? null) : null;
-
-  const { colors: physicalColors, isDefault: isDefaultPhysical } = useLedColors(
-    device.port,
-    physicalLen
+  // 1. Pre-process outputs into zones
+  const { zones: processedZones, totalLeds } = useMemo(
+    () => processDeviceZones(device),
+    [device]
   );
 
-  const { colors, isDefault } = useMemo(() => {
-    if (!isMatrix || !matrixMap) {
-      return { colors: physicalColors, isDefault: isDefaultPhysical };
-    }
+  // 2. Get colors
+  const { colors: physicalColors, isDefault } = useLedColors(device.port, totalLeds);
 
-    // Reconstruct virtual (width*height) color buffer from physical LEDs using the matrix map.
-    const out: LedColor[] = Array.from({ length: virtualLen }, () => ({
-      r: 0,
-      g: 0,
-      b: 0,
-    }));
+  // 3. Filter visible zones based on scope
+  const visibleZones = useMemo(
+    () => filterVisibleZones(processedZones, scope),
+    [processedZones, scope]
+  );
 
-    for (let i = 0; i < virtualLen; i++) {
-      const phys = matrixMap[i];
-      if (phys === null || phys === undefined) continue;
-      if (phys >= 0 && phys < physicalColors.length) {
-        out[i] = physicalColors[phys] as LedColor;
-      }
-    }
-
-    return { colors: out, isDefault: isDefaultPhysical };
-  }, [isMatrix, matrixMap, physicalColors, isDefaultPhysical, virtualLen]);
-
+  // 4. Compute Layout
   const layout = useMemo(
-    () =>
-      computeLayout(
-        bounds.width,
-        bounds.height,
-        virtualLen,
-        isMatrix,
-        virtualWidth,
-        virtualHeight,
-        matrixMap
-      ),
-    [bounds.width, bounds.height, virtualLen, isMatrix, virtualWidth, virtualHeight, matrixMap]
+    () => computeMultiLayout(bounds.width, bounds.height, visibleZones, scope),
+    [bounds.width, bounds.height, visibleZones, scope]
   );
 
-  const isValidLayout = layout.cols > 0 && layout.rows > 0 && layout.size > 0;
+  const isValidLayout = layout.size > 0 && layout.blocks.length > 0;
 
-  // Main-thread rendering (simple + robust).
-  // Key behavior: redraw on BOTH color updates and layout updates, so resize never leaves a stretched bitmap.
+  // 4. Render
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !isValidLayout) return;
@@ -188,10 +85,16 @@ export function DeviceLedVisualizer({ device }: Props) {
     const styles = container ? getComputedStyle(container) : null;
     const defaultFill = styles?.getPropertyValue('--led-preview-default-fill')?.trim();
     const emptyFill = styles?.getPropertyValue('--led-preview-empty-fill')?.trim();
+    const activeBorder =
+      styles?.getPropertyValue('--led-preview-active-border')?.trim() ||
+      styles?.getPropertyValue('--accent-color')?.trim() ||
+      'currentColor';
     const fallbackDefaultFill = 'rgba(128, 128, 128, 0.2)';
     const fallbackEmptyFill = 'rgba(255, 255, 255, 0.06)';
+    const effectiveDefaultFill = defaultFill || fallbackDefaultFill;
+    const effectiveEmptyFill = emptyFill || fallbackEmptyFill;
 
-    const { width, height, cols, rows, gap, size, offsetX, offsetY } = layout;
+    const { width, height, size, gap } = layout;
     const dpr = devicePixelRatio;
 
     canvas.width = width * dpr;
@@ -202,28 +105,58 @@ export function DeviceLedVisualizer({ device }: Props) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const radius = isMatrix ? Math.min(2, size / 2) : Math.min(4, size / 2);
+    const radius = Math.min(2, size / 2);
 
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const i = row * cols + col;
-        if (!isMatrix && i >= virtualLen) continue;
+    const highlightPad = 6;
+    const highlightRadius = Math.min(10, Math.max(6, size));
 
-        const x = offsetX + col * (size + gap);
-        const y = offsetY + row * (size + gap);
+    for (const block of layout.blocks) {
+      // Draw Highlight Border if active
+      if (block.isActive) {
+        ctx.strokeStyle = activeBorder;
+        ctx.lineWidth = 1;
+        ctx.lineJoin = 'round';
+        roundedRectPath(
+          ctx,
+          block.x - highlightPad,
+          block.y - highlightPad,
+          block.width + highlightPad * 2,
+          block.height + highlightPad * 2,
+          highlightRadius
+        );
+        ctx.stroke();
+      }
 
-        if (isMatrix && matrixMap?.[i] === null) {
-          ctx.fillStyle = emptyFill || fallbackEmptyFill;
-          drawRoundedRect(ctx, x, y, size, size, radius);
-          continue;
+      for (let row = 0; row < block.rows; row++) {
+        for (let col = 0; col < block.cols; col++) {
+          const i = row * block.cols + col;
+          const x = block.x + col * (size + gap);
+          const y = block.y + row * (size + gap);
+
+          if (block.isMatrix) {
+            // Matrix: handle null/undefined slots as empty
+            const mapVal = block.matrixMap?.[i];
+            if (mapVal === null || mapVal === undefined) {
+              ctx.fillStyle = effectiveEmptyFill;
+              roundedRectPath(ctx, x, y, size, size, radius);
+              ctx.fill();
+              continue;
+            }
+            const globalIndex = block.ledStartIndex + mapVal;
+            const c = (physicalColors?.[globalIndex] as LedColor | undefined) ?? { r: 0, g: 0, b: 0 };
+            drawLedCell(ctx, x, y, size, radius, c, isDefault, effectiveDefaultFill);
+          } else {
+            // Linear
+            if (i >= block.ledCount) continue;
+            const globalIndex = block.ledStartIndex + i;
+            const c = (physicalColors?.[globalIndex] as LedColor | undefined) ?? { r: 0, g: 0, b: 0 };
+            drawLedCell(ctx, x, y, size, radius, c, isDefault, effectiveDefaultFill);
+          }
         }
-
-        const c = (colors?.[i] as LedColor | undefined) ?? { r: 0, g: 0, b: 0 };
-        ctx.fillStyle = isDefault ? (defaultFill || fallbackDefaultFill) : `rgb(${c.r},${c.g},${c.b})`;
-        drawRoundedRect(ctx, x, y, size, size, radius);
       }
     }
-  }, [layout, isValidLayout, colors, isDefault, isMatrix, virtualLen, matrixMap]);
+
+  }, [layout, isValidLayout, physicalColors, isDefault]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -237,6 +170,97 @@ export function DeviceLedVisualizer({ device }: Props) {
           height: '100%',
         }}
       />
+
+      {/* Interactive overlay: hover label + click-to-jump */}
+      {layout.blocks.length > 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+          }}
+        >
+          {layout.blocks.map((b) => {
+            const key = `${b.outputId}:${b.segmentId ?? ''}`;
+            const isHovered = hoveredKey === key;
+
+            // Make hover/click region include the "frame" padding area.
+            const hoverPad = 10;
+            const left = Math.max(0, b.x - hoverPad);
+            const top = Math.max(0, b.y - hoverPad);
+            const right = Math.min(layout.width, b.x + b.width + hoverPad);
+            const bottom = Math.min(layout.height, b.y + b.height + hoverPad);
+            const w = Math.max(0, right - left);
+            const h = Math.max(0, bottom - top);
+
+            const handleSelect = () => {
+              onSelectScope?.({
+                port: device.port,
+                outputId: b.outputId,
+                segmentId: b.segmentId,
+              });
+            };
+
+            return (
+              <div
+                key={key}
+                title={b.title}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width: w,
+                  height: h,
+                  pointerEvents: 'auto',
+                  cursor: onSelectScope ? 'pointer' : 'default',
+                  borderRadius: 'var(--radius-m)',
+                }}
+                role={onSelectScope ? 'button' : undefined}
+                tabIndex={onSelectScope ? 0 : -1}
+                onMouseEnter={() => setHoveredKey(key)}
+                onMouseLeave={() => setHoveredKey(null)}
+                onClick={handleSelect}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelect();
+                  }
+                }}
+              >
+                {/* Keep overlay mounted so fade-out can animate */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '6px',
+                    borderRadius: 'var(--radius-m)',
+                    background: 'var(--led-preview-hover-bg)',
+                    color: 'var(--led-preview-hover-text)',
+                    border: '1px solid var(--border-subtle)',
+                    // Stronger blur for a clearer "frosted" effect.
+                    backdropFilter: 'blur(18px) saturate(1.25)',
+                    WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    letterSpacing: '0.2px',
+                    pointerEvents: 'none',
+                    opacity: isHovered ? 1 : 0,
+                    transform: isHovered ? 'scale(1)' : 'scale(0.98)',
+                    transition: 'opacity 160ms ease, transform 160ms ease',
+                    willChange: 'opacity, transform',
+                  }}
+                >
+                  {b.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

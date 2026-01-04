@@ -5,7 +5,6 @@ import { useCallback } from "react";
 import type { Device, SelectedScope } from "../../types";
 import { SidebarDeviceTree } from "./SidebarDeviceTree";
 import { HIGHLIGHT_TRANSITION, NAV_TRANSITION } from "../../motion/transitions";
-import { normalizeSelectedScope } from "../../utils/scope";
 
 const ActiveHighlight = () => (
   <motion.div
@@ -21,7 +20,7 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   devices: Device[];
   selectedScope: SelectedScope | null;
-  setSelectedScope: (scope: SelectedScope | null) => void;
+  selectScope: (scope: SelectedScope | null) => void;
 }
 
 export function Sidebar({
@@ -29,7 +28,7 @@ export function Sidebar({
   setActiveTab,
   devices,
   selectedScope,
-  setSelectedScope,
+  selectScope,
 }: SidebarProps) {
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -45,9 +44,9 @@ export function Sidebar({
   }, []);
 
   const handleScopeSelect = useCallback((scope: SelectedScope) => {
-    setSelectedScope(normalizeSelectedScope(scope, devices));
+    selectScope(scope);
     setActiveTab("device-detail");
-  }, [devices, setSelectedScope, setActiveTab]);
+  }, [selectScope, setActiveTab]);
 
   return (
     <aside className="sidebar">

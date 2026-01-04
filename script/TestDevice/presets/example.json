@@ -1,14 +1,13 @@
 {
   "schema_version": 1,
-  "device_name": "TestMatrix",
+  "device_name": "TestDevice V4",
   "udp_port": 9999,
   "pixel_size": 6,
   "outputs": [
     {
       "id": "matrix-a",
-      "name": "Matrix A (sparse corners)",
+      "name": "Matrix A",
       "output_type": "Matrix",
-      "leds_count": 6,
       "matrix": {
         "width": 8,
         "height": 1,
@@ -28,14 +27,12 @@
       "id": "strip-1",
       "name": "Strip 1",
       "output_type": "Linear",
-      "leds_count": 30,
       "length": 30
     },
     {
       "id": "matrix-1",
       "name": "Matrix 3",
       "output_type": "Matrix",
-      "leds_count": 80,
       "matrix": {
         "width": 20,
         "height": 4,

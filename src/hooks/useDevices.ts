@@ -10,6 +10,13 @@ export function useDevices() {
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready");
 
+  const selectScope = useCallback(
+    (scope: SelectedScope | null) => {
+      setSelectedScope(scope ? normalizeSelectedScope(scope, devices) : null);
+    },
+    [devices]
+  );
+
   const scanDevices = useCallback(async () => {
     setIsScanning(true);
     setStatusMsg("Scanning devices...");
@@ -66,7 +73,7 @@ export function useDevices() {
   return {
     devices,
     selectedScope,
-    setSelectedScope,
+    selectScope,
     isScanning,
     statusMsg,
     scanDevices,
