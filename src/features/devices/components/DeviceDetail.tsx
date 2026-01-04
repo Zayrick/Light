@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
 import { Device, EffectInfo, EffectParam, ScopeModeState } from "../../../types";
-import type { SelectedScope } from "../../../hooks/useDevices";
+import type { SelectedScope } from "../../../types";
 import { api } from "../../../services/api";
 import { logger } from "../../../services/logger";
 import { DeviceLedVisualizer } from "./DeviceLedVisualizer";

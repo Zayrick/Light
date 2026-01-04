@@ -7,6 +7,7 @@ import { Device, EffectInfo } from "../../types";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { BLOG_POSTS, PLUGINS } from "../../data/mockData";
+import { formatDeviceTypeLabel } from "../../utils/deviceDisplay";
 import styles from "./HomePage.module.css";
 
 type NewsPanelState = "auto" | "hidden" | "compact-news";
@@ -28,7 +29,12 @@ export function HomePage({
   onScan,
   onNavigate,
 }: HomePageProps) {
-  const [panelState, setPanelState] = useState<NewsPanelState>("auto");
+  const [panelState, setPanelState] = useState<NewsPanelState>(() => {
+    // Default: focus on devices. On desktop, keep the news panel collapsed;
+    // on narrow viewports, keep the normal devices view.
+    if (typeof window === "undefined") return "auto";
+    return window.innerWidth < SIDEBAR_BREAKPOINT ? "auto" : "hidden";
+  });
   const [isNarrow, setIsNarrow] = useState(false);
 
   useEffect(() => {
@@ -49,11 +55,15 @@ export function HomePage({
     if (!isNarrow && panelState === "compact-news") {
       setPanelState("auto");
     }
+    if (isNarrow && panelState === "hidden") {
+      // "hidden" is a desktop-only state; on narrow viewports we always show devices by default.
+      setPanelState("auto");
+    }
   }, [isNarrow, panelState]);
 
   const shouldShowSidebar = !isNarrow && panelState === "auto";
   const showCompactNews = isNarrow && panelState === "compact-news";
-  const togglePressed = panelState !== "auto";
+  const togglePressed = isNarrow ? panelState === "compact-news" : panelState === "hidden";
 
   const handleTogglePress = (pressed: boolean) => {
     if (isNarrow) {
@@ -191,6 +201,7 @@ export function HomePage({
                       key={device.port}
                       className="simplified-device-card"
                       hoverable
+                      title={device.port}
                       onClick={() => onNavigate(device.port)}
                     >
                       <div className="simplified-device-info">
@@ -200,7 +211,7 @@ export function HomePage({
                         <div>
                           <h3 className={styles.deviceInfoTitle}>{device.model}</h3>
                           <div className={styles.deviceInfoSubtitle}>
-                            <span>{device.port}</span>
+                            <span>{formatDeviceTypeLabel(device.device_type)}</span>
                             {activeEffectId && (
                               <>
                                 <span>•</span>
