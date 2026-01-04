@@ -3,7 +3,7 @@ import { Menu } from "@ark-ui/react/menu";
 import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { Device, DeviceType, ScopeModeState, SelectedScope } from "../../types";
 import { formatDeviceTypeLabel } from "../../utils/deviceDisplay";
 import { 
@@ -142,6 +142,40 @@ export function SidebarDeviceTree({
   onMouseMove,
   onMouseLeave,
 }: SidebarDeviceTreeProps) {
+  // Multi-zone devices (devices with multiple outputs) currently auto-expand because
+  // expandedValue is derived from selectedScope. We add a small local override so
+  // clicking the same device again can collapse/expand the branch.
+  const [collapsedDeviceIds, setCollapsedDeviceIds] = useState<string[]>([]);
+  const [collapsedOutputIds, setCollapsedOutputIds] = useState<string[]>([]);
+
+  const toggleDeviceCollapsed = useCallback((deviceNodeId: string) => {
+    setCollapsedDeviceIds((prev) =>
+      prev.includes(deviceNodeId)
+        ? prev.filter((id) => id !== deviceNodeId)
+        : [...prev, deviceNodeId]
+    );
+  }, []);
+
+  const uncollapseDevice = useCallback((deviceNodeId: string) => {
+    setCollapsedDeviceIds((prev) =>
+      prev.includes(deviceNodeId) ? prev.filter((id) => id !== deviceNodeId) : prev
+    );
+  }, []);
+
+  const toggleOutputCollapsed = useCallback((outputNodeId: string) => {
+    setCollapsedOutputIds((prev) =>
+      prev.includes(outputNodeId)
+        ? prev.filter((id) => id !== outputNodeId)
+        : [...prev, outputNodeId]
+    );
+  }, []);
+
+  const uncollapseOutput = useCallback((outputNodeId: string) => {
+    setCollapsedOutputIds((prev) =>
+      prev.includes(outputNodeId) ? prev.filter((id) => id !== outputNodeId) : prev
+    );
+  }, []);
+
   const nodes = useMemo(() => buildTree(devices), [devices]);
 
   const collection = useMemo(
@@ -167,12 +201,20 @@ export function SidebarDeviceTree({
     if (activeTab !== "device-detail" || !selectedScope) return [];
     // Expand the path to the selected scope.
     // Note: segment is a leaf node, so it does not need to be in expandedValue.
-    const values: string[] = [`dev:${selectedScope.port}`];
+    const devId = `dev:${selectedScope.port}`;
+    // Allow collapsing multi-zone devices only when the *device scope* itself is selected.
+    if (!selectedScope.outputId && collapsedDeviceIds.includes(devId)) return [];
+
+    const values: string[] = [devId];
     if (selectedScope.outputId) {
-      values.push(`out:${selectedScope.port}:${selectedScope.outputId}`);
+      const outId = `out:${selectedScope.port}:${selectedScope.outputId}`;
+      // Allow collapsing an output only when the *output scope* itself is selected.
+      // If a segment is selected, we must expand the output so the segment is reachable.
+      if (!selectedScope.segmentId && collapsedOutputIds.includes(outId)) return values;
+      values.push(outId);
     }
     return values;
-  }, [activeTab, selectedScope]);
+  }, [activeTab, selectedScope, collapsedDeviceIds, collapsedOutputIds]);
 
   return (
     <TreeView.Root
@@ -191,6 +233,10 @@ export function SidebarDeviceTree({
             onMouseMove={onMouseMove}
             onMouseLeave={onMouseLeave}
             expandedValue={expandedValue}
+            onToggleDeviceCollapsed={toggleDeviceCollapsed}
+            onUncollapseDevice={uncollapseDevice}
+            onToggleOutputCollapsed={toggleOutputCollapsed}
+            onUncollapseOutput={uncollapseOutput}
           />
         ))}
       </TreeView.Tree>
@@ -204,6 +250,10 @@ interface DeviceTreeItemProps extends TreeView.NodeProviderProps<DeviceTreeNode>
   onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
   onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => void;
   expandedValue: string[];
+  onToggleDeviceCollapsed: (deviceNodeId: string) => void;
+  onUncollapseDevice: (deviceNodeId: string) => void;
+  onToggleOutputCollapsed: (outputNodeId: string) => void;
+  onUncollapseOutput: (outputNodeId: string) => void;
 }
 
 const DeviceTreeItem = ({
@@ -214,6 +264,10 @@ const DeviceTreeItem = ({
   onMouseMove,
   onMouseLeave,
   expandedValue,
+  onToggleDeviceCollapsed,
+  onUncollapseDevice,
+  onToggleOutputCollapsed,
+  onUncollapseOutput,
 }: DeviceTreeItemProps) => {
   const isSelected = selectedNodeId === node.id;
   const depth = indexPath.length;
@@ -258,7 +312,33 @@ const DeviceTreeItem = ({
     />
   ) : null;
 
+  const isMultiZoneDevice = node.id.startsWith("dev:") && node.kind === "device" && !!node.children;
+  const isSegmentedOutput = node.id.startsWith("out:") && !!node.children;
+
   const handleClick = () => {
+    // Toggle collapse/expand when clicking the same multi-zone device again.
+    if (isMultiZoneDevice && isSelected) {
+      onToggleDeviceCollapsed(node.id);
+      return;
+    }
+
+    // Toggle collapse/expand when clicking the same segmented output again.
+    // This also covers "single-child compression" nodes (kind=device but id=out:*) when they have segments.
+    if (isSegmentedOutput && isSelected) {
+      onToggleOutputCollapsed(node.id);
+      return;
+    }
+
+    // If user previously collapsed this device, selecting it should expand again.
+    if (isMultiZoneDevice) {
+      onUncollapseDevice(node.id);
+    }
+
+    // If user previously collapsed this output, selecting it should expand again.
+    if (isSegmentedOutput) {
+      onUncollapseOutput(node.id);
+    }
+
     onSelectScope({
       port: node.port,
       outputId: node.outputId,
@@ -271,7 +351,7 @@ const DeviceTreeItem = ({
       {node.children ? (
         <TreeView.Branch className="layout-tree-branch">
           <DeviceContextMenu>
-            <motion.div layout>
+            <motion.div layout transition={BRANCH_TRANSITION}>
               <TreeView.BranchControl
                 className={clsx("device-list-item layout-branch-control", isSelected && "active")}
                 style={branchIndentStyle}
@@ -318,6 +398,10 @@ const DeviceTreeItem = ({
                       onMouseMove={onMouseMove}
                       onMouseLeave={onMouseLeave}
                       expandedValue={expandedValue}
+                      onToggleDeviceCollapsed={onToggleDeviceCollapsed}
+                      onUncollapseDevice={onUncollapseDevice}
+                      onToggleOutputCollapsed={onToggleOutputCollapsed}
+                      onUncollapseOutput={onUncollapseOutput}
                     />
                   ))}
                 </TreeView.BranchContent>
@@ -327,7 +411,7 @@ const DeviceTreeItem = ({
         </TreeView.Branch>
       ) : (
         <DeviceContextMenu>
-          <motion.div layout>
+          <motion.div layout transition={BRANCH_TRANSITION}>
             <TreeView.Item
               className={clsx(
                 "device-list-item",

@@ -42,10 +42,9 @@ export const pageVariants: Variants = {
 
 // Tree branch expand/collapse (height auto)
 export const BRANCH_TRANSITION: Transition = {
-  type: "spring",
-  stiffness: 300,
-  damping: 30,
-  mass: 1,
+  type: "tween",
+  duration: 0.28,
+  ease: EASE_OUT_EXPO,
 };
 
 export const branchContentVariants: Variants = {
