@@ -663,39 +663,6 @@
   background-color: transparent; /* Fully transparent */
 }
 
-/* Device detail mode category tabs */
-/* Range Input Styling */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-strong);
-  outline: none;
-  transition: background 0.2s;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent-color);
-  cursor: pointer;
-  transition: transform 0.1s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-}
-
-input[type="range"]:active::-webkit-slider-thumb {
-  transform: scale(1.1);
-}
-
 .active-mode-card {
   /* Styles for selected mode card if needed beyond inline styles */
   box-shadow: 0 0 0 1px var(--accent-color);
