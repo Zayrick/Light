@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { EffectInfo } from "../types";
 import { api } from "../services/api";
 import { logger } from "../services/logger";
+import { sortEffects } from "../utils/effectsSort";
 
 export function useEffects() {
   const [effects, setEffects] = useState<EffectInfo[]>([]);
@@ -11,7 +12,7 @@ export function useEffects() {
   useEffect(() => {
     api.getEffects()
       .then((data) => {
-        setEffects(data);
+        setEffects(sortEffects(data));
         setLoading(false);
       })
       .catch((err) => {

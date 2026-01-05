@@ -13,6 +13,7 @@ import { Tabs } from "../../../components/ui/Tabs";
 import { ParamRenderer } from "./params/ParamRenderer";
 import { checkDependency } from "../../../utils/effectUtils";
 import { DynamicIcon } from "../../../components/DynamicIcon";
+import { getEffectCategory, sortEffectCategories, sortEffects } from "../../../utils/effectsSort";
 
 interface DeviceDetailProps {
   device: Device;
@@ -180,10 +181,11 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
   const EFFECTIVE_FROM_SLOT_PX = 18;
 
   const [selectedCategory, setSelectedCategory] = useState<ModeCategory>(() => {
-    const initialEffect = effects.find((e) => e.id === effectiveModeId);
-    if (initialEffect?.group) return initialEffect.group;
-    const firstGroup = effects.find((e) => e.group)?.group;
-    return firstGroup ?? "Other";
+    const sorted = sortEffects(effects);
+    const initialEffect = sorted.find((e) => e.id === effectiveModeId);
+    if (initialEffect) return getEffectCategory(initialEffect);
+    const first = sorted[0];
+    return first ? getEffectCategory(first) : "Other";
   });
 
   const [selectedModeId, setSelectedModeId] = useState<string | null>(effectiveModeId);
@@ -194,16 +196,15 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
 
   // Adapt raw backend effects into display modes with categories and icons
   const modes: DisplayMode[] = useMemo(() => {
-    return effects.map((effect) => ({
+    const sorted = sortEffects(effects);
+    return sorted.map((effect) => ({
       ...effect,
-      category: effect.group ?? "Other",
+      category: getEffectCategory(effect),
     }));
   }, [effects]);
 
   const categories: ModeCategory[] = useMemo(() => {
-    const set = new Set<ModeCategory>();
-    modes.forEach((m) => set.add(m.category));
-    return Array.from(set);
+    return sortEffectCategories(modes.map((m) => m.category));
   }, [modes]);
 
   const modesByCategory = useMemo(() => {
@@ -241,13 +242,14 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
 
   // Keep category synced
   useEffect(() => {
-    const initialEffect = effects.find((e) => e.id === effectiveModeId);
-    if (initialEffect?.group) {
-      setSelectedCategory(initialEffect.group);
+    const sorted = sortEffects(effects);
+    const initialEffect = sorted.find((e) => e.id === effectiveModeId);
+    if (initialEffect) {
+      setSelectedCategory(getEffectCategory(initialEffect));
       return;
     }
-    const firstGroup = effects.find((e) => e.group)?.group ?? "Other";
-    setSelectedCategory(firstGroup);
+    const first = sorted[0];
+    setSelectedCategory(first ? getEffectCategory(first) : "Other");
   }, [effectiveModeId, effects]);
 
   useEffect(() => {
