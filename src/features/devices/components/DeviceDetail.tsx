@@ -105,12 +105,14 @@ function formatScopeFrom(mode: ScopeModeState): string | null {
 
 interface DeviceBrightnessSliderProps {
   value: number;
+  disabled?: boolean;
   onChange?: (value: number) => void;
   onCommit: (value: number) => Promise<void> | void;
 }
 
 const DeviceBrightnessSlider = memo(function DeviceBrightnessSlider({
   value,
+  disabled = false,
   onChange,
   onCommit,
 }: DeviceBrightnessSliderProps) {
@@ -128,6 +130,7 @@ const DeviceBrightnessSlider = memo(function DeviceBrightnessSlider({
       max={100}
       step={1}
       value={[draft]}
+      disabled={disabled}
       onValueChange={(details) => {
         const next = details.value[0];
         setDraft(next);
@@ -184,6 +187,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
   });
 
   const [selectedModeId, setSelectedModeId] = useState<string | null>(effectiveModeId);
+  const [switchingModeId, setSwitchingModeId] = useState<string | null>(null);
   const [paramValues, setParamValues] = useState<Record<string, EffectParamValue>>(() =>
     buildParamState(scopeMode.effective_effect_id, scopeMode.effective_params)
   );
@@ -363,6 +367,11 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
   );
 
   const handleModeClick = async (modeId: string) => {
+    if (switchingModeId) return;
+
+    const rollbackModeId = effectiveModeId;
+
+    setSwitchingModeId(modeId);
     setSelectedModeId(modeId);
     try {
       await api.setScopeEffect({
@@ -373,11 +382,14 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
       });
       await onRefresh();
     } catch (err) {
+      setSelectedModeId(rollbackModeId);
       logger.error(
         "scope.effect.set_failed",
         { port: scope.port, outputId: scope.outputId, segmentId: scope.segmentId, effectId: modeId },
         err
       );
+    } finally {
+      setSwitchingModeId(null);
     }
   };
 
@@ -591,16 +603,31 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                         >
                           {categoryModes.map((mode) => {
                             const isSelected = selectedModeId === mode.id;
+                            const isSwitching = !!switchingModeId;
+                            const isTargetSwitching = switchingModeId === mode.id;
+                            const isDisabled = isSwitching && !isTargetSwitching;
+
                             return (
                               <Card
                                 key={mode.id}
-                                hoverable
+                                hoverable={!isSwitching}
                                 className={`${isSelected ? "active-mode-card" : ""}`}
                                 style={{
-                                  border: isSelected
-                                    ? "1px solid var(--accent-color)"
-                                    : "1px solid transparent",
-                                  backgroundColor: isSelected ? "var(--bg-card-hover)" : undefined,
+                                  position: "relative",
+                                    border: "1px solid transparent",
+                                    boxShadow: isSelected
+                                      ? "inset 0 0 0 1px var(--accent-color)"
+                                      : "none",
+                                  backgroundColor: isSelected
+                                    ? isTargetSwitching
+                                      ? "transparent"
+                                      : "var(--bg-card-hover)"
+                                    : undefined,
+                                  opacity: isDisabled ? 0.55 : 1,
+                                  animation: isTargetSwitching
+                                    ? "breathing-opacity 1.5s infinite ease-in-out"
+                                    : "none",
+                                  pointerEvents: isDisabled ? "none" : "auto",
                                   transition: "all 0.2s ease",
                                   padding: "12px",
                                 }}
@@ -702,6 +729,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
 
             <DeviceBrightnessSlider
               value={backendBrightness}
+              disabled={!!switchingModeId}
               onChange={handleBrightnessChange}
               onCommit={handleBrightnessCommit}
             />
@@ -726,7 +754,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                       key={param.key}
                       param={param}
                       value={value}
-                      disabled={disabled || isInheriting}
+                      disabled={disabled || isInheriting || !!switchingModeId}
                       onChange={(val) => handleParamLiveChange(param, val)}
                       onCommit={(val) => handleParamCommit(selectedMode, param, val)}
                     />

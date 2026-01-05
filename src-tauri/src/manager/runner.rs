@@ -10,7 +10,7 @@ use crate::interface::controller::{Color, MatrixMap, SegmentType};
 use crate::interface::effect::Effect;
 
 use super::inventory::create_effect;
-use super::{resolve_effect_for_scope, DeviceConfig, ResolvedEffect, Scope};
+use super::{resolve_effect_for_scope, DeviceConfig, ResolvedEffect, Scope, EFFECT_READY_TIMEOUT};
 
 type ControllerRef = Arc<Mutex<Box<dyn crate::interface::controller::Controller>>>;
 
@@ -27,11 +27,38 @@ struct TargetRuntime {
     width: usize,
     height: usize,
     effect: Box<dyn Effect>,
-    /// Final rendered buffer (after optional transitions), in virtual order.
+    /// Final rendered buffer (after optional transitions), in virtual order.   
     buffer: Vec<Color>,
     /// Scratch buffer for the currently active effect output (used during transitions).
     effect_buffer: Vec<Color>,
     transition: Option<EffectTransition>,
+    pending: Option<PendingEffect>,
+    ready_wait: Option<ReadyWait>,
+    blocked: Option<BlockedSpec>,
+}
+
+struct PendingEffect {
+    effect_id: String,
+    origin_started_at: Instant,
+    origin_rev: u64,
+    width: usize,
+    height: usize,
+    effect: Box<dyn Effect>,
+    buffer: Vec<Color>,
+    started_at: Instant,
+    ready_to_commit: bool,
+}
+
+struct ReadyWait {
+    started_at: Instant,
+}
+
+struct BlockedSpec {
+    effect_id: String,
+    origin_started_at: Instant,
+    width: usize,
+    height: usize,
+    origin_rev: u64,
 }
 
 struct EffectTransition {
@@ -52,6 +79,19 @@ struct TargetSpec<'a> {
 const EFFECT_SWITCH_FADE_DURATION: Duration = Duration::from_millis(120);
 
 impl TargetRuntime {
+    fn create_configured_effect(
+        effect_id: &str,
+        width: usize,
+        height: usize,
+        params: &serde_json::Map<String, Value>,
+    ) -> Result<Box<dyn Effect>, String> {
+        let mut effect = create_effect(effect_id)
+            .ok_or_else(|| format!("Effect '{}' not found", effect_id))?;
+        effect.resize(width, height);
+        effect.update_params(Value::Object(params.clone()));
+        Ok(effect)
+    }
+
     fn new(
         effect_id: &str,
         width: usize,
@@ -61,10 +101,7 @@ impl TargetRuntime {
         params: &serde_json::Map<String, Value>,
         now: Instant,
     ) -> Result<Self, String> {
-        let mut effect = create_effect(effect_id)
-            .ok_or_else(|| format!("Effect '{}' not found", effect_id))?;
-        effect.resize(width, height);
-        effect.update_params(Value::Object(params.clone()));
+        let effect = Self::create_configured_effect(effect_id, width, height, params)?;
 
         let len = width.checked_mul(height).unwrap_or(0).max(1);
         let fade_from_black = EffectTransition {
@@ -83,6 +120,9 @@ impl TargetRuntime {
             buffer: vec![Color::default(); len],
             effect_buffer: Vec::new(),
             transition: Some(fade_from_black),
+            pending: None,
+            ready_wait: None,
+            blocked: None,
         })
     }
 
@@ -90,57 +130,144 @@ impl TargetRuntime {
         &mut self,
         spec: TargetSpec<'_>,
         now: Instant,
+        target: &TargetKey,
+        switch_tx: &flume::Sender<super::SwitchEvent>,
     ) -> Result<(), String> {
-        let needs_recreate = self.effect_id != spec.effect_id
-            || self.origin_started_at != spec.origin_started_at
-            || self.width != spec.width
-            || self.height != spec.height;
+        let current_matches = self.effect_id == spec.effect_id
+            && self.origin_started_at == spec.origin_started_at
+            && self.width == spec.width
+            && self.height == spec.height;
 
-        if needs_recreate {
-            // Crossfade from the previous rendered frame into the new effect.
-            let mut previous = std::mem::take(&mut self.buffer);
-            let mut next =
-                Self::new(
-                    spec.effect_id,
-                    spec.width,
-                    spec.height,
-                    spec.origin_started_at,
-                    spec.origin_rev,
-                    spec.params,
-                    now,
-                )?;
+        if current_matches {
+            self.pending = None;
+            self.ready_wait = None;
+            self.blocked = None;
 
-            let len = next.width.checked_mul(next.height).unwrap_or(0).max(1);
-            if previous.len() != len {
-                previous.resize(len, Color::default());
+            if self.origin_rev != spec.origin_rev {
+                self.origin_rev = spec.origin_rev;
+                self.effect
+                    .update_params(Value::Object(spec.params.clone()));
             }
 
-            next.transition = Some(EffectTransition {
-                started_at: now,
-                duration: EFFECT_SWITCH_FADE_DURATION,
-                from: previous,
-            });
-
-            *self = next;
             return Ok(());
         }
 
-        if self.origin_rev != spec.origin_rev {
-            self.origin_rev = spec.origin_rev;
-            self.effect.update_params(Value::Object(spec.params.clone()));
+        // Desired effect differs from currently active effect. Keep rendering the current
+        // effect while we initialize the next one in `pending`.
+        self.ready_wait = None;
+
+        if let Some(blocked) = &self.blocked {
+            let is_same = blocked.effect_id == spec.effect_id
+                && blocked.origin_started_at == spec.origin_started_at
+                && blocked.width == spec.width
+                && blocked.height == spec.height
+                && blocked.origin_rev == spec.origin_rev;
+            if is_same {
+                return Ok(());
+            }
+        }
+        self.blocked = None;
+
+        let pending_matches = self.pending.as_ref().is_some_and(|p| {
+            p.effect_id == spec.effect_id
+                && p.origin_started_at == spec.origin_started_at
+                && p.width == spec.width
+                && p.height == spec.height
+        });
+
+        if !pending_matches {
+            match Self::create_configured_effect(spec.effect_id, spec.width, spec.height, spec.params)
+            {
+                Ok(effect) => {
+                    let len = spec.width.checked_mul(spec.height).unwrap_or(0).max(1);
+                    self.pending = Some(PendingEffect {
+                        effect_id: spec.effect_id.to_string(),
+                        origin_started_at: spec.origin_started_at,
+                        origin_rev: spec.origin_rev,
+                        width: spec.width,
+                        height: spec.height,
+                        effect,
+                        buffer: vec![Color::default(); len],
+                        started_at: now,
+                        ready_to_commit: false,
+                    });
+                }
+                Err(err) => {
+                    let _ = switch_tx.send(super::SwitchEvent::Failed {
+                        output_id: target.output_id.clone(),
+                        segment_id: target.segment_id.clone(),
+                        effect_id: spec.effect_id.to_string(),
+                        origin_rev: spec.origin_rev,
+                        reason: err.clone(),
+                    });
+                    self.pending = None;
+                    self.blocked = Some(BlockedSpec {
+                        effect_id: spec.effect_id.to_string(),
+                        origin_started_at: spec.origin_started_at,
+                        width: spec.width,
+                        height: spec.height,
+                        origin_rev: spec.origin_rev,
+                    });
+                    return Ok(());
+                }
+            }
+        }
+
+        if let Some(pending) = &mut self.pending {
+            if pending.origin_rev != spec.origin_rev {
+                pending.origin_rev = spec.origin_rev;
+                pending
+                    .effect
+                    .update_params(Value::Object(spec.params.clone()));
+            }
         }
 
         Ok(())
     }
 
-    fn tick(&mut self, elapsed: Duration, now: Instant) {
+    fn tick(
+        &mut self,
+        now: Instant,
+        target: &TargetKey,
+        switch_tx: &flume::Sender<super::SwitchEvent>,
+    ) {
+        if matches!(
+            self.pending.as_ref().map(|pending| pending.ready_to_commit),
+            Some(true)
+        ) {
+            let pending = self.pending.take().unwrap();
+            let mut from = std::mem::take(&mut self.buffer);
+
+            let commit_len = pending.width.checked_mul(pending.height).unwrap_or(0).max(1);
+            if from.len() != commit_len {
+                from.resize(commit_len, Color::default());
+            }
+
+            self.effect_id = pending.effect_id;
+            self.origin_started_at = pending.origin_started_at;
+            self.origin_rev = pending.origin_rev;
+            self.width = pending.width;
+            self.height = pending.height;
+            self.effect = pending.effect;
+            self.transition = Some(EffectTransition {
+                started_at: now,
+                duration: EFFECT_SWITCH_FADE_DURATION,
+                from,
+            });
+        }
+
         let len = self.width.checked_mul(self.height).unwrap_or(0).max(1);
         if self.buffer.len() != len {
             self.buffer.resize(len, Color::default());
         }
 
+        let elapsed = now.duration_since(self.origin_started_at);
+
         let Some(transition) = &mut self.transition else {
             self.effect.tick(elapsed, &mut self.buffer);
+
+            self.process_ready_events(now, target, switch_tx);
+            self.tick_pending(now, target, switch_tx);
             return;
         };
 
@@ -173,6 +300,102 @@ impl TargetRuntime {
             self.transition = None;
             std::mem::swap(&mut self.buffer, &mut self.effect_buffer);
         }
+
+        self.process_ready_events(now, target, switch_tx);
+        self.tick_pending(now, target, switch_tx);
+    }
+
+    fn tick_pending(
+        &mut self,
+        now: Instant,
+        target: &TargetKey,
+        switch_tx: &flume::Sender<super::SwitchEvent>,
+    ) {
+        let Some(pending) = &mut self.pending else {
+            return;
+        };
+
+        if pending.ready_to_commit {
+            return;
+        }
+
+        if now.duration_since(pending.started_at) > EFFECT_READY_TIMEOUT {
+            let reason = format!(
+                "Effect switch timeout ({}s)",
+                EFFECT_READY_TIMEOUT.as_secs()
+            );
+            let _ = switch_tx.send(super::SwitchEvent::Failed {
+                output_id: target.output_id.clone(),
+                segment_id: target.segment_id.clone(),
+                effect_id: pending.effect_id.clone(),
+                origin_rev: pending.origin_rev,
+                reason: reason.clone(),
+            });
+            self.blocked = Some(BlockedSpec {
+                effect_id: pending.effect_id.clone(),
+                origin_started_at: pending.origin_started_at,
+                width: pending.width,
+                height: pending.height,
+                origin_rev: pending.origin_rev,
+            });
+            self.pending = None;
+            return;
+        }
+
+        let len = pending.width.checked_mul(pending.height).unwrap_or(0).max(1);
+        if pending.buffer.len() != len {
+            pending.buffer.resize(len, Color::default());
+        }
+
+        let elapsed = now.duration_since(pending.origin_started_at);
+        pending.effect.tick(elapsed, &mut pending.buffer);
+
+        if pending.effect.is_ready() {
+            pending.ready_to_commit = true;
+            let _ = switch_tx.send(super::SwitchEvent::Ready {
+                output_id: target.output_id.clone(),
+                segment_id: target.segment_id.clone(),
+                effect_id: pending.effect_id.clone(),
+                origin_rev: pending.origin_rev,
+            });
+        }
+    }
+
+    fn process_ready_events(
+        &mut self,
+        now: Instant,
+        target: &TargetKey,
+        switch_tx: &flume::Sender<super::SwitchEvent>,
+    ) {
+        let Some(wait) = &self.ready_wait else {
+            return;
+        };
+
+        if self.effect.is_ready() {
+            let _ = switch_tx.send(super::SwitchEvent::Ready {
+                output_id: target.output_id.clone(),
+                segment_id: target.segment_id.clone(),
+                effect_id: self.effect_id.clone(),
+                origin_rev: self.origin_rev,
+            });
+            self.ready_wait = None;
+            return;
+        }
+
+        if now.duration_since(wait.started_at) > EFFECT_READY_TIMEOUT {
+            let reason = format!(
+                "Effect switch timeout ({}s)",
+                EFFECT_READY_TIMEOUT.as_secs()
+            );
+            let _ = switch_tx.send(super::SwitchEvent::Failed {
+                output_id: target.output_id.clone(),
+                segment_id: target.segment_id.clone(),
+                effect_id: self.effect_id.clone(),
+                origin_rev: self.origin_rev,
+                reason,
+            });
+            self.ready_wait = None;
+        }
     }
 }
 
@@ -201,6 +424,7 @@ impl DeviceRunner {
         controller: ControllerRef,
         config: Arc<Mutex<DeviceConfig>>,
         app_handle: AppHandle,
+        switch_tx: flume::Sender<super::SwitchEvent>,
     ) -> Result<Self, String> {
         let running = Arc::new(AtomicBool::new(true));
         let running_thread = running.clone();
@@ -344,10 +568,10 @@ impl DeviceRunner {
                                 origin_rev: resolved.origin_rev,
                                 params: &params,
                             };
-                            if let Err(err) = e.get_mut().ensure_updated(
-                                spec,
-                                now,
-                            ) {
+                            if let Err(err) = e
+                                .get_mut()
+                                .ensure_updated(spec, now, &task.key, &switch_tx)
+                            {
                                 let seg = task
                                     .key
                                     .segment_id
@@ -365,36 +589,57 @@ impl DeviceRunner {
                             }
                             e.into_mut()
                         }
-                        std::collections::hash_map::Entry::Vacant(v) => match TargetRuntime::new(
-                            &resolved.effect_id,
-                            width,
-                            height,
-                            resolved.started_at,
-                            resolved.origin_rev,
-                            &params,
-                            now,
-                        ) {
-                            Ok(rt) => v.insert(rt),
-                            Err(err) => {
-                                let seg = task
-                                    .key
-                                    .segment_id
-                                    .as_deref()
-                                    .unwrap_or("<output>");
-                                log::warn!(
-                                    port = port.as_str(),
-                                    output_id = task.key.output_id.as_str(),
-                                    segment_id = seg,
-                                    err:display = err;
-                                    "[runner] Failed to create segment runtime"
-                                );
-                                continue;
+                        std::collections::hash_map::Entry::Vacant(v) => {
+                            match TargetRuntime::new(
+                                &resolved.effect_id,
+                                width,
+                                height,
+                                resolved.started_at,
+                                resolved.origin_rev,
+                                &params,
+                                now,
+                            ) {
+                                Ok(mut rt) => {
+                                    if rt.effect.is_ready() {
+                                        let _ = switch_tx.send(super::SwitchEvent::Ready {
+                                            output_id: task.key.output_id.clone(),
+                                            segment_id: task.key.segment_id.clone(),
+                                            effect_id: rt.effect_id.clone(),
+                                            origin_rev: rt.origin_rev,
+                                        });
+                                    } else {
+                                        rt.ready_wait = Some(ReadyWait { started_at: now });
+                                    }
+                                    v.insert(rt)
+                                }
+                                Err(err) => {
+                                    let _ = switch_tx.send(super::SwitchEvent::Failed {
+                                        output_id: task.key.output_id.clone(),
+                                        segment_id: task.key.segment_id.clone(),
+                                        effect_id: resolved.effect_id.clone(),
+                                        origin_rev: resolved.origin_rev,
+                                        reason: err.clone(),
+                                    });
+
+                                    let seg = task
+                                        .key
+                                        .segment_id
+                                        .as_deref()
+                                        .unwrap_or("<output>");
+                                    log::warn!(
+                                        port = port.as_str(),
+                                        output_id = task.key.output_id.as_str(),
+                                        segment_id = seg,
+                                        err:display = err;
+                                        "[runner] Failed to create segment runtime"
+                                    );
+                                    continue;
+                                }
                             }
-                        },
+                        }
                     };
 
-                    let elapsed = now.duration_since(runtime.origin_started_at);
-                    runtime.tick(elapsed, now);
+                    runtime.tick(now, &task.key, &switch_tx);
 
                     map_segment_into_physical(
                         &runtime.buffer,

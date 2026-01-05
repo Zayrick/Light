@@ -118,7 +118,7 @@ pub fn set_effect(
     manager: State<LightingManager>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.set_scope_effect(
+    manager.set_scope_effect_wait_ready(
         &port,
         None,
         None,
@@ -145,7 +145,7 @@ pub fn set_scope_effect(
     manager: State<LightingManager>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.set_scope_effect(
+    manager.set_scope_effect_wait_ready(
         &port,
         output_id.as_deref(),
         segment_id.as_deref(),

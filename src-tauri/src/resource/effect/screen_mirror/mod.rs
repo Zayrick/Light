@@ -23,6 +23,7 @@ pub struct ScreenMirrorEffect {
     saturation: f32,
     gamma: f32,
     black_border: RefCell<BlackBorderProcessor>,
+    has_captured_frame: bool,
     previous_buffer: Vec<Color>,
 }
 
@@ -45,6 +46,7 @@ impl ScreenMirrorEffect {
             saturation: 1.0,
             gamma: 1.0,
             black_border: RefCell::new(BlackBorderProcessor::new()),
+            has_captured_frame: false,
             previous_buffer: Vec::new(),
         }
     }
@@ -134,6 +136,7 @@ impl ScreenMirrorEffect {
                     // Drop current subscription so that a new one (and duplicator)
                     // will be created on the next tick if needed.
                     self.screen = None;
+                    self.has_captured_frame = false;
                     return false;
                 }
             }
@@ -158,10 +161,15 @@ impl Effect for ScreenMirrorEffect {
         }
 
         if self.capture_and_render(buffer) {
+            self.has_captured_frame = true;
             return;
         }
 
         self.paint_black(buffer);
+    }
+
+    fn is_ready(&self) -> bool {
+        self.screen.is_some() && self.has_captured_frame
     }
 
     fn resize(&mut self, width: usize, height: usize) {
@@ -242,6 +250,7 @@ impl Effect for ScreenMirrorEffect {
                 // Drop existing subscription so that the next capture will
                 // attach to the newly selected display via the manager.
                 self.screen = None;
+                self.has_captured_frame = false;
             }
         }
     }

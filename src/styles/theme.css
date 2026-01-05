@@ -128,3 +128,10 @@ body {
   margin: 0;
   overflow: hidden;
 }
+
+@keyframes breathing-opacity {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.6; }
+}
+

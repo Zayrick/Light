@@ -10,6 +10,14 @@ pub trait Effect: Send {
     /// Default implementation ignores the size, which is fine for 1D effects.
     fn resize(&mut self, _width: usize, _height: usize) {}
     fn update_params(&mut self, _params: Value) {}
+    /// Returns whether the effect is ready to be displayed.
+    ///
+    /// Most effects are ready immediately. Effects that require asynchronous
+    /// initialization (e.g. screen capture) should override this method and
+    /// return `true` once they can produce meaningful frames.
+    fn is_ready(&self) -> bool {
+        true
+    }
 }
 
 /// How the frontend should treat a parameter when its dependency condition is not met.

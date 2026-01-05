@@ -4,7 +4,7 @@ pub mod runner;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
 use crate::interface::controller::{
@@ -212,6 +212,32 @@ struct ResolvedEffect {
     started_at: Instant,
     params: Map<String, Value>,
     origin_rev: u64,
+}
+
+const EFFECT_READY_TIMEOUT: Duration = Duration::from_secs(5);
+const EFFECT_READY_TIMEOUT_GRACE: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Debug)]
+enum SwitchEvent {
+    Ready {
+        output_id: String,
+        segment_id: Option<String>,
+        effect_id: String,
+        origin_rev: u64,
+    },
+    Failed {
+        output_id: String,
+        segment_id: Option<String>,
+        effect_id: String,
+        origin_rev: u64,
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct SwitchTarget {
+    output_id: String,
+    segment_id: Option<String>,
 }
 
 fn mode_for_scope<'a>(cfg: &'a DeviceConfig, scope: Scope<'_>) -> Option<&'a ModeConfig> {
@@ -443,6 +469,8 @@ struct ManagedDevice {
     controller: ControllerRef,
     config: Arc<Mutex<DeviceConfig>>,
     runner: Option<DeviceRunner>,
+    switch_tx: flume::Sender<SwitchEvent>,
+    switch_rx: Option<flume::Receiver<SwitchEvent>>,
 }
 
 pub struct LightingManager {
@@ -479,11 +507,14 @@ impl LightingManager {
                     let controller_ref: ControllerRef = Arc::new(Mutex::new(controller));
                     let output_defs = controller_ref.lock().unwrap().outputs();
                     let config = DeviceConfig::from_output_defs(output_defs);
+                    let (switch_tx, switch_rx) = flume::unbounded();
 
                     ManagedDevice {
                         controller: controller_ref,
                         config: Arc::new(Mutex::new(config)),
                         runner: None,
+                        switch_tx,
+                        switch_rx: Some(switch_rx),
                     }
                 });
             }
@@ -584,8 +615,303 @@ impl LightingManager {
             }
         }
 
-        self.ensure_runner_state_locked(&mut devices, port, app_handle)?;
+        self.ensure_runner_state_locked(&mut devices, port, app_handle)?;       
         Ok(())
+    }
+
+    pub fn set_scope_effect_wait_ready(
+        &self,
+        port: &str,
+        output_id: Option<&str>,
+        segment_id: Option<&str>,
+        effect_id: Option<&str>,
+        app_handle: AppHandle,
+    ) -> Result<(), String> {
+        let scope = Scope::from_options(output_id, segment_id)?;
+        let Some(effect_id) = effect_id else {
+            return self.set_scope_effect(port, output_id, segment_id, None, app_handle);
+        };
+
+        fn use_segments_for_output(out: &OutputConfig) -> bool {
+            if out.output_type != SegmentType::Linear || out.segments.is_empty() {
+                return false;
+            }
+
+            let out_len = out.leds_count.max(1);
+            let seg_total = out.segments.iter().map(|s| s.leds_count).sum::<usize>();
+            seg_total == out_len
+        }
+
+        fn scope_targets(cfg: &DeviceConfig, scope: Scope<'_>) -> Result<Vec<SwitchTarget>, String> {
+            let mut targets = Vec::new();
+
+            match scope {
+                Scope::Device => {
+                    for out in &cfg.outputs {
+                        if use_segments_for_output(out) {
+                            for seg in &out.segments {
+                                targets.push(SwitchTarget {
+                                    output_id: out.id.clone(),
+                                    segment_id: Some(seg.id.clone()),
+                                });
+                            }
+                        } else {
+                            targets.push(SwitchTarget {
+                                output_id: out.id.clone(),
+                                segment_id: None,
+                            });
+                        }
+                    }
+                }
+                Scope::Output { output_id } => {
+                    let out = cfg
+                        .output(output_id)
+                        .ok_or_else(|| format!("Output '{}' not found", output_id))?;
+                    if use_segments_for_output(out) {
+                        for seg in &out.segments {
+                            targets.push(SwitchTarget {
+                                output_id: out.id.clone(),
+                                segment_id: Some(seg.id.clone()),
+                            });
+                        }
+                    } else {
+                        targets.push(SwitchTarget {
+                            output_id: out.id.clone(),
+                            segment_id: None,
+                        });
+                    }
+                }
+                Scope::Segment {
+                    output_id,
+                    segment_id,
+                } => {
+                    let out = cfg
+                        .output(output_id)
+                        .ok_or_else(|| format!("Output '{}' not found", output_id))?;
+                    if !out.segments.iter().any(|s| s.id == segment_id) {
+                        return Err(format!("Segment '{}' not found", segment_id));
+                    }
+                    targets.push(SwitchTarget {
+                        output_id: out.id.clone(),
+                        segment_id: Some(segment_id.to_string()),
+                    });
+                }
+            }
+
+            Ok(targets)
+        }
+
+        fn all_target_effects(
+            cfg: &DeviceConfig,
+            port: &str,
+        ) -> HashMap<SwitchTarget, Option<(String, u64)>> {
+            let mut map: HashMap<SwitchTarget, Option<(String, u64)>> = HashMap::new();
+
+            for out in &cfg.outputs {
+                if use_segments_for_output(out) {
+                    for seg in &out.segments {
+                        let resolved = resolve_effect_for_scope(
+                            cfg,
+                            port,
+                            Scope::Segment {
+                                output_id: out.id.as_str(),
+                                segment_id: seg.id.as_str(),
+                            },
+                        );
+                        map.insert(
+                            SwitchTarget {
+                                output_id: out.id.clone(),
+                                segment_id: Some(seg.id.clone()),
+                            },
+                            resolved.map(|r| (r.effect_id, r.origin_rev)),
+                        );
+                    }
+                } else {
+                    let resolved = resolve_effect_for_scope(
+                        cfg,
+                        port,
+                        Scope::Output {
+                            output_id: out.id.as_str(),
+                        },
+                    );
+                    map.insert(
+                        SwitchTarget {
+                            output_id: out.id.clone(),
+                            segment_id: None,
+                        },
+                        resolved.map(|r| (r.effect_id, r.origin_rev)),
+                    );
+                }
+            }
+
+            map
+        }
+
+        // Setup switch + start pending in runner (old effect keeps running).
+        let (switch_rx, backup_cfg, expected) = {
+            let mut devices = self.devices.lock().unwrap();
+            let md = devices
+                .get_mut(port)
+                .ok_or_else(|| "Device not found".to_string())?;
+
+            let switch_rx = md
+                .switch_rx
+                .take()
+                .ok_or_else(|| "Effect switch already in progress".to_string())?;
+            while switch_rx.try_recv().is_ok() {}
+
+            let mut cfg = md.config.lock().unwrap();
+            let backup_cfg = cfg.clone();
+
+            let before = all_target_effects(&cfg, port);
+            let scope_targets = match scope_targets(&cfg, scope) {
+                Ok(targets) => targets,
+                Err(err) => {
+                    md.switch_rx = Some(switch_rx);
+                    return Err(err);
+                }
+            };
+
+            // Apply config mutation (same semantics as `set_scope_effect`).
+            let set_result = (|| -> Result<(), String> {
+                let current_resolved = resolve_effect_for_scope(&cfg, port, scope);
+                let started_at = |new_id: &str| {
+                    if let Some(res) = &current_resolved {
+                        if res.effect_id == new_id {
+                            res.started_at
+                        } else {
+                            Instant::now()
+                        }
+                    } else {
+                        Instant::now()
+                    }
+                };
+
+                let mode = mode_for_scope_mut(&mut cfg, scope)?;
+                mode.set_effect(effect_id, started_at(effect_id))?;
+                // Per spec: when parent becomes explicit, force children to inherit.
+                force_children_inherit(&mut cfg, scope);
+                Ok(())
+            })();
+
+            if let Err(err) = set_result {
+                *cfg = backup_cfg.clone();
+                md.switch_rx = Some(switch_rx);
+                return Err(err);
+            }
+
+            let after = all_target_effects(&cfg, port);
+            let mut expected = HashMap::<SwitchTarget, (String, u64)>::new();
+            for target in &scope_targets {
+                let before_id = before
+                    .get(target)
+                    .and_then(|meta| meta.as_ref().map(|(id, _rev)| id.as_str()));
+                let after_meta = after.get(target).cloned().unwrap_or(None);
+                let after_id = after_meta.as_ref().map(|(id, _rev)| id.as_str());
+
+                if before_id != after_id {
+                    if let Some(after_meta) = after_meta {
+                        expected.insert(target.clone(), after_meta);
+                    }
+                }
+            }
+
+            drop(cfg);
+            if let Err(err) = self.ensure_runner_state_for_device(md, port, app_handle.clone()) {
+                let mut cfg = md.config.lock().unwrap();
+                *cfg = backup_cfg.clone();
+                drop(cfg);
+                md.switch_rx = Some(switch_rx);
+                let _ = self.ensure_runner_state_for_device(md, port, app_handle.clone());
+                return Err(err);
+            }
+
+            (switch_rx, backup_cfg, expected)
+        };
+
+        // No visible change => no runner switch => nothing to wait for.
+        let wait_result = if expected.is_empty() {
+            Ok(())
+        } else {
+            let mut remaining: HashSet<SwitchTarget> = expected.keys().cloned().collect();
+            let deadline = Instant::now() + EFFECT_READY_TIMEOUT + EFFECT_READY_TIMEOUT_GRACE;
+
+            let mut result = Ok(());
+            while !remaining.is_empty() {
+                let now = Instant::now();
+                if now >= deadline {
+                    result = Err(format!(
+                        "Effect switch timeout ({}s)",
+                        EFFECT_READY_TIMEOUT.as_secs()
+                    ));
+                    break;
+                }
+
+                let wait_for = deadline.saturating_duration_since(now);
+                match switch_rx.recv_timeout(wait_for) {
+                    Ok(SwitchEvent::Ready {
+                        output_id,
+                        segment_id,
+                        effect_id: ready_id,
+                        origin_rev,
+                    }) => {
+                        let key = SwitchTarget { output_id, segment_id };
+                        if let Some((expected_id, expected_rev)) = expected.get(&key) {
+                            if expected_id == &ready_id && *expected_rev == origin_rev {
+                                remaining.remove(&key);
+                            }
+                        }
+                    }
+                    Ok(SwitchEvent::Failed {
+                        output_id,
+                        segment_id,
+                        effect_id: failed_id,
+                        origin_rev,
+                        reason,
+                    }) => {
+                        let key = SwitchTarget { output_id, segment_id };
+                        if let Some((expected_id, expected_rev)) = expected.get(&key) {
+                            if expected_id == &failed_id && *expected_rev == origin_rev {
+                                result = Err(reason);
+                                break;
+                            }
+                        }
+                    }
+                    Err(flume::RecvTimeoutError::Timeout) => {
+                        result = Err(format!(
+                            "Effect switch timeout ({}s)",
+                            EFFECT_READY_TIMEOUT.as_secs()
+                        ));
+                        break;
+                    }
+                    Err(flume::RecvTimeoutError::Disconnected) => {
+                        result = Err("Effect switch channel disconnected".to_string());
+                        break;
+                    }
+                }
+            }
+
+            result
+        };
+
+        // Put receiver back + rollback on failure.
+        let mut devices = self.devices.lock().unwrap();
+        let md = devices
+            .get_mut(port)
+            .ok_or_else(|| "Device not found".to_string())?;
+
+        if let Err(err) = &wait_result {
+            let mut cfg = md.config.lock().unwrap();
+            *cfg = backup_cfg;
+            drop(cfg);
+            let _ = self.ensure_runner_state_for_device(md, port, app_handle);
+
+            md.switch_rx = Some(switch_rx);
+            return Err(err.clone());
+        }
+
+        md.switch_rx = Some(switch_rx);
+        wait_result
     }
 
     pub fn update_scope_effect_params(
@@ -853,7 +1179,7 @@ impl LightingManager {
         self.build_mode_state(cfg, port, Scope::Segment { output_id, segment_id })
     }
 
-    fn device_has_any_effect(&self, cfg: &DeviceConfig, _port: &str) -> bool {
+    fn device_has_any_effect(&self, cfg: &DeviceConfig, _port: &str) -> bool {  
         if cfg.mode.active_effect.is_some() {
             return true;
         }
@@ -872,15 +1198,12 @@ impl LightingManager {
         false
     }
 
-    fn ensure_runner_state_locked(
+    fn ensure_runner_state_for_device(
         &self,
-        devices: &mut HashMap<String, ManagedDevice>,
+        md: &mut ManagedDevice,
         port: &str,
         app_handle: AppHandle,
     ) -> Result<(), String> {
-        let md = devices
-            .get_mut(port)
-            .ok_or_else(|| "Device not found".to_string())?;
         let cfg = md.config.lock().unwrap();
         let should_run = self.device_has_any_effect(&cfg, port);
         drop(cfg);
@@ -892,17 +1215,30 @@ impl LightingManager {
                     md.controller.clone(),
                     md.config.clone(),
                     app_handle,
+                    md.switch_tx.clone(),
                 )?);
             }
             (false, true) => {
                 if let Some(runner) = md.runner.take() {
-            runner.stop();
+                    runner.stop();
                 }
             }
             _ => {}
         }
 
         Ok(())
+    }
+
+    fn ensure_runner_state_locked(
+        &self,
+        devices: &mut HashMap<String, ManagedDevice>,
+        port: &str,
+        app_handle: AppHandle,
+    ) -> Result<(), String> {
+        let md = devices
+            .get_mut(port)
+            .ok_or_else(|| "Device not found".to_string())?;
+        self.ensure_runner_state_for_device(md, port, app_handle)
     }
 }
 
