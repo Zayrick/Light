@@ -114,11 +114,22 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 -   组件/Hook 不得直接 `invoke`，避免散落的命令字符串与错误处理。
 -   DTO 变更必须同步更新 `src/types/**`，且保持后端 `dto.rs` 与前端类型严格一致。
 
-### 5. UI 组件库 (Ark UI)
+### 5. UI 组件库 (Chakra UI v3)
 
-本项目使用 **Ark UI** 作为基础 UI 组件库，并配置了 Ark UI MCP Server (`ark-ui`)。
+本项目使用 **Chakra UI v3** 作为基础 UI 组件库，并配置了 Chakra UI MCP Server（`chakra-ui`）。
 
-**强制要求**：实现 UI 功能前，**必须**先通过 MCP 工具查询 Ark UI 可用组件和相关用法及文档，优先使用 Ark UI 组件而非自行实现。
+**强制要求（UI 开发）**：
+
+1. **优先使用 Chakra UI 组件**，避免重复造基础 UI（按钮、弹窗、表单、提示等）。
+2. 在实现/改造 UI 之前，**必须先通过 Chakra UI MCP 工具查询**：
+    - 可用组件列表：`mcp_chakra-ui_list_components`
+    - 组件示例：`mcp_chakra-ui_get_component_example`
+    - 组件 Props：`mcp_chakra-ui_get_component_props`
+3. 涉及 v2 -> v3 的迁移或不确定 API 时，**必须**先用迁移审查工具核对：
+    - `mcp_chakra-ui_v2_to_v3_code_review`
+4. 对于项目内封装组件（`src/components/ui/**`），如果已有同等能力的 Chakra UI v3 组件，优先直接使用 Chakra UI；如确需封装，必须确保：
+    - 不泄漏业务逻辑（保持通用可复用）
+    - API 与 v3 约定一致（例如 `open/disabled/invalid`、`colorPalette` 等）
 
 ### 6. 文档查询 (Context7)
 

@@ -34,7 +34,7 @@ Light 是一个基于 **Tauri** (Rust) 和 **React** 构建的现代化、跨平
 前端是一个动态渲染器，负责展示状态和配置界面：
 *   **动态参数渲染**: 根据后端返回的 `EffectParam` 元数据，自动生成滑块、选择框等控件。
 *   **策略模式**: 使用 `ParamRenderer` 分发不同的 UI 组件。
-*   **Ark UI**: 使用 Ark UI 组件库构建无障碍且美观的界面。
+*   **Chakra UI**: 使用 Chakra UI v3 组件库构建无障碍且美观的界面。
 
 详细架构文档请参阅 [AGENTS.md](AGENTS.md)。
 
@@ -43,7 +43,7 @@ Light 是一个基于 **Tauri** (Rust) 和 **React** 构建的现代化、跨平
 ### Frontend
 *   **Framework**: React 19, Vite
 *   **Language**: TypeScript
-*   **UI Library**: Ark UI, HeroUI, Lucide React
+*   **UI Library**: Chakra UI v3, HeroUI, Lucide React
 *   **Visualization**: PixiJS
 *   **State/Animation**: Framer Motion
 

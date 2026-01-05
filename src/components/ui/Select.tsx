@@ -1,8 +1,12 @@
-import { Portal } from "@ark-ui/react/portal";
-import { Select as ArkSelect, createListCollection } from "@ark-ui/react/select";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import {
+  Box,
+  HStack,
+  Portal,
+  Select as ChakraSelect,
+  Text,
+  createListCollection,
+} from "@chakra-ui/react";
 import { ReactNode, useMemo } from "react";
-import "./Select.css";
 
 export interface SelectOption<T extends string | number = string> {
   value: T;
@@ -43,52 +47,110 @@ export function Select<T extends string | number = string>({
           label: opt.label,
         })),
       }),
-    [options]
+    [options],
   );
 
-  const handleValueChange = (details: ArkSelect.ValueChangeDetails) => {
-    if (details.value.length > 0) {
-      const rawValue = details.value[0];
-      // 转换回原始类型
-      const typedValue = (typeof value === "number" ? Number(rawValue) : rawValue) as T;
-      onChange?.(typedValue);
-    }
+  const handleValueChange = (details: { value: string[] }) => {
+    if (!details.value?.length) return;
+
+    const rawValue = details.value[0];
+    // 转换回原始类型
+    const typedValue = (typeof value === "number" ? Number(rawValue) : rawValue) as T;
+    onChange?.(typedValue);
   };
 
   return (
-    <ArkSelect.Root
+    <ChakraSelect.Root
       collection={collection}
       value={[String(value)]}
       onValueChange={handleValueChange}
       disabled={disabled}
       positioning={{ sameWidth: true }}
+      size="sm"
+      variant="outline"
     >
-      {(label || valueText) && (
-        <div className="ark-select-header">
-          {label && <ArkSelect.Label>{label}</ArkSelect.Label>}
-          {valueText && <span className="ark-select-value-text">{valueText}</span>}
-        </div>
-      )}
-      <ArkSelect.Control>
-        <ArkSelect.Trigger>
-          <ArkSelect.ValueText placeholder={placeholder} />
-          <ChevronDownIcon size={16} />
-        </ArkSelect.Trigger>
-      </ArkSelect.Control>
+      <Box width="100%">
+        {(label || valueText) && (
+          <HStack justify="space-between" align="center" mb="2">
+            {label && (
+              <ChakraSelect.Label fontSize="sm" fontWeight="500" color="fg" lineHeight="1.2">
+                {label}
+              </ChakraSelect.Label>
+            )}
+            {valueText && (
+              <Text fontSize="sm" color="fg.muted" opacity={0.7} lineHeight="1.2">
+                {valueText}
+              </Text>
+            )}
+          </HStack>
+        )}
+
+        <ChakraSelect.HiddenSelect />
+
+        <ChakraSelect.Control width="full">
+          <ChakraSelect.Trigger
+            width="full"
+            px="3"
+            py="2"
+            gap="2"
+            justifyContent="space-between"
+            border="1px solid"
+            borderColor="border"
+            borderRadius="var(--radius-m)"
+            bg="bg.muted"
+            color="fg"
+            fontSize="14px"
+            _hover={{ borderColor: "fg.muted" }}
+            _focusVisible={{
+              outline: "none",
+              borderColor: "accent.solid",
+              boxShadow:
+                "0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent)",
+            }}
+          >
+            <ChakraSelect.ValueText placeholder={placeholder} />
+          </ChakraSelect.Trigger>
+          <ChakraSelect.IndicatorGroup>
+            <ChakraSelect.Indicator />
+          </ChakraSelect.IndicatorGroup>
+        </ChakraSelect.Control>
+      </Box>
+
       <Portal>
-        <ArkSelect.Positioner>
-          <ArkSelect.Content>
+        <ChakraSelect.Positioner>
+          <ChakraSelect.Content
+            p="1"
+            bg="bg.panel"
+            border="1px solid"
+            borderColor="border"
+            borderRadius="var(--radius-m)"
+            boxShadow="0 8px 24px rgba(0, 0, 0, 0.3)"
+            zIndex={100}
+          >
             {collection.items.map((item) => (
-              <ArkSelect.Item key={item.value} item={item}>
-                <ArkSelect.ItemText>{item.label}</ArkSelect.ItemText>
-                <ArkSelect.ItemIndicator>
-                  <CheckIcon size={14} strokeWidth={2} />
-                </ArkSelect.ItemIndicator>
-              </ArkSelect.Item>
+              <ChakraSelect.Item
+                key={item.value}
+                item={item}
+                px="3"
+                py="2"
+                borderRadius="var(--radius-s)"
+                cursor="pointer"
+                fontSize="14px"
+                color="fg"
+                _highlighted={{ bg: "var(--bg-card-hover)" }}
+                css={{
+                  "&[data-state='checked']": {
+                    color: "var(--accent-color)",
+                  },
+                }}
+              >
+                <ChakraSelect.ItemText>{item.label}</ChakraSelect.ItemText>
+                <ChakraSelect.ItemIndicator css={{ color: "var(--accent-color)" }} />
+              </ChakraSelect.Item>
             ))}
-          </ArkSelect.Content>
-        </ArkSelect.Positioner>
+          </ChakraSelect.Content>
+        </ChakraSelect.Positioner>
       </Portal>
-    </ArkSelect.Root>
+    </ChakraSelect.Root>
   );
 }

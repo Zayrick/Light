@@ -521,7 +521,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
             {categories.map((category) => {
               const categoryModes = modesByCategory.get(category) ?? [];
               return (
-                <Tabs.Content key={category} value={category} style={{ minHeight: 0 }}>
+                <Tabs.Content key={category} value={category} p="0" style={{ minHeight: 0 }}>
                   <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
                     <div
                       className="no-scrollbar"
@@ -532,7 +532,6 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                           display: "grid",
                           gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
                           gap: "8px",
-                          padding: "2px",
                           paddingBottom: "20px",
                         }}
                       >

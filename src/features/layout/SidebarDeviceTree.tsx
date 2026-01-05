@@ -1,5 +1,4 @@
-import { TreeView, createTreeCollection } from "@ark-ui/react/tree-view";
-import { Menu } from "@ark-ui/react/menu";
+import { Menu, Portal, TreeView, createTreeCollection } from "@chakra-ui/react";
 import { ChevronRight, PlugZap, Zap, Power, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
@@ -18,18 +17,20 @@ function DeviceContextMenu({ children }: { children: React.ReactNode }) {
   return (
     <Menu.Root lazyMount unmountOnExit>
       <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
-      <Menu.Positioner>
-        <Menu.Content>
-          <Menu.Item value="turn-off">
-            <Power />
-            关灯
-          </Menu.Item>
-          <Menu.Item value="settings">
-            <Settings />
-            设置设备
-          </Menu.Item>
-        </Menu.Content>
-      </Menu.Positioner>
+      <Portal>
+        <Menu.Positioner>
+          <Menu.Content>
+            <Menu.Item value="turn-off">
+              <Power />
+              关灯
+            </Menu.Item>
+            <Menu.Item value="settings">
+              <Settings />
+              设置设备
+            </Menu.Item>
+          </Menu.Content>
+        </Menu.Positioner>
+      </Portal>
     </Menu.Root>
   );
 }
@@ -273,6 +274,16 @@ const DeviceTreeItem = ({
   const depth = indexPath.length;
   const isExpanded = expandedValue.includes(node.id);
 
+  // We maintain our own selected background via `.active-highlight`.
+  // Disable Chakra TreeView's default hover/selected background to avoid double-highlighting.
+  const suppressChakraItemBg = {
+    bg: "transparent",
+    _hover: { bg: "transparent" },
+    _active: { bg: "transparent" },
+    _selected: { bg: "transparent" },
+    _highlighted: { bg: "transparent" },
+  } as const;
+
   const indent = depth === 2 ? 8 : depth >= 3 ? 20 : 0;
 
   // Branch controls (device / output nodes with children) should not be indented at root.
@@ -355,6 +366,7 @@ const DeviceTreeItem = ({
               <TreeView.BranchControl
                 className={clsx("device-list-item layout-branch-control", isSelected && "active")}
                 style={branchIndentStyle}
+                {...suppressChakraItemBg}
                 onClick={handleClick}
                 onMouseMove={onMouseMove}
                 onMouseLeave={onMouseLeave}
@@ -419,6 +431,7 @@ const DeviceTreeItem = ({
                 isSelected && "active"
               )}
               style={itemIndentStyle}
+              {...suppressChakraItemBg}
               onClick={handleClick}
               onMouseMove={onMouseMove}
               onMouseLeave={onMouseLeave}

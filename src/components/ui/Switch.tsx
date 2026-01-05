@@ -1,6 +1,5 @@
-import { Switch as ArkSwitch } from "@ark-ui/react/switch";
+import { Stack, Switch as ChakraSwitch, Text } from "@chakra-ui/react";
 import type { ReactNode } from "react";
-import "./Switch.css";
 
 export interface SwitchProps {
   /** 当前是否开启 */
@@ -22,25 +21,36 @@ export function Switch({
   description,
   disabled = false,
 }: SwitchProps) {
-  const handleCheckedChange = (details: ArkSwitch.CheckedChangeDetails) => {
-    onChange?.(details.checked);
-  };
-
   return (
-    <ArkSwitch.Root
-      className="ark-switch-root"
+    <ChakraSwitch.Root
       checked={checked}
       disabled={disabled}
-      onCheckedChange={handleCheckedChange}
+      onCheckedChange={(details) => onChange?.(details.checked)}
+      display="flex"
+      alignItems="center"
+      justifyContent="space-between"
+      gap="4"
+      width="full"
     >
-      <span className="ark-switch-text">
-        {label && <ArkSwitch.Label className="ark-switch-label">{label}</ArkSwitch.Label>}
-        {description && <span className="ark-switch-description">{description}</span>}
-      </span>
-      <ArkSwitch.Control className="ark-switch-control">
-        <ArkSwitch.Thumb className="ark-switch-thumb" />
-      </ArkSwitch.Control>
-      <ArkSwitch.HiddenInput />
-    </ArkSwitch.Root>
+      {(label || description) && (
+        <Stack gap="0.5" minW="0">
+          {label && (
+            <ChakraSwitch.Label fontSize="sm" fontWeight="medium">
+              {label}
+            </ChakraSwitch.Label>
+          )}
+          {description && (
+            <Text fontSize="sm" color="fg.muted">
+              {description}
+            </Text>
+          )}
+        </Stack>
+      )}
+
+      <ChakraSwitch.HiddenInput />
+      <ChakraSwitch.Control>
+        <ChakraSwitch.Thumb />
+      </ChakraSwitch.Control>
+    </ChakraSwitch.Root>
   );
 }

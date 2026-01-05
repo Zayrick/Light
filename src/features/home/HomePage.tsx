@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Toggle } from "@ark-ui/react/toggle";
+import { Toggle } from "@chakra-ui/react";
 import { Monitor, RefreshCw, Zap, ArrowRight, BookOpen, Puzzle, Server, ServerOff, ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { Device, EffectInfo } from "../../types";
