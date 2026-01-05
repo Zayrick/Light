@@ -41,7 +41,7 @@ impl ScreenMirrorEffect {
             screen: None,
             display_index: 0,
             smoothness: 80,
-            auto_crop_enabled: true,
+            auto_crop_enabled: false,
             brightness: 1.0,
             saturation: 1.0,
             gamma: 1.0,

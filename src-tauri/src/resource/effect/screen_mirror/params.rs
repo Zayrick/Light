@@ -96,7 +96,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
         key: "autoCrop",
         label: "黑边裁剪",
         kind: EffectParamKind::Toggle {
-            default: true,
+            default: false,
         },
         dependency: None,
     },
@@ -113,7 +113,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
     EffectParam {
@@ -129,7 +129,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
     EffectParam {
@@ -145,7 +145,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
     EffectParam {
@@ -161,7 +161,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
     EffectParam {
@@ -177,7 +177,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
     EffectParam {
@@ -191,7 +191,7 @@ pub const SCREEN_PARAMS: [EffectParam; 12] = [
             key: "autoCrop",
             equals: Some(1.0),
             not_equals: None,
-            behavior: DependencyBehavior::Disable,
+            behavior: DependencyBehavior::Hide,
         }),
     },
 ];
