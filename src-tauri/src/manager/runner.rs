@@ -27,8 +27,29 @@ struct TargetRuntime {
     width: usize,
     height: usize,
     effect: Box<dyn Effect>,
+    /// Final rendered buffer (after optional transitions), in virtual order.
     buffer: Vec<Color>,
+    /// Scratch buffer for the currently active effect output (used during transitions).
+    effect_buffer: Vec<Color>,
+    transition: Option<EffectTransition>,
 }
+
+struct EffectTransition {
+    started_at: Instant,
+    duration: Duration,
+    from: Vec<Color>,
+}
+
+struct TargetSpec<'a> {
+    effect_id: &'a str,
+    width: usize,
+    height: usize,
+    origin_started_at: Instant,
+    origin_rev: u64,
+    params: &'a serde_json::Map<String, Value>,
+}
+
+const EFFECT_SWITCH_FADE_DURATION: Duration = Duration::from_millis(120);
 
 impl TargetRuntime {
     fn new(
@@ -38,6 +59,7 @@ impl TargetRuntime {
         origin_started_at: Instant,
         origin_rev: u64,
         params: &serde_json::Map<String, Value>,
+        now: Instant,
     ) -> Result<Self, String> {
         let mut effect = create_effect(effect_id)
             .ok_or_else(|| format!("Effect '{}' not found", effect_id))?;
@@ -45,6 +67,11 @@ impl TargetRuntime {
         effect.update_params(Value::Object(params.clone()));
 
         let len = width.checked_mul(height).unwrap_or(0).max(1);
+        let fade_from_black = EffectTransition {
+            started_at: now,
+            duration: EFFECT_SWITCH_FADE_DURATION,
+            from: vec![Color::default(); len],
+        };
 
         Ok(Self {
             effect_id: effect_id.to_string(),
@@ -54,42 +81,112 @@ impl TargetRuntime {
             height,
             effect,
             buffer: vec![Color::default(); len],
+            effect_buffer: Vec::new(),
+            transition: Some(fade_from_black),
         })
     }
 
     fn ensure_updated(
         &mut self,
-        effect_id: &str,
-        width: usize,
-        height: usize,
-        origin_started_at: Instant,
-        origin_rev: u64,
-        params: &serde_json::Map<String, Value>,
+        spec: TargetSpec<'_>,
+        now: Instant,
     ) -> Result<(), String> {
-        let needs_recreate = self.effect_id != effect_id
-            || self.origin_started_at != origin_started_at
-            || self.width != width
-            || self.height != height;
+        let needs_recreate = self.effect_id != spec.effect_id
+            || self.origin_started_at != spec.origin_started_at
+            || self.width != spec.width
+            || self.height != spec.height;
 
         if needs_recreate {
-            *self = Self::new(effect_id, width, height, origin_started_at, origin_rev, params)?;
+            // Crossfade from the previous rendered frame into the new effect.
+            let mut previous = std::mem::take(&mut self.buffer);
+            let mut next =
+                Self::new(
+                    spec.effect_id,
+                    spec.width,
+                    spec.height,
+                    spec.origin_started_at,
+                    spec.origin_rev,
+                    spec.params,
+                    now,
+                )?;
+
+            let len = next.width.checked_mul(next.height).unwrap_or(0).max(1);
+            if previous.len() != len {
+                previous.resize(len, Color::default());
+            }
+
+            next.transition = Some(EffectTransition {
+                started_at: now,
+                duration: EFFECT_SWITCH_FADE_DURATION,
+                from: previous,
+            });
+
+            *self = next;
             return Ok(());
         }
 
-        if self.origin_rev != origin_rev {
-            self.origin_rev = origin_rev;
-            self.effect.update_params(Value::Object(params.clone()));
+        if self.origin_rev != spec.origin_rev {
+            self.origin_rev = spec.origin_rev;
+            self.effect.update_params(Value::Object(spec.params.clone()));
         }
 
         Ok(())
     }
 
-    fn tick(&mut self, elapsed: Duration) {
+    fn tick(&mut self, elapsed: Duration, now: Instant) {
         let len = self.width.checked_mul(self.height).unwrap_or(0).max(1);
         if self.buffer.len() != len {
             self.buffer.resize(len, Color::default());
         }
-        self.effect.tick(elapsed, &mut self.buffer);
+
+        let Some(transition) = &mut self.transition else {
+            self.effect.tick(elapsed, &mut self.buffer);
+            return;
+        };
+
+        if self.effect_buffer.len() != len {
+            self.effect_buffer.resize(len, Color::default());
+        }
+
+        // Produce the new effect frame.
+        self.effect.tick(elapsed, &mut self.effect_buffer);
+
+        // Blend with the previous frame.
+        let t = if transition.duration.is_zero() {
+            1.0
+        } else {
+            (now.duration_since(transition.started_at).as_secs_f32() / transition.duration.as_secs_f32())
+                .clamp(0.0, 1.0)
+        };
+
+        // Keep lengths consistent even if something resized unexpectedly.
+        if transition.from.len() != len {
+            transition.from.resize(len, Color::default());
+        }
+
+        for i in 0..len {
+            self.buffer[i] = lerp_color(transition.from[i], self.effect_buffer[i], t);
+        }
+
+        // Finish transition.
+        if t >= 1.0 {
+            self.transition = None;
+            std::mem::swap(&mut self.buffer, &mut self.effect_buffer);
+        }
+    }
+}
+
+fn lerp_color(from: Color, to: Color, t: f32) -> Color {
+    fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+        let a = a as f32;
+        let b = b as f32;
+        (a + (b - a) * t).round().clamp(0.0, 255.0) as u8
+    }
+
+    Color {
+        r: lerp_u8(from.r, to.r, t),
+        g: lerp_u8(from.g, to.g, t),
+        b: lerp_u8(from.b, to.b, t),
     }
 }
 
@@ -239,13 +336,17 @@ impl DeviceRunner {
                     let entry = target_runtimes.entry(task.key.clone());
                     let runtime = match entry {
                         std::collections::hash_map::Entry::Occupied(mut e) => {
-                            if let Err(err) = e.get_mut().ensure_updated(
-                                &resolved.effect_id,
+                            let spec = TargetSpec {
+                                effect_id: &resolved.effect_id,
                                 width,
                                 height,
-                                resolved.started_at,
-                                resolved.origin_rev,
-                                &params,
+                                origin_started_at: resolved.started_at,
+                                origin_rev: resolved.origin_rev,
+                                params: &params,
+                            };
+                            if let Err(err) = e.get_mut().ensure_updated(
+                                spec,
+                                now,
                             ) {
                                 let seg = task
                                     .key
@@ -271,6 +372,7 @@ impl DeviceRunner {
                             resolved.started_at,
                             resolved.origin_rev,
                             &params,
+                            now,
                         ) {
                             Ok(rt) => v.insert(rt),
                             Err(err) => {
@@ -292,7 +394,7 @@ impl DeviceRunner {
                     };
 
                     let elapsed = now.duration_since(runtime.origin_started_at);
-                    runtime.tick(elapsed);
+                    runtime.tick(elapsed, now);
 
                     map_segment_into_physical(
                         &runtime.buffer,
