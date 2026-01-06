@@ -21,6 +21,13 @@ import { ParamRenderer } from "./params/ParamRenderer";
 import { checkDependency } from "../../../utils/effectUtils";
 import { DynamicIcon } from "../../../components/DynamicIcon";
 import { getEffectCategory, sortEffectCategories, sortEffects } from "../../../utils/effectsSort";
+import { BRANCH_TRANSITION } from "../../../motion/transitions";
+
+const MODE_SETTINGS_PANEL_VARIANTS = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+} as const;
 
 interface DeviceDetailProps {
   device: Device;
@@ -400,9 +407,13 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     [paramsLive],
   );
 
+  // Minimum duration for mode switching to prevent flicker when backend responds quickly.
+  const MIN_SWITCH_ANIMATION_MS = 150;
+
   const handleModeClick = async (modeId: string) => {
     if (switchingModeId) return;
 
+    const startTime = performance.now();
     setSwitchingModeId(modeId);
     try {
       // Wait for backend to be ready before updating frontend state.
@@ -416,6 +427,13 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
       // Backend is ready, now refresh to get the new state.
       // The useEffect watching effectiveModeId will update selectedModeId.
       await onRefresh();
+
+      // Ensure minimum animation duration to prevent visual flicker
+      const elapsed = performance.now() - startTime;
+      const remaining = MIN_SWITCH_ANIMATION_MS - elapsed;
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
     } catch (err) {
       logger.error(
         "scope.effect.set_failed",
@@ -654,14 +672,9 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                                       ? "inset 0 0 0 1px var(--accent-color)"
                                       : "none",
                                   backgroundColor: isSelected
-                                    ? isTargetSwitching
-                                      ? "transparent"
-                                      : "var(--bg-card-hover)"
+                                    ? "var(--bg-card-hover)"
                                     : undefined,
                                   opacity: isDisabled ? 0.55 : 1,
-                                  animation: isTargetSwitching
-                                    ? "breathing-opacity 1.5s infinite ease-in-out"
-                                    : "none",
                                   pointerEvents: isDisabled ? "none" : "auto",
                                   transition: "all 0.2s ease",
                                   padding: "12px",
@@ -733,7 +746,9 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
         </div>
 
         {/* Right Column: Configuration */}
-        <div
+        <motion.div
+          layout
+          transition={BRANCH_TRANSITION}
           className="no-scrollbar fade-edges"
           style={{
             width: "280px",
@@ -771,34 +786,54 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
           </Card>
 
           {/* Current Mode Settings */}
-          {selectedMode && selectedMode.params && selectedMode.params.length > 0 && (
-            <Card style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {selectedMode.params.map((param) => {
-                  const value = getParamValue(selectedMode, param);
-                  const { visible, disabled } = checkDependency(
-                    selectedMode,
-                    param.dependency,
-                    paramValues
-                  );
+          <AnimatePresence mode="wait" initial={false}>
+            {selectedMode && selectedMode.params && selectedMode.params.length > 0 ? (
+              <motion.div
+                key={selectedMode.id}
+                layout
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                variants={MODE_SETTINGS_PANEL_VARIANTS}
+                transition={BRANCH_TRANSITION}
+                style={{ willChange: "transform, opacity" }}
+              >
+                <Card
+                  style={{
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    {selectedMode.params.map((param) => {
+                      const value = getParamValue(selectedMode, param);
+                      const { visible, disabled } = checkDependency(
+                        selectedMode,
+                        param.dependency,
+                        paramValues
+                      );
 
-                  if (!visible) return null;
+                      if (!visible) return null;
 
-                  return (
-                    <ParamRenderer
-                      key={param.key}
-                      param={param}
-                      value={value}
-                      disabled={disabled || isInheriting}
-                      onChange={(val) => handleParamLiveChange(param, val)}
-                      onCommit={(val) => handleParamCommit(selectedMode, param, val)}
-                    />
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-        </div>
+                      return (
+                        <ParamRenderer
+                          key={param.key}
+                          param={param}
+                          value={value}
+                          disabled={disabled || isInheriting}
+                          onChange={(val) => handleParamLiveChange(param, val)}
+                          onCommit={(val) => handleParamCommit(selectedMode, param, val)}
+                        />
+                      );
+                    })}
+                  </div>
+                </Card>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </motion.div>
       </div>
       </motion.div>
     </AnimatePresence>
