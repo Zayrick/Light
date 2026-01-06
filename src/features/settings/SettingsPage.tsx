@@ -5,6 +5,7 @@ import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
 import { Switch } from "../../components/ui/Switch";
 import { api, CaptureMethod, SystemInfo, WindowEffectId } from "../../services/api";
+import { configManager } from "../../services/config";
 import { logger } from "../../services/logger";
 import { usePlatform } from "../../hooks/usePlatform";
 import { useMinimizeToTray } from "../../hooks/useMinimizeToTray";
@@ -188,7 +189,7 @@ export function SettingsPage() {
   };
 
   const scaleLive = useLatestThrottledInvoker<number>(
-    (percent) => api.setCaptureScale(percent),
+    (percent) => configManager.setCaptureScale(percent),
     0,
     {
       areEqual: (a, b) => a === b,
@@ -197,7 +198,7 @@ export function SettingsPage() {
   );
 
   const fpsLive = useLatestThrottledInvoker<number>(
-    (fps) => api.setCaptureFps(fps),
+    (fps) => configManager.setCaptureFps(fps),
     0,
     {
       areEqual: (a, b) => a === b,
@@ -283,24 +284,24 @@ export function SettingsPage() {
   );
 
   useEffect(() => {
-    Promise.all([
-      api.getCaptureScale(),
-      api.getCaptureFps(),
-      api.getCaptureMethod(),
-      api.getWindowEffects(),
-      api.getWindowEffect(),
-    ]).then(([scale, fps, method, windowEffects, currentEffect]) => {
+    Promise.all([configManager.getAppConfig(), api.getWindowEffects()]).then(([cfg, windowEffects]) => {
+      const scale = cfg.screenCapture.scalePercent;
+      const fps = cfg.screenCapture.fps;
+      const method = cfg.screenCapture.method;
+
       setCaptureFps(fps);
       lastSyncedFpsRef.current = fps;
       setCaptureMethod(method);
       setAvailableWindowEffects(windowEffects);
 
       if (windowEffects.length > 0) {
-        const effective = windowEffects.includes(currentEffect) ? currentEffect : windowEffects[0];
+        const effective = windowEffects.includes(cfg.windowEffect)
+          ? cfg.windowEffect
+          : windowEffects[0];
         setWindowEffect(effective);
-        if (!windowEffects.includes(currentEffect)) {
-          // 后端返回的默认值不在当前支持列表中时，对齐到第一个可用选项。
-          api.setWindowEffect(effective);
+        if (effective !== cfg.windowEffect) {
+          // 配置中的值不在当前支持列表中时，对齐到第一个可用选项。
+          configManager.setWindowEffect(effective);
         }
       } else {
         setWindowEffect("");
@@ -349,7 +350,7 @@ export function SettingsPage() {
     scaleLive.cancel();
     fpsLive.cancel();
     setCaptureMethod(value);
-    api.setCaptureMethod(value);
+    configManager.setCaptureMethod(value);
 
     // 从 GDI 切换到 DXGI 时，用动画吸附到最近有效点
     if (value === "dxgi") {
@@ -388,7 +389,7 @@ export function SettingsPage() {
 
   const handleWindowEffectChange = (value: WindowEffectId) => {
     setWindowEffect(value);
-    api.setWindowEffect(value);
+    configManager.setWindowEffect(value);
   };
 
   const displayScaleText = useCallback(() => {

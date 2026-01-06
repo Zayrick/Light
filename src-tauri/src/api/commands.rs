@@ -1,7 +1,9 @@
 use tauri::State;
 use crate::manager::{Device, LightingManager};
 use crate::manager::inventory::list_effects;
-use crate::api::dto::{EffectInfo, EffectParamInfo, SystemInfoResponse};
+use crate::api::dto::{AppConfigDto, EffectInfo, EffectParamInfo, SystemInfoResponse};
+use crate::api::config_store;
+use crate::manager::PersistedDeviceConfig;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use once_cell::sync::Lazy;
@@ -66,13 +68,183 @@ pub fn get_minimize_to_tray() -> bool {
 }
 
 #[tauri::command]
-pub fn set_minimize_to_tray(enabled: bool) {
+pub fn set_minimize_to_tray(enabled: bool, app_handle: tauri::AppHandle) {
     MINIMIZE_TO_TRAY.store(enabled, Ordering::Relaxed);
+    save_runtime_app_config_best_effort(&app_handle);
+}
+
+// ============================================================================
+// Persisted App Config (app.json)
+// ============================================================================
+
+pub fn default_window_effect_for_platform() -> &'static str {
+    default_effect_for_platform()
+}
+
+fn runtime_app_config_snapshot(app_handle: &tauri::AppHandle) -> AppConfigDto {
+    let capture_method = get_capture_method();
+    let window_effect = get_window_effect();
+
+    let mut cfg = AppConfigDto::default_for_platform();
+    cfg.window_effect = window_effect;
+    cfg.minimize_to_tray = get_minimize_to_tray();
+    cfg.screen_capture.scale_percent = get_capture_scale();
+    cfg.screen_capture.fps = get_capture_fps();
+    cfg.screen_capture.method = capture_method;
+
+    // Ensure platform default effect is never persisted as empty string.
+    if cfg.window_effect.is_empty() {
+        cfg.window_effect = default_effect_for_platform().to_string();
+    }
+
+    let _ = app_handle;
+    cfg
+}
+
+pub fn apply_app_config_to_runtime(cfg: &AppConfigDto, app_handle: &tauri::AppHandle) {
+    // Minimize-to-tray
+    MINIMIZE_TO_TRAY.store(cfg.minimize_to_tray, Ordering::Relaxed);
+
+    // Screen capture
+    set_capture_scale_percent(cfg.screen_capture.scale_percent);
+    set_screen_capture_fps(cfg.screen_capture.fps);
+    if let Ok(m) = cfg.screen_capture.method.parse::<CaptureMethod>() {
+        set_screen_capture_method(m);
+    }
+
+    // Window effect
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let effect = if cfg.window_effect.is_empty() {
+            default_effect_for_platform()
+        } else {
+            cfg.window_effect.as_str()
+        };
+
+        if let Err(err) = apply_window_effect_impl(effect, app_handle) {
+            log::warn!(effect, err:display = err; "[window_effect] Failed to apply persisted window effect");
+        } else {
+            let mut guard = CURRENT_WINDOW_EFFECT.lock().unwrap();
+            *guard = effect.to_string();
+        }
+    }
+}
+
+fn save_runtime_app_config_best_effort(app_handle: &tauri::AppHandle) {
+    let cfg = runtime_app_config_snapshot(app_handle);
+    if let Err(err) = config_store::save_app_config(app_handle, &cfg) {
+        log::warn!(err:display = err; "[config] Failed to persist app config");
+    }
 }
 
 #[tauri::command]
-pub async fn scan_devices(manager: State<'_, LightingManager>) -> Result<Vec<Device>, String> {
-    Ok(manager.scan_devices())
+pub fn get_app_config(app_handle: tauri::AppHandle) -> AppConfigDto {
+    match config_store::load_app_config(&app_handle) {
+        Ok(mut cfg) => {
+            // Normalize empty window_effect to runtime/platform default.
+            if cfg.window_effect.is_empty() {
+                cfg.window_effect = get_window_effect();
+            }
+            cfg
+        }
+        Err(err) => {
+            log::warn!(err:display = err; "[config] Failed to load app config; using runtime snapshot");
+            runtime_app_config_snapshot(&app_handle)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn set_app_config(config: AppConfigDto, app_handle: tauri::AppHandle) -> Result<AppConfigDto, String> {
+    let mut cfg = config;
+
+    // Clamp numeric values defensively.
+    cfg.screen_capture.scale_percent = cfg.screen_capture.scale_percent.clamp(1, 100);
+    cfg.screen_capture.fps = cfg.screen_capture.fps.clamp(1, 60);
+
+    // Normalize windowEffect.
+    if cfg.window_effect.is_empty() {
+        cfg.window_effect = default_effect_for_platform().to_string();
+    }
+
+    apply_app_config_to_runtime(&cfg, &app_handle);
+
+    // Persist.
+    config_store::save_app_config(&app_handle, &cfg)?;
+    Ok(cfg)
+}
+
+// ============================================================================
+// Persisted Device Config (devices/<id>.json)
+// ============================================================================
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceConfigResponse {
+    pub device_id: String,
+    pub port: String,
+    pub config: Option<PersistedDeviceConfig>,
+}
+
+fn save_device_config_best_effort(
+    manager: &LightingManager,
+    port: &str,
+    app_handle: &tauri::AppHandle,
+) {
+    match manager.export_persisted_device_config(port) {
+        Ok((device_id, cfg)) => {
+            if let Err(err) = config_store::save_device_config(app_handle, &device_id, &cfg) {
+                log::warn!(port, device_id = device_id.as_str(), err:display = err; "[config] Failed to persist device config");
+            }
+        }
+        Err(err) => {
+            log::warn!(port, err:display = err; "[config] Failed to export device config");
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_device_config(
+    port: String,
+    manager: State<'_, LightingManager>,
+    app_handle: tauri::AppHandle,
+) -> Result<DeviceConfigResponse, String> {
+    let device = manager.get_device(&port)?;
+    let cfg = config_store::load_device_config(&app_handle, &device.id)
+        .map_err(|e| format!("Failed to load device config: {e}"))?;
+
+    Ok(DeviceConfigResponse {
+        device_id: device.id,
+        port,
+        config: cfg,
+    })
+}
+
+#[tauri::command]
+pub async fn scan_devices(
+    manager: State<'_, LightingManager>,
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<Device>, String> {
+    // 1) Probe hardware.
+    let _ = manager.scan_devices();
+
+    // 2) Restore per-device persisted configs (best-effort) and start runners if needed.
+    let devices = manager.get_devices();
+    for d in &devices {
+        match config_store::load_device_config(&app_handle, &d.id) {
+            Ok(Some(persisted)) => {
+                if let Err(err) = manager.apply_persisted_device_config(&d.port, &persisted, app_handle.clone()) {
+                    log::warn!(port = d.port.as_str(), device_id = d.id.as_str(), err:display = err; "[config] Failed to apply persisted device config");
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                log::warn!(port = d.port.as_str(), device_id = d.id.as_str(), err:display = err; "[config] Failed to load persisted device config");
+            }
+        }
+    }
+
+    Ok(manager.get_devices())
 }
 
 #[tauri::command]
@@ -123,8 +295,11 @@ pub fn set_effect(
         None,
         None,
         Some(&effect_id),
-        app_handle,
-    )
+        app_handle.clone(),
+    )?;
+
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -132,8 +307,11 @@ pub fn update_effect_params(
     port: String,
     params: serde_json::Value,
     manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.update_scope_effect_params(&port, None, None, params)
+    manager.update_scope_effect_params(&port, None, None, params)?;
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -150,8 +328,11 @@ pub fn set_scope_effect(
         output_id.as_deref(),
         segment_id.as_deref(),
         effect_id.as_deref(),
-        app_handle,
-    )
+        app_handle.clone(),
+    )?;
+
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -161,13 +342,17 @@ pub fn update_scope_effect_params(
     segment_id: Option<String>,
     params: serde_json::Value,
     manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     manager.update_scope_effect_params(
         &port,
         output_id.as_deref(),
         segment_id.as_deref(),
         params,
-    )
+    )?;
+
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -176,8 +361,11 @@ pub fn set_output_segments(
     output_id: String,
     segments: Vec<crate::interface::controller::SegmentDefinition>,
     manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.set_output_segments(&port, &output_id, segments)
+    manager.set_output_segments(&port, &output_id, segments)?;
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -185,13 +373,31 @@ pub fn set_brightness(
     port: String,
     brightness: u8,
     manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    manager.set_brightness(&port, brightness)
+    manager.set_brightness(&port, brightness)?;
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
 }
 
 #[tauri::command]
-pub fn set_capture_scale(percent: u8) {
+pub fn set_scope_brightness(
+    port: String,
+    output_id: Option<String>,
+    segment_id: Option<String>,
+    brightness: u8,
+    manager: State<LightingManager>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    manager.set_scope_brightness(&port, output_id.as_deref(), segment_id.as_deref(), brightness)?;
+    save_device_config_best_effort(&manager, &port, &app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_capture_scale(percent: u8, app_handle: tauri::AppHandle) {
     set_capture_scale_percent(percent);
+    save_runtime_app_config_best_effort(&app_handle);
 }
 
 #[tauri::command]
@@ -200,8 +406,9 @@ pub fn get_capture_scale() -> u8 {
 }
 
 #[tauri::command]
-pub fn set_capture_fps(fps: u8) {
+pub fn set_capture_fps(fps: u8, app_handle: tauri::AppHandle) {
     set_screen_capture_fps(fps);
+    save_runtime_app_config_best_effort(&app_handle);
 }
 
 #[tauri::command]
@@ -210,10 +417,11 @@ pub fn get_capture_fps() -> u8 {
 }
 
 #[tauri::command]
-pub fn set_capture_method(method: String) {
+pub fn set_capture_method(method: String, app_handle: tauri::AppHandle) {
     if let Ok(m) = method.parse::<CaptureMethod>() {
         set_screen_capture_method(m);
     }
+    save_runtime_app_config_best_effort(&app_handle);
 }
 
 #[tauri::command]
@@ -303,6 +511,8 @@ pub fn set_window_effect(effect: String, app_handle: tauri::AppHandle) -> Result
         apply_window_effect_impl(&effect, &app_handle)?;
         let mut guard = CURRENT_WINDOW_EFFECT.lock().unwrap();
         *guard = effect;
+
+        save_runtime_app_config_best_effort(&app_handle);
         Ok(())
     }
 
@@ -316,19 +526,30 @@ pub fn set_window_effect(effect: String, app_handle: tauri::AppHandle) -> Result
 // Used from lib.rs during app setup
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 pub fn initialize_window_effect(app: &tauri::App) {
-    let default = default_effect_for_platform();
-    let handle = app.handle();
+    let default = default_effect_for_platform().to_string();
+    initialize_window_effect_with(app, &default);
+}
 
-    if let Err(err) = apply_window_effect_impl(default, handle) {
+// Used from lib.rs during app setup (restoring persisted effect)
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+pub fn initialize_window_effect_with(app: &tauri::App, effect: &str) {
+    let handle = app.handle();
+    let effective = if effect.is_empty() {
+        default_effect_for_platform()
+    } else {
+        effect
+    };
+
+    if let Err(err) = apply_window_effect_impl(effective, handle) {
         log::warn!(
-            effect = default,
+            effect = effective,
             err:display = err;
-            "[window_effect] Failed to apply default window effect"
+            "[window_effect] Failed to apply window effect during setup"
         );
     }
 
     let mut guard = CURRENT_WINDOW_EFFECT.lock().unwrap();
-    *guard = default.to_string();
+    *guard = effective.to_string();
 }
 
 // ============================================================================

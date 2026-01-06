@@ -5,6 +5,7 @@ pub mod api;
 
 use crate::manager::LightingManager;
 use crate::api::commands;
+use crate::api::config_store;
 use log::LevelFilter;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy, WEBVIEW_TARGET};
 use tauri::Manager;
@@ -166,6 +167,7 @@ pub fn run() {
             commands::update_scope_effect_params,
             commands::set_output_segments,
             commands::set_brightness,
+            commands::set_scope_brightness,
             commands::set_capture_scale,
             commands::get_capture_scale,
             commands::set_capture_fps,
@@ -178,6 +180,9 @@ pub fn run() {
             commands::get_system_info,
             commands::get_minimize_to_tray,
             commands::set_minimize_to_tray,
+            commands::get_app_config,
+            commands::set_app_config,
+            commands::get_device_config,
         ])
         .on_window_event(|window, event| {
             // 只处理主窗口
@@ -219,9 +224,24 @@ pub fn run() {
 
             log::info!("app starting");
 
+            // Load persisted app config (best-effort) and apply it to runtime.
+            // This must run before any UI queries so that `get_*` commands reflect persisted values.
+            {
+                let handle = app.handle();
+                if let Ok(cfg) = config_store::load_app_config(handle) {
+                    commands::apply_app_config_to_runtime(&cfg, handle);
+                }
+            }
+
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             {
-                commands::initialize_window_effect(app);
+                // Prefer persisted `windowEffect` if available; otherwise fall back to platform default.
+                let handle = app.handle();
+                let effect = config_store::load_app_config(handle)
+                    .ok()
+                    .map(|c| c.window_effect)
+                    .unwrap_or_else(|| commands::default_window_effect_for_platform().to_string());
+                commands::initialize_window_effect_with(app, &effect);
             }
 
             // System tray (用于“最小化到托盘”以及快速恢复/退出)

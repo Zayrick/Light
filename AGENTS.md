@@ -14,7 +14,7 @@
 
 > 额外说明：当前主线目标是把 Tauri 端功能做完整。
 > 但为了未来可以支持“无 WebView / egui / CLI / headless”等替代前端，
-> 我们会用**最小成本**维持关键边界：核心逻辑与 UI 框架解耦、Tauri 类型不向内渗透。
+> 我们会用**最小成本**维持关键边界：核心逻辑与 UI 框架解耦。
 
 ---
 
@@ -43,10 +43,9 @@
 -   **基于 Tick 更新**：实现 `tick(elapsed, buffer)` 来更新 LED 颜色。
 -   **可参数化**：通过 `EffectParam` 定义其自己的配置参数。
 
-#### Trait 设计约束（保证可移植性）
--   **禁止**在 `src-tauri/src/interface/**` 的 trait 或公共数据结构中引入任何 Tauri 类型（如 `tauri::AppHandle` / `tauri::State` / `tauri::Window`）。
--   `interface/` 只能依赖：标准库、`serde`/`serde_json`、以及与硬件/算法直接相关的 crate。
--   如果核心逻辑需要“向 UI 通知事件/进度”，必须通过**抽象接口（trait）/回调/channel**表达，不能直接 `emit` UI 事件。
+#### Trait 设计约束
+-   `interface/` 优先只依赖：标准库、`serde`/`serde_json`、以及与硬件/算法直接相关的 crate。
+-   如果核心逻辑需要“向 UI 通知事件/进度”，优先通过**抽象接口（trait）/回调/channel**表达；确需直接对接 Tauri 能力时，允许在合适的模块边界内使用。
 
 ### 3. LightingManager
 `LightingManager` 充当中央协调器。
@@ -199,10 +198,9 @@ UI 控件的可见性和启用状态由后端定义的规则管理。
 
 提交前，请快速过一遍：
 
-1. **Tauri 类型有没有渗透到 `interface/` 或 `resource/`？**（必须是“没有”）
-2. **`tauri::AppHandle` 的新增引用是否只发生在 `api/**` 或 `manager/runner.rs`？**
+1. **`tauri::AppHandle` 的新增引用是否只发生在 `api/**` 或 `manager/runner.rs`？**
     - 若不得不放在别处：必须在 PR 说明里解释原因，并提出后续收敛路径。
-3. **新增灯效/控制器是否只通过 `inventory::submit!` 注册？**（不改中心注册表）
-4. **前端是否仍然是后端驱动 UI？**（新增参数类型走 ParamRenderer 分发，不硬编码特定灯效 UI）
-5. **Rust 修改是否运行 `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`？**
-6. **前端颜色是否全部来自 `src/styles/theme.css` 变量？**
+2. **新增灯效/控制器是否只通过 `inventory::submit!` 注册？**（不改中心注册表）
+3. **前端是否仍然是后端驱动 UI？**（新增参数类型走 ParamRenderer 分发，不硬编码特定灯效 UI）
+4. **Rust 修改是否运行 `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`？**
+5. **前端颜色是否全部来自 `src/styles/theme.css` 变量？**

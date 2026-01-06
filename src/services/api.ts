@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Device, EffectInfo } from "../types";
+import type { AppConfig, Device, DeviceConfigResponse, EffectInfo } from "../types";
 import { logger } from "./logger";
 
 export type CaptureMethod = "dxgi" | "gdi" | "graphics" | "xcap" | "screencapturekit";
@@ -79,7 +79,22 @@ export const api = {
   },
 
   setBrightness: async (port: string, brightness: number): Promise<void> => {
+    // Legacy device-level brightness.
     return await invokeWithLog("set_brightness", { port, brightness }, { port, brightness });
+  },
+
+  setScopeBrightness: async (args: {
+    port: string;
+    outputId?: string;
+    segmentId?: string;
+    brightness: number;
+  }): Promise<void> => {
+    const { port, outputId, segmentId, brightness } = args;
+    return await invokeWithLog(
+      "set_scope_brightness",
+      { port, outputId, segmentId, brightness },
+      { port, outputId, segmentId, brightness },
+    );
   },
 
   getCaptureScale: async (): Promise<number> => {
@@ -128,5 +143,19 @@ export const api = {
 
   setMinimizeToTray: async (enabled: boolean): Promise<void> => {
     return await invokeWithLog("set_minimize_to_tray", { enabled }, { enabled });
+  },
+
+  // --- Persisted configuration
+
+  getAppConfig: async (): Promise<AppConfig> => {
+    return await invokeWithLog<AppConfig>("get_app_config");
+  },
+
+  setAppConfig: async (config: AppConfig): Promise<AppConfig> => {
+    return await invokeWithLog<AppConfig>("set_app_config", { config }, { schemaVersion: config.schemaVersion });
+  },
+
+  getDeviceConfig: async (port: string): Promise<DeviceConfigResponse> => {
+    return await invokeWithLog<DeviceConfigResponse>("get_device_config", { port }, { port });
   },
 };

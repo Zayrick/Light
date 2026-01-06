@@ -10,7 +10,10 @@ use crate::interface::controller::{Color, MatrixMap, SegmentType};
 use crate::interface::effect::Effect;
 
 use super::inventory::create_effect;
-use super::{resolve_effect_for_scope, DeviceConfig, ResolvedEffect, Scope, EFFECT_READY_TIMEOUT};
+use super::{
+    resolve_brightness_for_scope, resolve_effect_for_scope, DeviceConfig, ResolvedEffect, Scope,
+    EFFECT_READY_TIMEOUT,
+};
 
 type ControllerRef = Arc<Mutex<Box<dyn crate::interface::controller::Controller>>>;
 
@@ -440,9 +443,8 @@ impl DeviceRunner {
                 let now = Instant::now();
 
                 // Snapshot config for this tick.
-                let (brightness, tasks, total_len) = {
+                let (tasks, total_len) = {
                     let cfg = config.lock().unwrap();
-                    let brightness = cfg.brightness;
                     let mut tasks = Vec::new();
 
                     let mut offset: usize = 0;
@@ -476,6 +478,15 @@ impl DeviceRunner {
                                     leds_count: out_len,
                                     matrix: out.matrix.clone(),
                                     physical_offset: offset,
+                                    brightness: resolve_brightness_for_scope(
+                                        &cfg,
+                                        &port,
+                                        Scope::Output {
+                                            output_id: out.id.as_str(),
+                                        },
+                                    )
+                                    .map(|b| b.value)
+                                    .unwrap_or(100),
                                     resolved,
                                 });
                                 offset = offset.saturating_add(out_len);
@@ -499,6 +510,16 @@ impl DeviceRunner {
                                         leds_count: seg.leds_count.max(1),
                                         matrix: seg.matrix.clone(),
                                         physical_offset: offset,
+                                        brightness: resolve_brightness_for_scope(
+                                            &cfg,
+                                            &port,
+                                            Scope::Segment {
+                                                output_id: out.id.as_str(),
+                                                segment_id: seg.id.as_str(),
+                                            },
+                                        )
+                                        .map(|b| b.value)
+                                        .unwrap_or(100),
                                         resolved,
                                     });
 
@@ -522,6 +543,15 @@ impl DeviceRunner {
                                 leds_count: out_len,
                                 matrix: out.matrix.clone(),
                                 physical_offset: offset,
+                                brightness: resolve_brightness_for_scope(
+                                    &cfg,
+                                    &port,
+                                    Scope::Output {
+                                        output_id: out.id.as_str(),
+                                    },
+                                )
+                                .map(|b| b.value)
+                                .unwrap_or(100),
                                 resolved,
                             });
 
@@ -529,7 +559,7 @@ impl DeviceRunner {
                         }
                     }
 
-                    (brightness, tasks, offset)
+                    (tasks, offset)
                 };
 
                 // Prune runtimes for removed targets (config edits).
@@ -647,18 +677,9 @@ impl DeviceRunner {
                         task.leds_count,
                         &task.matrix,
                         task.physical_offset,
+                        task.brightness,
                         &mut device_buffer,
                     );
-                }
-
-                // Apply brightness (0..=100).
-                if brightness < 100 {
-                    let factor = (brightness as f32 / 100.0).clamp(0.0, 1.0);
-                    for c in &mut device_buffer {
-                        c.r = (c.r as f32 * factor).round() as u8;
-                        c.g = (c.g as f32 * factor).round() as u8;
-                        c.b = (c.b as f32 * factor).round() as u8;
-                    }
                 }
 
                 // Write to hardware.
@@ -720,6 +741,7 @@ struct TargetTask {
     leds_count: usize,
     matrix: Option<MatrixMap>,
     physical_offset: usize,
+    brightness: u8,
     resolved: Option<ResolvedEffect>,
 }
 
@@ -748,12 +770,27 @@ fn map_segment_into_physical(
     leds_count: usize,
     matrix: &Option<MatrixMap>,
     physical_offset: usize,
+    brightness: u8,
     physical_out: &mut [Color],
 ) {
+    let brightness = brightness.min(100);
+    let factor = (brightness as f32 / 100.0).clamp(0.0, 1.0);
+
+    let apply = |c: Color| -> Color {
+        if brightness >= 100 {
+            return c;
+        }
+        Color {
+            r: (c.r as f32 * factor).round() as u8,
+            g: (c.g as f32 * factor).round() as u8,
+            b: (c.b as f32 * factor).round() as u8,
+        }
+    };
+
     match segment_type {
         SegmentType::Single => {
             if physical_offset < physical_out.len() && !virtual_buffer.is_empty() {
-                physical_out[physical_offset] = virtual_buffer[0];
+                physical_out[physical_offset] = apply(virtual_buffer[0]);
             }
         }
         SegmentType::Linear => {
@@ -761,8 +798,14 @@ fn map_segment_into_physical(
             let end = (physical_offset + len).min(physical_out.len());
             let write_len = end.saturating_sub(physical_offset);
             if write_len > 0 {
-                physical_out[physical_offset..physical_offset + write_len]
-                    .copy_from_slice(&virtual_buffer[..write_len]);
+                if brightness >= 100 {
+                    physical_out[physical_offset..physical_offset + write_len]
+                        .copy_from_slice(&virtual_buffer[..write_len]);
+                } else {
+                    for i in 0..write_len {
+                        physical_out[physical_offset + i] = apply(virtual_buffer[i]);
+                    }
+                }
             }
         }
         SegmentType::Matrix => {
@@ -772,8 +815,14 @@ fn map_segment_into_physical(
                 let end = (physical_offset + len).min(physical_out.len());
                 let write_len = end.saturating_sub(physical_offset);
                 if write_len > 0 {
-                    physical_out[physical_offset..physical_offset + write_len]
-                        .copy_from_slice(&virtual_buffer[..write_len]);
+                    if brightness >= 100 {
+                        physical_out[physical_offset..physical_offset + write_len]
+                            .copy_from_slice(&virtual_buffer[..write_len]);
+                    } else {
+                        for i in 0..write_len {
+                            physical_out[physical_offset + i] = apply(virtual_buffer[i]);
+                        }
+                    }
                 }
                 return;
             };
@@ -789,7 +838,7 @@ fn map_segment_into_physical(
                 }
                 let dest = physical_offset.saturating_add(*local_phys);
                 if dest < physical_out.len() {
-                    physical_out[dest] = virtual_buffer[virtual_idx];
+                    physical_out[dest] = apply(virtual_buffer[virtual_idx]);
                 }
             }
         }

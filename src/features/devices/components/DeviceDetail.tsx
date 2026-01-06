@@ -2,7 +2,14 @@ import { memo, useCallback, useEffect, useMemo, useState, type WheelEvent } from
 import { AnimatePresence, motion } from "framer-motion";
 import { Sun, Sliders } from "lucide-react";
 import { Box, HStack, Slider, Text } from "@chakra-ui/react";
-import { Device, EffectInfo, EffectParam, EffectParamValue, ScopeModeState } from "../../../types";
+import {
+  Device,
+  EffectInfo,
+  EffectParam,
+  EffectParamValue,
+  ScopeBrightnessState,
+  ScopeModeState,
+} from "../../../types";
 import type { SelectedScope } from "../../../types";
 import { api } from "../../../services/api";
 import { logger } from "../../../services/logger";
@@ -40,10 +47,11 @@ function buildParamState(effectId?: string, params?: Record<string, EffectParamV
   return initial;
 }
 
-function resolveScopeMode(device: Device, scope: SelectedScope): {
+function resolveScopeState(device: Device, scope: SelectedScope): {
   title: string;
   subtitle?: string;
   mode: ScopeModeState;
+  brightness: ScopeBrightnessState;
   kind: "device" | "output" | "segment";
 } {
   if (scope.outputId && scope.segmentId) {
@@ -54,6 +62,7 @@ function resolveScopeMode(device: Device, scope: SelectedScope): {
         title: seg.name,
         subtitle: `${device.model} / ${out?.name ?? scope.outputId}`,
         mode: seg.mode,
+        brightness: seg.brightness,
         kind: "segment",
       };
     }
@@ -70,6 +79,7 @@ function resolveScopeMode(device: Device, scope: SelectedScope): {
           title: device.model,
           subtitle: out.name,
           mode: out.mode,
+          brightness: out.brightness,
           kind: "output",
         };
       }
@@ -78,6 +88,7 @@ function resolveScopeMode(device: Device, scope: SelectedScope): {
         title: out.name,
         subtitle: device.model,
         mode: out.mode,
+        brightness: out.brightness,
         kind: "output",
       };
     }
@@ -87,6 +98,7 @@ function resolveScopeMode(device: Device, scope: SelectedScope): {
     title: device.model,
     subtitle: device.description,
     mode: device.mode,
+    brightness: device.brightness,
     kind: "device",
   };
 }
@@ -159,8 +171,9 @@ const DeviceBrightnessSlider = memo(function DeviceBrightnessSlider({
 });
 
 export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope }: DeviceDetailProps) {
-  const resolvedScope = useMemo(() => resolveScopeMode(device, scope), [device, scope]);
+  const resolvedScope = useMemo(() => resolveScopeState(device, scope), [device, scope]);
   const scopeMode = resolvedScope.mode;
+  const scopeBrightness = resolvedScope.brightness;
 
   const scopeKey = useMemo(() => {
     // Key used to animate transitions between scopes (device/output/segment) within the same device detail page.
@@ -291,16 +304,26 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     return paramValues[key] ?? param.default;
   };
 
-  const backendBrightness = device.brightness ?? 100;
+  const backendBrightness = scopeBrightness.effective_value ?? 100;
 
   // Live sync for brightness (slider drag). Latest-wins + throttled.
   const brightnessLive = useLatestThrottledInvoker<number>(
-    (value) => api.setBrightness(device.port, value),
+    (value) =>
+      api.setScopeBrightness({
+        port: scope.port,
+        outputId: scope.outputId,
+        segmentId: scope.segmentId,
+        brightness: value,
+      }),
     0,
     {
       areEqual: (a, b) => a === b,
       onError: (err) =>
-        logger.error("device.brightness.live_failed", { port: device.port }, err),
+        logger.error(
+          "scope.brightness.live_failed",
+          { port: scope.port, outputId: scope.outputId, segmentId: scope.segmentId },
+          err,
+        ),
     },
   );
 
@@ -352,12 +375,21 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
     try {
       // Ensure no pending live value remains; commit is authoritative.
       brightnessLive.cancel();
-      await api.setBrightness(device.port, value);
+      await api.setScopeBrightness({
+        port: scope.port,
+        outputId: scope.outputId,
+        segmentId: scope.segmentId,
+        brightness: value,
+      });
       await onRefresh();
     } catch (err) {
-      logger.error("device.brightness.set_failed", { port: device.port, brightness: value }, err);
+      logger.error(
+        "scope.brightness.set_failed",
+        { port: scope.port, outputId: scope.outputId, segmentId: scope.segmentId, brightness: value },
+        err,
+      );
     }
-  }, [brightnessLive, device.port, onRefresh]);
+  }, [brightnessLive, scope.port, scope.outputId, scope.segmentId, onRefresh]);
 
   const handleParamLiveChange = useCallback(
     (param: EffectParam, value: EffectParamValue) => {
@@ -726,12 +758,12 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Sliders size={16} />
-              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Device Settings</h3>
+              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Scope Settings</h3>
             </div>
 
             <DeviceBrightnessSlider
               value={backendBrightness}
-              disabled={!!switchingModeId}
+              disabled={scopeBrightness.is_following || !!switchingModeId}
               onChange={handleBrightnessChange}
               onCommit={handleBrightnessCommit}
             />

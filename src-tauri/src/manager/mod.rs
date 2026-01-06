@@ -17,6 +17,10 @@ use self::runner::DeviceRunner;
 
 type ControllerRef = Arc<Mutex<Box<dyn Controller>>>;
 
+fn default_brightness() -> u8 {
+    100
+}
+
 // ============================================================================
 // Scope helpers (internal)
 // ============================================================================
@@ -72,6 +76,21 @@ pub struct ScopeModeState {
 }
 
 #[derive(serde::Serialize, Clone, Debug)]
+pub struct ScopeBrightnessState {
+    /// Stored brightness at this scope (0..=100). Always present even if currently following.
+    pub value: u8,
+    /// Resolved brightness after applying inheritance rules.
+    pub effective_value: u8,
+    /// Where `effective_value` is coming from.
+    pub effective_from: Option<ScopeRef>,
+    /// Whether this scope is currently following its parent brightness.
+    ///
+    /// Rule: non-device scopes follow when their mode is inheriting
+    /// (`active_effect` is None at this scope).
+    pub is_following: bool,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct Segment {
     pub id: String,
     pub name: String,
@@ -79,6 +98,7 @@ pub struct Segment {
     pub leds_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matrix: Option<MatrixMap>,
+    pub brightness: ScopeBrightnessState,
     pub mode: ScopeModeState,
 }
 
@@ -92,6 +112,7 @@ pub struct OutputPort {
     pub matrix: Option<MatrixMap>,
     pub capabilities: OutputCapabilities,
     pub segments: Vec<Segment>,
+    pub brightness: ScopeBrightnessState,
     pub mode: ScopeModeState,
 }
 
@@ -102,7 +123,7 @@ pub struct Device {
     pub description: String,
     pub id: String,
     pub device_type: DeviceType,
-    pub brightness: u8,
+    pub brightness: ScopeBrightnessState,
     pub outputs: Vec<OutputPort>,
     pub mode: ScopeModeState,
 }
@@ -115,6 +136,86 @@ pub struct Device {
 struct ActiveEffect {
     effect_id: String,
     started_at: Instant,
+}
+
+// ============================================================================
+// Persisted config DTOs (stored under config/devices/*.json)
+// ============================================================================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedModeConfig {
+    pub selected: Option<String>,
+    #[serde(default)]
+    pub params: HashMap<String, Map<String, Value>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedDeviceConfig {
+    pub device: PersistedDeviceSection,
+    pub effects: PersistedEffectsSection,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedDeviceSection {
+    /// Segment layout configuration (e.g. linear strip segmentation).
+    ///
+    /// Keyed by `output_id`.
+    #[serde(default)]
+    pub layout: HashMap<String, PersistedOutputLayout>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedOutputLayout {
+    /// Ordered segment list for this output.
+    ///
+    /// Order matters for linear outputs because we derive physical offsets by accumulation.
+    #[serde(default)]
+    pub segments: Vec<SegmentDefinition>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedEffectsSection {
+    /// Device-scope mode config.
+    pub selected: Option<String>,
+    #[serde(default)]
+    pub params: HashMap<String, Map<String, Value>>,
+    /// Device-scope brightness (0..=100).
+    #[serde(default = "default_brightness")]
+    pub brightness: u8,
+    /// Output / segment scoped mode configs.
+    #[serde(default)]
+    pub outputs: Vec<PersistedOutputEffectsConfig>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedOutputEffectsConfig {
+    pub id: String,
+    /// Output-scope brightness. If omitted, runtime falls back to 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<u8>,
+    pub selected: Option<String>,
+    #[serde(default)]
+    pub params: HashMap<String, Map<String, Value>>,
+    #[serde(default)]
+    pub segments: Vec<PersistedSegmentEffectsConfig>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedSegmentEffectsConfig {
+    pub id: String,
+    /// Segment-scope brightness. If omitted, runtime falls back to 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<u8>,
+    pub selected: Option<String>,
+    #[serde(default)]
+    pub params: HashMap<String, Map<String, Value>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -174,6 +275,32 @@ impl ModeConfig {
     }
 }
 
+impl From<&ModeConfig> for PersistedModeConfig {
+    fn from(value: &ModeConfig) -> Self {
+        PersistedModeConfig {
+            selected: value.selected_effect_id(),
+            params: value.params_by_effect.clone(),
+        }
+    }
+}
+
+fn apply_persisted_mode(mode: &mut ModeConfig, persisted: &PersistedModeConfig) -> Result<(), String> {
+    mode.params_by_effect = persisted.params.clone();
+
+    if let Some(effect_id) = &persisted.selected {
+        mode.ensure_params_entry(effect_id)?;
+        mode.active_effect = Some(ActiveEffect {
+            effect_id: effect_id.clone(),
+            started_at: Instant::now(),
+        });
+    } else {
+        mode.active_effect = None;
+    }
+
+    mode.rev = mode.rev.wrapping_add(1);
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 struct SegmentConfig {
     id: String,
@@ -181,6 +308,7 @@ struct SegmentConfig {
     segment_type: SegmentType,
     leds_count: usize,
     matrix: Option<MatrixMap>,
+    brightness: u8,
     mode: ModeConfig,
 }
 
@@ -192,6 +320,7 @@ struct OutputConfig {
     leds_count: usize,
     matrix: Option<MatrixMap>,
     capabilities: OutputCapabilities,
+    brightness: u8,
     mode: ModeConfig,
     segments: Vec<SegmentConfig>,
 }
@@ -203,6 +332,139 @@ struct DeviceConfig {
     outputs: Vec<OutputConfig>,
     /// Fast lookup table for outputs by id. `outputs` remains the source of truth.
     output_index: HashMap<String, usize>,
+}
+
+#[derive(Clone, Debug)]
+struct ResolvedBrightness {
+    value: u8,
+    from: ScopeRef,
+}
+
+fn scope_ref_for(port: &str, scope: Scope<'_>) -> ScopeRef {
+    match scope {
+        Scope::Device => ScopeRef {
+            port: port.to_string(),
+            output_id: None,
+            segment_id: None,
+        },
+        Scope::Output { output_id } => ScopeRef {
+            port: port.to_string(),
+            output_id: Some(output_id.to_string()),
+            segment_id: None,
+        },
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => ScopeRef {
+            port: port.to_string(),
+            output_id: Some(output_id.to_string()),
+            segment_id: Some(segment_id.to_string()),
+        },
+    }
+}
+
+fn brightness_for_scope(cfg: &DeviceConfig, scope: Scope<'_>) -> Option<u8> {
+    match scope {
+        Scope::Device => Some(cfg.brightness),
+        Scope::Output { output_id } => cfg.output(output_id).map(|o| o.brightness),
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => cfg
+            .output(output_id)
+            .and_then(|o| o.segments.iter().find(|s| s.id == segment_id))
+            .map(|s| s.brightness),
+    }
+}
+
+fn brightness_for_scope_mut<'a>(
+    cfg: &'a mut DeviceConfig,
+    scope: Scope<'_>,
+) -> Result<&'a mut u8, String> {
+    match scope {
+        Scope::Device => Ok(&mut cfg.brightness),
+        Scope::Output { output_id } => cfg
+            .output_mut(output_id)
+            .map(|o| &mut o.brightness)
+            .ok_or_else(|| format!("Output '{}' not found", output_id)),
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => {
+            let out = cfg
+                .output_mut(output_id)
+                .ok_or_else(|| format!("Output '{}' not found", output_id))?;
+            let seg = out
+                .segments
+                .iter_mut()
+                .find(|s| s.id == segment_id)
+                .ok_or_else(|| format!("Segment '{}' not found", segment_id))?;
+            Ok(&mut seg.brightness)
+        }
+    }
+}
+
+fn scope_is_following_mode(cfg: &DeviceConfig, scope: Scope<'_>) -> bool {
+    if scope == Scope::Device {
+        return false;
+    }
+
+    // Follow rule: if this scope doesn't explicitly pick a mode, it is following.
+    // This is intentionally independent from whether the resolved effective effect exists.
+    mode_for_scope(cfg, scope)
+        .map(|m| m.active_effect.is_none())
+        .unwrap_or(false)
+}
+
+/// Resolve effective brightness for a scope.
+///
+/// Rule: brightness follows the mode selection hierarchy.
+/// - If a scope explicitly selects a mode, it uses its stored brightness.
+/// - Otherwise (non-device scopes), it follows parent scope effective brightness.
+fn resolve_brightness_for_scope(
+    cfg: &DeviceConfig,
+    port: &str,
+    scope: Scope<'_>,
+) -> Option<ResolvedBrightness> {
+    match scope {
+        Scope::Device => Some(ResolvedBrightness {
+            value: cfg.brightness,
+            from: scope_ref_for(port, Scope::Device),
+        }),
+        Scope::Output { output_id } => {
+            let out = cfg.output(output_id)?;
+            if out.mode.active_effect.is_some() {
+                Some(ResolvedBrightness {
+                    value: out.brightness,
+                    from: scope_ref_for(port, Scope::Output { output_id }),
+                })
+            } else {
+                resolve_brightness_for_scope(cfg, port, Scope::Device)
+            }
+        }
+        Scope::Segment {
+            output_id,
+            segment_id,
+        } => {
+            let out = cfg.output(output_id)?;
+            let seg = out.segments.iter().find(|s| s.id == segment_id)?;
+
+            if seg.mode.active_effect.is_some() {
+                Some(ResolvedBrightness {
+                    value: seg.brightness,
+                    from: scope_ref_for(
+                        port,
+                        Scope::Segment {
+                            output_id,
+                            segment_id,
+                        },
+                    ),
+                })
+            } else {
+                resolve_brightness_for_scope(cfg, port, Scope::Output { output_id })
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -279,6 +541,95 @@ fn mode_for_scope_mut<'a>(
             Ok(&mut seg.mode)
         }
     }
+}
+
+fn replace_segments_for_output(
+    out: &mut OutputConfig,
+    output_id: &str,
+    segments: Vec<SegmentDefinition>,
+) -> Result<(), String> {
+    // Validate segment types and matrix payloads.
+    for seg in &segments {
+        if !out.capabilities.allowed_segment_types.contains(&seg.segment_type) {
+            return Err(format!(
+                "Segment type {:?} is not allowed on output '{}'",
+                seg.segment_type, output_id
+            ));
+        }
+
+        match seg.segment_type {
+            SegmentType::Single => {
+                if seg.leds_count != 1 {
+                    return Err("Single segment must have leds_count = 1".to_string());
+                }
+            }
+            SegmentType::Matrix => {
+                let m = seg
+                    .matrix
+                    .as_ref()
+                    .ok_or_else(|| "Matrix segment requires matrix map".to_string())?;
+                let physical = m.map.iter().filter(|v| v.is_some()).count();
+                if physical != seg.leds_count {
+                    return Err(format!(
+                        "Matrix leds_count mismatch: leds_count={}, map_has_leds={}",
+                        seg.leds_count, physical
+                    ));
+                }
+            }
+            SegmentType::Linear => {}
+        }
+    }
+
+    let total = segments.iter().map(|s| s.leds_count).sum::<usize>();
+    if total != out.leds_count {
+        return Err(format!(
+            "Segment total LED count {} must equal output leds_count {}",
+            total, out.leds_count
+        ));
+    }
+    if total < out.capabilities.min_total_leds || total > out.capabilities.max_total_leds {
+        return Err(format!(
+            "Total LED count {} is outside allowed range {}..={}",
+            total, out.capabilities.min_total_leds, out.capabilities.max_total_leds
+        ));
+    }
+    if let Some(allowed) = &out.capabilities.allowed_total_leds {
+        if !allowed.is_empty() && !allowed.contains(&total) {
+            return Err(format!(
+                "Total LED count {} is not allowed (allowed: {:?})",
+                total, allowed
+            ));
+        }
+    }
+
+    // Preserve per-segment mode state when ids match.
+    let mut old_by_id: HashMap<String, SegmentConfig> =
+        out.segments.drain(..).map(|s| (s.id.clone(), s)).collect();
+
+    out.segments = segments
+        .into_iter()
+        .map(|seg| {
+            if let Some(mut existing) = old_by_id.remove(&seg.id) {
+                existing.name = seg.name;
+                existing.segment_type = seg.segment_type;
+                existing.leds_count = seg.leds_count;
+                existing.matrix = seg.matrix;
+                existing
+            } else {
+                SegmentConfig {
+                    id: seg.id,
+                    name: seg.name,
+                    segment_type: seg.segment_type,
+                    leds_count: seg.leds_count,
+                    matrix: seg.matrix,
+                    brightness: 100,
+                    mode: ModeConfig::default(),
+                }
+            }
+        })
+        .collect();
+
+    Ok(())
 }
 
 fn force_children_inherit(cfg: &mut DeviceConfig, scope: Scope<'_>) {
@@ -394,6 +745,7 @@ impl DeviceConfig {
                 leds_count: def.leds_count.max(1),
                 matrix: def.matrix,
                 capabilities: def.capabilities,
+                brightness: 100,
                 mode: ModeConfig::default(),
                 // Segments are user-defined and only meaningful for linear outputs (future).
                 segments: Vec::new(),
@@ -447,6 +799,7 @@ impl DeviceConfig {
                     leds_count: def.leds_count.max(1),
                     matrix: def.matrix,
                     capabilities: def.capabilities,
+                    brightness: 100,
                     mode: ModeConfig::default(),
                     segments: Vec::new(),
                 }
@@ -931,14 +1284,36 @@ impl LightingManager {
         Ok(())
     }
 
-    pub fn set_brightness(&self, port: &str, brightness: u8) -> Result<(), String> {
+    pub fn set_scope_brightness(
+        &self,
+        port: &str,
+        output_id: Option<&str>,
+        segment_id: Option<&str>,
+        brightness: u8,
+    ) -> Result<(), String> {
+        let scope = Scope::from_options(output_id, segment_id)?;
+
         let mut devices = self.devices.lock().unwrap();
         let md = devices
             .get_mut(port)
             .ok_or_else(|| "Device not found".to_string())?;
+
         let mut cfg = md.config.lock().unwrap();
-        cfg.brightness = brightness;
+
+        // Brightness follows mode inheritance: when a scope is inheriting mode,
+        // its brightness is locked (but still stored).
+        if scope_is_following_mode(&cfg, scope) {
+            return Err("Brightness is following parent mode at this scope".to_string());
+        }
+
+        let target = brightness_for_scope_mut(&mut cfg, scope)?;
+        *target = brightness;
         Ok(())
+    }
+
+    pub fn set_brightness(&self, port: &str, brightness: u8) -> Result<(), String> {
+        // Legacy device-level entrypoint.
+        self.set_scope_brightness(port, None, None, brightness)
     }
 
     pub fn set_output_segments(
@@ -968,86 +1343,181 @@ impl LightingManager {
             return Err(format!("Output '{}' is not editable", output_id));
         }
 
-        // Validate segment types and matrix payloads.
-        for seg in &segments {
-            if !out.capabilities.allowed_segment_types.contains(&seg.segment_type) {
-                return Err(format!(
-                    "Segment type {:?} is not allowed on output '{}'",
-                    seg.segment_type, output_id
-                ));
+        replace_segments_for_output(out, output_id, segments)?;
+
+        Ok(())
+    }
+
+    /// Export a device config snapshot for persistence.
+    /// Returns `(device_id, config)` where `device_id` is the controller serial id.
+    pub fn export_persisted_device_config(
+        &self,
+        port: &str,
+    ) -> Result<(String, PersistedDeviceConfig), String> {
+        let devices = self.devices.lock().unwrap();
+        let md = devices
+            .get(port)
+            .ok_or_else(|| "Device not found".to_string())?;
+
+        let device_id = md.controller.lock().unwrap().serial_id();
+        let cfg = md.config.lock().unwrap();
+
+        let mut layout: HashMap<String, PersistedOutputLayout> = HashMap::new();
+        let mut outputs: Vec<PersistedOutputEffectsConfig> = Vec::with_capacity(cfg.outputs.len());
+
+        for out in &cfg.outputs {
+            // Layout: persist only if user-defined segments exist.
+            if !out.segments.is_empty() {
+                let segments = out
+                    .segments
+                    .iter()
+                    .map(|s| SegmentDefinition {
+                        id: s.id.clone(),
+                        name: s.name.clone(),
+                        segment_type: s.segment_type,
+                        leds_count: s.leds_count,
+                        matrix: s.matrix.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                layout.insert(out.id.clone(), PersistedOutputLayout { segments });
             }
 
-            match seg.segment_type {
-                SegmentType::Single => {
-                    if seg.leds_count != 1 {
-                        return Err("Single segment must have leds_count = 1".to_string());
+            // Effects: persist mode state for each scope.
+            let segments = out
+                .segments
+                .iter()
+                .map(|s| PersistedSegmentEffectsConfig {
+                    id: s.id.clone(),
+                    brightness: {
+                        let explicit = s.mode.selected_effect_id().is_some();
+                        if explicit || s.brightness != 100 {
+                            Some(s.brightness)
+                        } else {
+                            None
+                        }
+                    },
+                    selected: s.mode.selected_effect_id(),
+                    params: s.mode.params_by_effect.clone(),
+                })
+                .collect::<Vec<_>>();
+
+            outputs.push(PersistedOutputEffectsConfig {
+                id: out.id.clone(),
+                brightness: {
+                    let explicit = out.mode.selected_effect_id().is_some();
+                    if explicit || out.brightness != 100 {
+                        Some(out.brightness)
+                    } else {
+                        None
+                    }
+                },
+                selected: out.mode.selected_effect_id(),
+                params: out.mode.params_by_effect.clone(),
+                segments,
+            });
+        }
+
+        Ok((
+            device_id,
+            PersistedDeviceConfig {
+                device: PersistedDeviceSection {
+                    layout,
+                },
+                effects: PersistedEffectsSection {
+                    selected: cfg.mode.selected_effect_id(),
+                    params: cfg.mode.params_by_effect.clone(),
+                    brightness: cfg.brightness,
+                    outputs,
+                },
+            },
+        ))
+    }
+
+    /// Apply a persisted device config to a live device instance.
+    ///
+    /// Best-effort: unknown outputs/segments are ignored; invalid segments are skipped.
+    pub fn apply_persisted_device_config(
+        &self,
+        port: &str,
+        persisted: &PersistedDeviceConfig,
+        app_handle: AppHandle,
+    ) -> Result<(), String> {
+        let mut devices = self.devices.lock().unwrap();
+        let md = devices
+            .get_mut(port)
+            .ok_or_else(|| "Device not found".to_string())?;
+
+        {
+            let mut cfg = md.config.lock().unwrap();
+
+            cfg.brightness = persisted.effects.brightness;
+
+            // 1) Apply layout first so segments exist before applying segment modes.
+            for (output_id, layout) in &persisted.device.layout {
+                let Some(out) = cfg.output_mut(output_id) else {
+                    continue;
+                };
+
+                // Segments: only meaningful for editable linear outputs.
+                if out.output_type == SegmentType::Linear
+                    && out.capabilities.editable
+                    && !layout.segments.is_empty()
+                {
+                    if let Err(err) =
+                        replace_segments_for_output(out, output_id, layout.segments.clone())
+                    {
+                        log::warn!(
+                            port,
+                            output = output_id.as_str(),
+                            err:display = err;
+                            "[config] Skip invalid persisted layout"
+                        );
                     }
                 }
-                SegmentType::Matrix => {
-                    let m = seg
-                        .matrix
-                        .as_ref()
-                        .ok_or_else(|| "Matrix segment requires matrix map".to_string())?;
-                    let physical = m.map.iter().filter(|v| v.is_some()).count();
-                    if physical != seg.leds_count {
-                        return Err(format!(
-                            "Matrix leds_count mismatch: leds_count={}, map_has_leds={}",
-                            seg.leds_count, physical
-                        ));
+            }
+
+            // 2) Apply device-scope effects.
+            let device_mode = PersistedModeConfig {
+                selected: persisted.effects.selected.clone(),
+                params: persisted.effects.params.clone(),
+            };
+            apply_persisted_mode(&mut cfg.mode, &device_mode)?;
+
+            // 3) Apply output/segment effects.
+            for out_persisted in &persisted.effects.outputs {
+                let Some(out) = cfg.output_mut(&out_persisted.id) else {
+                    continue;
+                };
+
+                // Brightness (optional per-scope).
+                out.brightness = out_persisted.brightness.unwrap_or(100);
+
+                let out_mode = PersistedModeConfig {
+                    selected: out_persisted.selected.clone(),
+                    params: out_persisted.params.clone(),
+                };
+                apply_persisted_mode(&mut out.mode, &out_mode)?;
+
+                for seg_persisted in &out_persisted.segments {
+                    if let Some(seg) = out
+                        .segments
+                        .iter_mut()
+                        .find(|s| s.id == seg_persisted.id)
+                    {
+                        seg.brightness = seg_persisted.brightness.unwrap_or(100);
+                        let seg_mode = PersistedModeConfig {
+                            selected: seg_persisted.selected.clone(),
+                            params: seg_persisted.params.clone(),
+                        };
+                        let _ = apply_persisted_mode(&mut seg.mode, &seg_mode);
                     }
                 }
-                SegmentType::Linear => {}
             }
         }
 
-        let total = segments.iter().map(|s| s.leds_count).sum::<usize>();
-        if total != out.leds_count {
-            return Err(format!(
-                "Segment total LED count {} must equal output leds_count {}",
-                total, out.leds_count
-            ));
-        }
-        if total < out.capabilities.min_total_leds || total > out.capabilities.max_total_leds {
-            return Err(format!(
-                "Total LED count {} is outside allowed range {}..={}",
-                total, out.capabilities.min_total_leds, out.capabilities.max_total_leds
-            ));
-        }
-        if let Some(allowed) = &out.capabilities.allowed_total_leds {
-            if !allowed.is_empty() && !allowed.contains(&total) {
-                return Err(format!(
-                    "Total LED count {} is not allowed (allowed: {:?})",
-                    total, allowed
-                ));
-            }
-        }
-
-        // Preserve per-segment mode state when ids match.
-        let mut old_by_id: HashMap<String, SegmentConfig> =
-            out.segments.drain(..).map(|s| (s.id.clone(), s)).collect();
-
-        out.segments = segments
-            .into_iter()
-            .map(|seg| {
-                if let Some(mut existing) = old_by_id.remove(&seg.id) {
-                    existing.name = seg.name;
-                    existing.segment_type = seg.segment_type;
-                    existing.leds_count = seg.leds_count;
-                    existing.matrix = seg.matrix;
-                    existing
-                } else {
-                    SegmentConfig {
-                        id: seg.id,
-                        name: seg.name,
-                        segment_type: seg.segment_type,
-                        leds_count: seg.leds_count,
-                        matrix: seg.matrix,
-                        mode: ModeConfig::default(),
-                    }
-                }
-            })
-            .collect();
-
+        // Ensure runner state matches restored modes.
+        self.ensure_runner_state_for_device(md, port, app_handle)?;
         Ok(())
     }
 
@@ -1088,6 +1558,12 @@ impl LightingManager {
                         segment_type: seg.segment_type,
                         leds_count: seg.leds_count,
                         matrix: seg.matrix.clone(),
+                        brightness: self.build_brightness_state_for_segment(
+                            &cfg,
+                            port,
+                            &out.id,
+                            &seg.id,
+                        ),
                         mode: self.build_mode_state_for_segment(&cfg, port, &out.id, &seg.id),
                     })
                     .collect();
@@ -1100,6 +1576,7 @@ impl LightingManager {
                     matrix: out.matrix.clone(),
                     capabilities: out.capabilities.clone(),
                     segments,
+                    brightness: self.build_brightness_state_for_output(&cfg, port, &out.id),
                     mode: out_mode,
                 }
             })
@@ -1111,7 +1588,7 @@ impl LightingManager {
             description,
             id: serial_id,
             device_type,
-            brightness: cfg.brightness,
+            brightness: self.build_brightness_state_for_device(&cfg, port),
             outputs,
             mode: device_mode,
         }
@@ -1149,6 +1626,50 @@ impl LightingManager {
         segment_id: &str,
     ) -> ScopeModeState {
         self.build_mode_state(cfg, port, Scope::Segment { output_id, segment_id })
+    }
+
+    fn build_brightness_state(
+        &self,
+        cfg: &DeviceConfig,
+        port: &str,
+        scope: Scope<'_>,
+    ) -> ScopeBrightnessState {
+        let stored = brightness_for_scope(cfg, scope).unwrap_or(100);
+        let resolved = resolve_brightness_for_scope(cfg, port, scope);
+
+        ScopeBrightnessState {
+            value: stored,
+            effective_value: resolved.as_ref().map(|r| r.value).unwrap_or(stored),
+            effective_from: resolved.as_ref().map(|r| r.from.clone()),
+            is_following: scope_is_following_mode(cfg, scope),
+        }
+    }
+
+    fn build_brightness_state_for_device(
+        &self,
+        cfg: &DeviceConfig,
+        port: &str,
+    ) -> ScopeBrightnessState {
+        self.build_brightness_state(cfg, port, Scope::Device)
+    }
+
+    fn build_brightness_state_for_output(
+        &self,
+        cfg: &DeviceConfig,
+        port: &str,
+        output_id: &str,
+    ) -> ScopeBrightnessState {
+        self.build_brightness_state(cfg, port, Scope::Output { output_id })
+    }
+
+    fn build_brightness_state_for_segment(
+        &self,
+        cfg: &DeviceConfig,
+        port: &str,
+        output_id: &str,
+        segment_id: &str,
+    ) -> ScopeBrightnessState {
+        self.build_brightness_state(cfg, port, Scope::Segment { output_id, segment_id })
     }
 
     fn device_has_any_effect(&self, cfg: &DeviceConfig, _port: &str) -> bool {  

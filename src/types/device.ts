@@ -53,6 +53,17 @@ export interface ScopeModeState {
   effective_from?: ScopeRef;
 }
 
+export interface ScopeBrightnessState {
+  /** Stored brightness at this scope (0..=100). */
+  value: number;
+  /** Resolved brightness after applying inheritance rules. */
+  effective_value: number;
+  /** Where the effective brightness comes from. */
+  effective_from?: ScopeRef;
+  /** Whether this scope is currently following its parent brightness. */
+  is_following: boolean;
+}
+
 export interface OutputCapabilities {
   editable: boolean;
   min_total_leds: number;
@@ -67,6 +78,7 @@ export interface Segment {
   segment_type: SegmentType;
   leds_count: number;
   matrix?: MatrixMap;
+  brightness: ScopeBrightnessState;
   mode: ScopeModeState;
 }
 
@@ -78,6 +90,7 @@ export interface OutputPort {
   matrix?: MatrixMap;
   capabilities: OutputCapabilities;
   segments: Segment[];
+  brightness: ScopeBrightnessState;
   mode: ScopeModeState;
 }
 
@@ -87,7 +100,7 @@ export interface Device {
   description: string;
   id: string;
   device_type: DeviceType;
-  brightness: number;
+  brightness: ScopeBrightnessState;
   outputs: OutputPort[];
   mode: ScopeModeState;
 }

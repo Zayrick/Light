@@ -1,7 +1,53 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use crate::interface::effect::{
     DependencyBehavior, EffectParam, EffectParamDependency, EffectParamKind,
 };
+
+// ============================================================================
+// App config DTOs (persisted via tauri-plugin-store)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenCaptureConfigDto {
+    pub scale_percent: u8,
+    pub fps: u8,
+    /// Capture backend/method identifier (e.g. "dxgi", "gdi", "graphics", "xcap").
+    pub method: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfigDto {
+    pub schema_version: u32,
+    pub window_effect: String,
+    pub minimize_to_tray: bool,
+    pub screen_capture: ScreenCaptureConfigDto,
+}
+
+impl AppConfigDto {
+    pub fn default_for_platform() -> Self {
+        let default_method = if cfg!(target_os = "windows") {
+            "dxgi"
+        } else if cfg!(target_os = "macos") {
+            "screencapturekit"
+        } else {
+            "xcap"
+        };
+
+        // Keep defaults aligned with current frontend expectations.
+        AppConfigDto {
+            schema_version: 1,
+            window_effect: "".to_string(),
+            minimize_to_tray: false,
+            screen_capture: ScreenCaptureConfigDto {
+                scale_percent: 5,
+                fps: 30,
+                method: default_method.to_string(),
+            },
+        }
+    }
+}
 
 #[derive(Serialize)]
 pub struct ParamDependencyInfo {
