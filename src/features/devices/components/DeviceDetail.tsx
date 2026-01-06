@@ -24,9 +24,14 @@ import { getEffectCategory, sortEffectCategories, sortEffects } from "../../../u
 import { BRANCH_TRANSITION } from "../../../motion/transitions";
 
 const MODE_SETTINGS_PANEL_VARIANTS = {
-  hidden: { opacity: 0, y: 8 },
-  visible: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -6 },
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+  exit: { opacity: 0 },
+} as const;
+
+const SETTINGS_TRANSITION = {
+  duration: 0.15,
+  ease: "easeOut",
 } as const;
 
 interface DeviceDetailProps {
@@ -794,8 +799,8 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                 animate="visible"
                 exit="exit"
                 variants={MODE_SETTINGS_PANEL_VARIANTS}
-                transition={BRANCH_TRANSITION}
-                style={{ willChange: "transform, opacity" }}
+                transition={SETTINGS_TRANSITION}
+                style={{ willChange: "opacity" }}
               >
                 <Card
                   style={{
