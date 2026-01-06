@@ -12,7 +12,7 @@ pub mod manager;
 pub use config::{
     CaptureMethod,
     get_capture_fps, set_capture_fps,
-    get_capture_scale_percent, set_capture_scale_percent,
+    get_capture_max_pixels, set_capture_max_pixels,
     get_hardware_acceleration, set_hardware_acceleration,
     get_sample_ratio, set_sample_ratio,
     get_capture_method, set_capture_method,

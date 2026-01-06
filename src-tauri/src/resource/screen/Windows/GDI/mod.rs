@@ -20,8 +20,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
-use crate::resource::screen::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
-use super::{CAPTURE_FPS, CAPTURE_SCALE_PERCENT};
+use crate::resource::screen::{
+    compute_scaled_dimensions_by_max_pixels, ScreenCaptureError, ScreenCapturer, ScreenFrame,
+};
+use super::{CAPTURE_FPS, CAPTURE_MAX_PIXELS};
 
 const BYTES_PER_PIXEL: usize = 4;
 
@@ -220,9 +222,12 @@ impl GdiCapturer {
             let memory_dc_guard = MemoryDcGuard::new(screen_dc_guard.handle())?;
 
             let region = detect_region(output_index);
-            let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as u32;
-            let target_width = (region.width as u32 * scale_percent / 100).max(1);
-            let target_height = (region.height as u32 * scale_percent / 100).max(1);
+            let max_pixels = CAPTURE_MAX_PIXELS.load(Ordering::Relaxed);
+            let (target_width, target_height) = compute_scaled_dimensions_by_max_pixels(
+                region.width as u32,
+                region.height as u32,
+                max_pixels,
+            );
 
             let bitmap_guard = BitmapGuard::new(
                 screen_dc_guard.handle(),

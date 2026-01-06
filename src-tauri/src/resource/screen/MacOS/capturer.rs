@@ -4,7 +4,7 @@ use screencapturekit::prelude::*;
 
 use crate::resource::screen::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
 use super::frame::{FrameHandler, SharedFrameBuffer};
-use super::config::{CAPTURE_FPS, CAPTURE_SCALE_PERCENT};
+use super::config::{CAPTURE_FPS, CAPTURE_MAX_PIXELS};
 
 // ============================================================================
 // ScreenCaptureKit Capturer
@@ -88,10 +88,10 @@ impl Capturer {
         let mut stream = SCStream::new(&filter, &config);
 
         // Create frame handler
-        let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed);
+        let max_pixels = CAPTURE_MAX_PIXELS.load(Ordering::Relaxed);
         let handler = FrameHandler {
             frame_buffer: Arc::clone(&self.frame_buffer),
-            scale_percent,
+            max_pixels,
         };
 
         // Add output handler

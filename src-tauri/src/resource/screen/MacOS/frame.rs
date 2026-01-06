@@ -3,6 +3,7 @@ use screencapturekit::cv::CVPixelBufferLockFlags;
 use screencapturekit::prelude::*;
 
 use super::config::BYTES_PER_PIXEL;
+use crate::resource::screen::compute_scaled_dimensions_by_max_pixels;
 
 // ============================================================================
 // Frame Buffer for Stream Output
@@ -38,7 +39,7 @@ impl SharedFrameBuffer {
 /// Handler that receives frames from SCStream and stores them in shared buffer
 pub(crate) struct FrameHandler {
     pub(crate) frame_buffer: Arc<RwLock<SharedFrameBuffer>>,
-    pub(crate) scale_percent: u8,
+    pub(crate) max_pixels: u32,
 }
 
 impl SCStreamOutputTrait for FrameHandler {
@@ -62,10 +63,12 @@ impl SCStreamOutputTrait for FrameHandler {
         let bytes_per_row = guard.bytes_per_row();
         let pixels = guard.as_slice();
 
-        // Calculate target dimensions based on scale
-        let scale = self.scale_percent.clamp(1, 100) as u32;
-        let target_width = (source_width * scale / 100).max(1);
-        let target_height = (source_height * scale / 100).max(1);
+        // Calculate target dimensions based on max pixel budget
+        let (target_width, target_height) = compute_scaled_dimensions_by_max_pixels(
+            source_width,
+            source_height,
+            self.max_pixels,
+        );
 
         // Lock frame buffer for writing
         let Ok(mut frame_buffer) = self.frame_buffer.write() else {
@@ -79,7 +82,7 @@ impl SCStreamOutputTrait for FrameHandler {
         }
 
         // Copy or scale pixels
-        if scale == 100 {
+        if target_width == source_width && target_height == source_height {
             // Direct copy - no scaling needed
             // Handle potential stride mismatch
             let expected_stride = (source_width as usize) * BYTES_PER_PIXEL;

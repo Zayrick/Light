@@ -13,7 +13,7 @@ pub mod graphics_capture;
 
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
     Mutex, OnceLock, RwLock,
 };
 
@@ -26,7 +26,10 @@ use windows::Win32::Graphics::Dxgi::{
     DXGI_ERROR_NOT_FOUND, DXGI_OUTPUT_DESC,
 };
 
-use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use super::{
+    normalize_capture_max_pixels, DEFAULT_CAPTURE_MAX_PIXELS, ScreenCaptureError,
+    ScreenCapturer, ScreenFrame,
+};
 use dxgi::DxgiCapturer;
 use gdi::GdiCapturer;
 use graphics_capture::GraphicsCapturer;
@@ -47,8 +50,8 @@ pub(crate) const DEFAULT_TARGET_NITS: u32 = 200;
 // Global Settings
 // ============================================================================
 
-/// Percentage scale factor (1-100) for the capture resolution.
-pub(crate) static CAPTURE_SCALE_PERCENT: AtomicU8 = AtomicU8::new(5);
+/// Max pixel budget for capture resolution. 0 means "no limit".
+pub(crate) static CAPTURE_MAX_PIXELS: AtomicU32 = AtomicU32::new(DEFAULT_CAPTURE_MAX_PIXELS);
 pub(crate) static CAPTURE_FPS: AtomicU8 = AtomicU8::new(DEFAULT_CAPTURE_FPS);
 pub(crate) static HARDWARE_ACCELERATION: AtomicBool = AtomicBool::new(true);
 
@@ -111,12 +114,12 @@ pub struct DisplayInfo {
 // Public API - Settings
 // ============================================================================
 
-pub fn set_capture_scale_percent(percent: u8) {
-    let clamped = percent.clamp(1, 100);
-    let previous = CAPTURE_SCALE_PERCENT.swap(clamped, Ordering::Relaxed);
+pub fn set_capture_max_pixels(max_pixels: u32) {
+    let normalized = normalize_capture_max_pixels(max_pixels);
+    let previous = CAPTURE_MAX_PIXELS.swap(normalized, Ordering::Relaxed);
 
     // Only rebuild capture pipelines when the effective value changes.
-    if previous != clamped {
+    if previous != normalized {
         if let Ok(mut manager) = global_manager().lock() {
             manager.clear();
         }
@@ -126,8 +129,8 @@ pub fn set_capture_scale_percent(percent: u8) {
     }
 }
 
-pub fn get_capture_scale_percent() -> u8 {
-    CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed)
+pub fn get_capture_max_pixels() -> u32 {
+    CAPTURE_MAX_PIXELS.load(Ordering::Relaxed)
 }
 
 pub fn set_capture_fps(fps: u8) {

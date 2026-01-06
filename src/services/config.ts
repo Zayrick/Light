@@ -1,6 +1,7 @@
 import type { AppConfig, ScreenCaptureConfig } from "../types";
 import type { CaptureMethod, WindowEffectId } from "./api";
 import { api } from "./api";
+import { normalizeCaptureMaxPixels } from "../utils/captureQuality";
 
 let cachedAppConfig: AppConfig | null = null;
 let loadingPromise: Promise<AppConfig> | null = null;
@@ -14,7 +15,7 @@ function normalizeAppConfig(cfg: AppConfig): AppConfig {
     ...cfg,
     screenCapture: {
       ...cfg.screenCapture,
-      scalePercent: clamp(cfg.screenCapture.scalePercent, 1, 100),
+      maxPixels: normalizeCaptureMaxPixels(cfg.screenCapture.maxPixels),
       fps: clamp(cfg.screenCapture.fps, 1, 60),
     },
   };
@@ -73,9 +74,9 @@ export const configManager = {
     return await configManager.updateAppConfig({ screenCapture: { method } as ScreenCaptureConfig });
   },
 
-  setCaptureScale: async (scalePercent: number): Promise<AppConfig> => {
+  setCaptureMaxPixels: async (maxPixels: number): Promise<AppConfig> => {
     return await configManager.updateAppConfig({
-      screenCapture: { scalePercent } as ScreenCaptureConfig,
+      screenCapture: { maxPixels } as ScreenCaptureConfig,
     });
   },
 

@@ -38,8 +38,11 @@ use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice;
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 
-use crate::resource::screen::{DirtyRegion, ScreenCaptureError, ScreenCapturer, ScreenFrame};
-use super::{BYTES_PER_PIXEL, CAPTURE_FPS, CAPTURE_SCALE_PERCENT};
+use crate::resource::screen::{
+    compute_scaled_dimensions_by_max_pixels, DirtyRegion, ScreenCaptureError, ScreenCapturer,
+    ScreenFrame,
+};
+use super::{BYTES_PER_PIXEL, CAPTURE_FPS, CAPTURE_MAX_PIXELS};
 
 /// WinRT Graphics Capture backend for fullscreen monitor capture.
 ///
@@ -256,13 +259,11 @@ impl GraphicsCapturer {
         let dst_stride = width as usize * BYTES_PER_PIXEL;
         let height_usize = height as usize;
 
-        // Apply scaling if configured
-        let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100);
-        let (target_width, target_height) = if scale_percent < 100 {
-            compute_scaled_dimensions(width, height, scale_percent)
-        } else {
-            (width, height)
-        };
+        // Apply scaling based on max pixel budget
+        let max_pixels = CAPTURE_MAX_PIXELS.load(Ordering::Relaxed);
+        let (target_width, target_height) =
+            compute_scaled_dimensions_by_max_pixels(width, height, max_pixels);
+        let needs_scale = target_width != width || target_height != height;
 
         let target_stride = target_width as usize * BYTES_PER_PIXEL;
         self.buffer.resize(target_stride * target_height as usize, 0);
@@ -271,7 +272,7 @@ impl GraphicsCapturer {
             std::slice::from_raw_parts(mapped.pData as *const u8, src_pitch * height_usize)
         };
 
-        if scale_percent < 100 {
+        if needs_scale {
             // Parallel downsampling
             let src_width = width as usize;
             let src_height = height_usize;
@@ -511,23 +512,6 @@ fn create_capture_item_for_monitor(monitor: HMONITOR) -> Result<GraphicsCaptureI
             .CreateForMonitor(monitor)
             .map_err(|err| wrap_os_error("CreateForMonitor", err))
     }
-}
-
-/// Compute scaled dimensions for downsampling.
-fn compute_scaled_dimensions(width: u32, height: u32, scale_percent: u8) -> (u32, u32) {
-    let target_width = (width.saturating_mul(scale_percent as u32) / 100).max(1);
-    let target_height = (height.saturating_mul(scale_percent as u32) / 100).max(1);
-
-    // Round to power-of-two steps for cleaner mipmap-like scaling
-    let mut scaled_width = width.max(1);
-    let mut scaled_height = height.max(1);
-
-    while scaled_width / 2 >= target_width && scaled_height / 2 >= target_height {
-        scaled_width = (scaled_width / 2).max(1);
-        scaled_height = (scaled_height / 2).max(1);
-    }
-
-    (scaled_width, scaled_height)
 }
 
 /// Wrap Windows error into ScreenCaptureError.
