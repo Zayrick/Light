@@ -350,7 +350,7 @@ impl LedMatrixUdpController {
     fn capabilities_for_output(output_type: SegmentType, leds_count: usize) -> OutputCapabilities {
         let allowed_segment_types = match output_type {
             SegmentType::Single => vec![SegmentType::Single],
-            SegmentType::Linear => vec![SegmentType::Single, SegmentType::Linear],
+            SegmentType::Linear => vec![SegmentType::Single, SegmentType::Linear, SegmentType::Matrix],
             SegmentType::Matrix => vec![SegmentType::Matrix],
         };
 
