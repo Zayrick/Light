@@ -349,13 +349,23 @@ export function SettingsPage() {
     cancelAnimation();
     scaleLive.cancel();
     fpsLive.cancel();
+    // Optimistic UI update; we'll reconcile with backend response below.
     setCaptureMethod(value);
-    configManager.setCaptureMethod(value);
 
-    // 从 GDI 切换到 DXGI 时，用动画吸附到最近有效点
-    if (value === "dxgi") {
-      animateToMipScale(captureScale);
-    }
+    configManager
+      .setCaptureMethod(value)
+      .then((saved) => {
+        const effective = saved.screenCapture.method;
+        setCaptureMethod(effective);
+
+        // Only animate snap when DXGI is actually effective.
+        if (effective === "dxgi") {
+          animateToMipScale(captureScale);
+        }
+      })
+      .catch((err) => {
+        logger.error("settings.captureMethod.update_failed", { requested: value }, err);
+      });
   };
 
   const handleScaleChange = (value: number) => {

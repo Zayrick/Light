@@ -25,6 +25,7 @@ use crate::resource::screen::{
     set_capture_scale_percent,
     CaptureMethod,
     DisplayInfo,
+    ScreenSubscription,
 };
 
 #[cfg(target_os = "windows")]
@@ -108,8 +109,25 @@ pub fn apply_app_config_to_runtime(cfg: &AppConfigDto, app_handle: &tauri::AppHa
     // Screen capture
     set_capture_scale_percent(cfg.screen_capture.scale_percent);
     set_screen_capture_fps(cfg.screen_capture.fps);
-    if let Ok(m) = cfg.screen_capture.method.parse::<CaptureMethod>() {
-        set_screen_capture_method(m);
+    if let Ok(requested) = cfg.screen_capture.method.parse::<CaptureMethod>() {
+        set_screen_capture_method(requested);
+
+        // Best-effort warm-up: triggers fallback early so we can persist the effective backend.
+        #[cfg(target_os = "windows")]
+        {
+            let output_index = list_screen_displays()
+                .ok()
+                .and_then(|d| d.first().map(|x| x.index))
+                .unwrap_or(0);
+
+            let _ = ScreenSubscription::new(output_index);
+
+            let effective = get_screen_capture_method();
+            if effective != requested {
+                // Persist the effective method so the frontend/config stay in sync.
+                save_runtime_app_config_best_effort(app_handle);
+            }
+        }
     }
 
     // Window effect
@@ -168,6 +186,11 @@ pub fn set_app_config(config: AppConfigDto, app_handle: tauri::AppHandle) -> Res
     }
 
     apply_app_config_to_runtime(&cfg, &app_handle);
+
+    // Ensure we persist/return the effective capture method after warm-up/fallback.
+    // This keeps the UI, runtime, and on-disk config aligned.
+    let effective_method = get_screen_capture_method().to_string();
+    cfg.screen_capture.method = effective_method;
 
     // Persist.
     config_store::save_app_config(&app_handle, &cfg)?;
@@ -418,8 +441,17 @@ pub fn get_capture_fps() -> u8 {
 
 #[tauri::command]
 pub fn set_capture_method(method: String, app_handle: tauri::AppHandle) {
-    if let Ok(m) = method.parse::<CaptureMethod>() {
-        set_screen_capture_method(m);
+    if let Ok(requested) = method.parse::<CaptureMethod>() {
+        set_screen_capture_method(requested);
+
+        #[cfg(target_os = "windows")]
+        {
+            let output_index = list_screen_displays()
+                .ok()
+                .and_then(|d| d.first().map(|x| x.index))
+                .unwrap_or(0);
+            let _ = ScreenSubscription::new(output_index);
+        }
     }
     save_runtime_app_config_best_effort(&app_handle);
 }
