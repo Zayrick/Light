@@ -493,16 +493,10 @@ impl LightingManager {
     /// Probe hardware and merge newly discovered controllers into the manager.
     pub fn scan_devices(&self) -> Vec<Device> {
         let found = scan_controllers();
-        let mut found_ports: HashSet<String> = HashSet::with_capacity(found.len());
-
-        // Remove devices that are no longer present. We collect removed devices and stop them
-        // outside of the devices lock to avoid blocking other calls while joining threads.
-        let removed: Vec<ManagedDevice> = {
+        {
             let mut devices = self.devices.lock().unwrap();
-
             for controller in found {
                 let port = controller.port_name();
-                found_ports.insert(port.clone());
                 devices.entry(port.clone()).or_insert_with(|| {
                     let controller_ref: ControllerRef = Arc::new(Mutex::new(controller));
                     let output_defs = controller_ref.lock().unwrap().outputs();
@@ -518,28 +512,6 @@ impl LightingManager {
                     }
                 });
             }
-
-            let dead_ports: Vec<String> = devices
-                .keys()
-                .filter(|port| !found_ports.contains(*port))
-                .cloned()
-                .collect();
-
-            let mut removed = Vec::with_capacity(dead_ports.len());
-            for port in dead_ports {
-                if let Some(md) = devices.remove(&port) {
-                    removed.push(md);
-                }
-            }
-            removed
-        };
-
-        for mut md in removed {
-            if let Some(runner) = md.runner.take() {
-                runner.stop();
-            }
-            // Best-effort disconnect to release OS/hardware resources.
-            let _ = md.controller.lock().unwrap().disconnect();
         }
 
         // Always sync output definitions after scan, in case a driver changed its capabilities.
