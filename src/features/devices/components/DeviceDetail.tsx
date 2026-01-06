@@ -790,7 +790,6 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
             {selectedMode && selectedMode.params && selectedMode.params.length > 0 ? (
               <motion.div
                 key={selectedMode.id}
-                layout
                 initial="hidden"
                 animate="visible"
                 exit="exit"
