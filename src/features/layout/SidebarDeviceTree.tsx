@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useCallback, useMemo, useState } from "react";
 import type { Device, DeviceType, ScopeModeState, SelectedScope } from "../../types";
 import { formatDeviceTypeLabel } from "../../utils/deviceDisplay";
+import { DeviceConfigDialog } from "../devices/components/DeviceConfigDialog";
 import { 
   HIGHLIGHT_TRANSITION, 
   BRANCH_TRANSITION,
@@ -14,8 +15,19 @@ import {
 type ControlState = "none" | "explicit" | "inherited";
 
 function DeviceContextMenu({ children }: { children: React.ReactNode }) {
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+
   return (
-    <Menu.Root lazyMount unmountOnExit>
+    <>
+      <Menu.Root
+        lazyMount
+        unmountOnExit
+        onSelect={(details) => {
+          if (details.value === "settings") {
+            setIsConfigOpen(true);
+          }
+        }}
+      >
       <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
       <Portal>
         <Menu.Positioner>
@@ -31,7 +43,10 @@ function DeviceContextMenu({ children }: { children: React.ReactNode }) {
           </Menu.Content>
         </Menu.Positioner>
       </Portal>
-    </Menu.Root>
+      </Menu.Root>
+
+      <DeviceConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} />
+    </>
   );
 }
 
