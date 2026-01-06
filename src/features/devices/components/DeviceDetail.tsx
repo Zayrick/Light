@@ -403,20 +403,20 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
   const handleModeClick = async (modeId: string) => {
     if (switchingModeId) return;
 
-    const rollbackModeId = effectiveModeId;
-
     setSwitchingModeId(modeId);
-    setSelectedModeId(modeId);
     try {
+      // Wait for backend to be ready before updating frontend state.
+      // The backend's set_scope_effect already waits for effect ready.
       await api.setScopeEffect({
         port: scope.port,
         outputId: scope.outputId,
         segmentId: scope.segmentId,
         effectId: modeId,
       });
+      // Backend is ready, now refresh to get the new state.
+      // The useEffect watching effectiveModeId will update selectedModeId.
       await onRefresh();
     } catch (err) {
-      setSelectedModeId(rollbackModeId);
       logger.error(
         "scope.effect.set_failed",
         { port: scope.port, outputId: scope.outputId, segmentId: scope.segmentId, effectId: modeId },
@@ -636,9 +636,10 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                           }}
                         >
                           {categoryModes.map((mode) => {
-                            const isSelected = selectedModeId === mode.id;
                             const isSwitching = !!switchingModeId;
                             const isTargetSwitching = switchingModeId === mode.id;
+                            // Show as selected if: currently selected OR being switched to
+                            const isSelected = selectedModeId === mode.id || isTargetSwitching;
                             const isDisabled = isSwitching && !isTargetSwitching;
 
                             return (
@@ -763,7 +764,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
 
             <DeviceBrightnessSlider
               value={backendBrightness}
-              disabled={scopeBrightness.is_following || !!switchingModeId}
+              disabled={scopeBrightness.is_following}
               onChange={handleBrightnessChange}
               onCommit={handleBrightnessCommit}
             />
@@ -788,7 +789,7 @@ export function DeviceDetail({ device, scope, effects, onRefresh, onSelectScope 
                       key={param.key}
                       param={param}
                       value={value}
-                      disabled={disabled || isInheriting || !!switchingModeId}
+                      disabled={disabled || isInheriting}
                       onChange={(val) => handleParamLiveChange(param, val)}
                       onCommit={(val) => handleParamCommit(selectedMode, param, val)}
                     />
