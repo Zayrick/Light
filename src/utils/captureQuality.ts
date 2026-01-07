@@ -86,7 +86,7 @@ export const CAPTURE_QUALITY_PRESETS: CaptureQualityPreset[] = [
   },
 ];
 
-export const DEFAULT_CAPTURE_MAX_PIXELS = 230_400;
+export const DEFAULT_CAPTURE_MAX_PIXELS = 2_304;
 
 const NON_ZERO_PRESETS = CAPTURE_QUALITY_PRESETS.filter((preset) => preset.maxPixels > 0);
 

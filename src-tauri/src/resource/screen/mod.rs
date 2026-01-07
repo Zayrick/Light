@@ -69,7 +69,7 @@ pub(crate) const CAPTURE_PIXEL_PRESETS: &[u32] = &[
     576,       // 18p
 ];
 
-pub(crate) const DEFAULT_CAPTURE_MAX_PIXELS: u32 = 230_400; // 360p
+pub(crate) const DEFAULT_CAPTURE_MAX_PIXELS: u32 = 2_304; // 36p
 
 pub(crate) fn normalize_capture_max_pixels(value: u32) -> u32 {
     if value == 0 {
