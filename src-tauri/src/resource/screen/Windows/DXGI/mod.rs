@@ -41,9 +41,7 @@ use windows::{
                 Common::{
                     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM,
                     DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT,
-                    DXGI_FORMAT_R32G32B32_FLOAT, DXGI_MODE_ROTATION, DXGI_MODE_ROTATION_IDENTITY,
-                    DXGI_MODE_ROTATION_ROTATE180, DXGI_MODE_ROTATION_ROTATE270,
-                    DXGI_MODE_ROTATION_ROTATE90, DXGI_MODE_ROTATION_UNSPECIFIED, DXGI_SAMPLE_DESC,
+                    DXGI_FORMAT_R32G32B32_FLOAT, DXGI_SAMPLE_DESC,
                 },
                 CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput1,
                 IDXGIOutput6, IDXGIOutputDuplication, IDXGIResource, IDXGISurface1,
@@ -90,7 +88,6 @@ pub struct DxgiCapturer {
     device_context: ID3D11DeviceContext,
     duplication: IDXGIOutputDuplication,
     dupl_desc: DXGI_OUTDUPL_DESC,
-    rotation: DXGI_MODE_ROTATION,
     output_index: usize,
     timeout_ms: u32,
     buffer: Vec<u8>,
@@ -131,17 +128,9 @@ impl DxgiCapturer {
             create_duplication(output_index, hardware)?;
 
         let (width, height) = output_dimensions(&desc);
-        let rotation = match dupl_desc.Rotation {
-            r @ (DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270) => r,
-            _ => desc.Rotation,
-        };
-        let rotation_requires_cpu = !matches!(
-            rotation,
-            DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED
-        );
 
-        // Calculate actual capture dimensions after rotation
-        let (actual_width, actual_height) = rotated_dimensions(width, height, rotation);
+        // Actual capture dimensions
+        let (actual_width, actual_height) = (width, height);
 
         // Calculate scaled dimensions
         let max_pixels = CAPTURE_MAX_PIXELS.load(std::sync::atomic::Ordering::Relaxed);
@@ -172,10 +161,8 @@ impl DxgiCapturer {
             staging.unwrap()
         };
 
-        // Create GPU pipeline only when rotation doesn't need a transform.
-        // If the display is rotated (portrait, 180, etc.), fall back to CPU path
-        // to avoid orientation mismatches.
-        let gpu_pipeline = if hardware && !rotation_requires_cpu {
+        // Create GPU pipeline for hardware acceleration
+        let gpu_pipeline = if hardware {
             Some(create_gpu_pipeline(
                 &device,
                 width,
@@ -194,7 +181,6 @@ impl DxgiCapturer {
             device_context,
             duplication,
             dupl_desc,
-            rotation,
             output_index,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             buffer: Vec::new(),
@@ -630,19 +616,12 @@ impl DxgiCapturer {
         unsafe {
             let pitch = mapped.Pitch as usize;
             let data = slice::from_raw_parts(mapped.pBits as *const u8, pitch * height);
-            let (rotated_width, rotated_height) = rotated_dimensions(
-                width as u32,
-                height as u32,
-                self.rotation,
-            );
-            let rotated_width = rotated_width as usize;
-            let rotated_height = rotated_height as usize;
 
             let max_pixels =
                 CAPTURE_MAX_PIXELS.load(std::sync::atomic::Ordering::Relaxed);
             let (scaled_width_u32, scaled_height_u32) = compute_scaled_dimensions_by_max_pixels(
-                rotated_width as u32,
-                rotated_height as u32,
+                width as u32,
+                height as u32,
                 max_pixels,
             );
             let scaled_width = scaled_width_u32 as usize;
@@ -656,30 +635,10 @@ impl DxgiCapturer {
                 .par_chunks_mut(dst_stride)
                 .enumerate()
                 .for_each(|(y, row)| {
-                    let rotated_y = y * rotated_height / scaled_height;
+                    let src_y = y * height / scaled_height;
 
                     for x in 0..scaled_width {
-                        let rotated_x = x * rotated_width / scaled_width;
-
-                        let (src_x, src_y) = match self.rotation {
-                            DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => {
-                                (rotated_x, rotated_y)
-                            }
-                            DXGI_MODE_ROTATION_ROTATE90 => {
-                                let h = height;
-                                (rotated_y, h - 1 - rotated_x)
-                            }
-                            DXGI_MODE_ROTATION_ROTATE180 => {
-                                let w = width;
-                                let h = height;
-                                (w - 1 - rotated_x, h - 1 - rotated_y)
-                            }
-                            DXGI_MODE_ROTATION_ROTATE270 => {
-                                let w = width;
-                                (w - 1 - rotated_y, rotated_x)
-                            }
-                            _ => (rotated_x, rotated_y),
-                        };
+                        let src_x = x * width / scaled_width;
 
                         let src_idx = src_y * pitch + src_x * src_bpp;
                         let dst_idx = x * BYTES_PER_PIXEL;
@@ -1130,13 +1089,6 @@ pub fn output_dimensions(desc: &DXGI_OUTPUT_DESC) -> (u32, u32) {
     let width = (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left).max(1) as u32;
     let height = (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top).max(1) as u32;
     (width, height)
-}
-
-fn rotated_dimensions(width: u32, height: u32, rotation: DXGI_MODE_ROTATION) -> (u32, u32) {
-    match rotation {
-        DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270 => (height, width),
-        _ => (width, height),
-    }
 }
 
 fn os_error(context: &'static str, err: windows::core::Error) -> ScreenCaptureError {
