@@ -264,18 +264,7 @@ impl DesktopDuplicator {
         output_index: usize,
     ) -> Result<Self, ScreenCaptureError> {
         match method {
-            CaptureMethod::Dxgi => match DxgiCapturer::with_output(output_index) {
-                Ok(capturer) => Ok(Self::Dxgi(capturer)),
-                Err(err) => {
-                    // Try to fall back to GDI if DXGI fails
-                    log::warn!(
-                        output_index = output_index,
-                        err:display = err;
-                        "[screen] DXGI failed, falling back to GDI"
-                    );
-                    Ok(Self::Gdi(GdiCapturer::with_output(output_index)?))
-                }
-            },
+            CaptureMethod::Dxgi => Ok(Self::Dxgi(DxgiCapturer::with_output(output_index)?)),
             CaptureMethod::Gdi => Ok(Self::Gdi(GdiCapturer::with_output(output_index)?)),
             CaptureMethod::Graphics => Ok(Self::Graphics(GraphicsCapturer::with_output(output_index)?)),
         }
@@ -361,9 +350,41 @@ impl ScreenCaptureManager {
             return Ok(());
         }
 
-        let duplicator = DesktopDuplicator::with_method_output(method, output_index)?;
+        // Build duplicator; if the requested backend is unavailable, fall back and
+        // update global method so the UI/config can observe the effective backend.
+        let (effective_method, duplicator) = match method {
+            CaptureMethod::Dxgi => match DesktopDuplicator::with_method_output(CaptureMethod::Dxgi, output_index) {
+                Ok(dup) => (CaptureMethod::Dxgi, dup),
+                Err(_dxgi_err) => {
+                    // Prefer the modern WinRT Graphics Capture API if available.
+                    match DesktopDuplicator::with_method_output(CaptureMethod::Graphics, output_index) {
+                        Ok(dup) => (CaptureMethod::Graphics, dup),
+                        Err(_graphics_err) => {
+                            // Both DXGI and Graphics Capture failed; fall back to GDI.
+                            (CaptureMethod::Gdi, DesktopDuplicator::with_method_output(CaptureMethod::Gdi, output_index)?)
+                        }
+                    }
+                }
+            },
+            CaptureMethod::Graphics => (CaptureMethod::Graphics, DesktopDuplicator::with_method_output(CaptureMethod::Graphics, output_index)?),
+            CaptureMethod::Gdi => (CaptureMethod::Gdi, DesktopDuplicator::with_method_output(CaptureMethod::Gdi, output_index)?),
+        };
+
+        // If we had to fall back, rebind globally and clear existing outputs so
+        // subsequent subscriptions align with the effective backend.
+        if effective_method != method {
+            self.clear();
+            if let Ok(mut guard) = CAPTURE_METHOD.write() {
+                *guard = effective_method;
+            }
+            CAPTURE_GEN.fetch_add(1, Ordering::Relaxed);
+        }
+
         self.outputs.insert(
-            key,
+            CaptureKey {
+                method: effective_method,
+                output: output_index,
+            },
             ManagedOutput {
                 duplicator,
                 ref_count: 1,
@@ -431,9 +452,13 @@ impl ScreenSubscription {
     pub fn new(display_index: usize) -> Result<Self, ScreenCaptureError> {
         let manager = global_manager();
         let mut guard = manager.lock().unwrap();
+        let requested = get_capture_method();
+        guard.acquire(requested, display_index)?;
+
+        // `acquire` may have changed the global method (fallback). Re-read after acquire so
+        // the subscription key matches what is actually stored in the manager.
         let method = get_capture_method();
         let generation = CAPTURE_GEN.load(Ordering::Relaxed);
-        guard.acquire(method, display_index)?;
         Ok(Self {
             display_index,
             method,
@@ -457,8 +482,9 @@ impl ScreenSubscription {
         let current_method = get_capture_method();
         if current_generation != self.generation || current_method != self.method {
             guard.acquire(current_method, self.display_index)?;
-            self.generation = current_generation;
-            self.method = current_method;
+            // `acquire` may have fallen back and updated globals; re-sync after it.
+            self.generation = CAPTURE_GEN.load(Ordering::Relaxed);
+            self.method = get_capture_method();
         }
 
         let key = CaptureKey {
