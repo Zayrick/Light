@@ -1,11 +1,12 @@
-import { CloseButton, Dialog, Portal } from "@chakra-ui/react";
+import { Box, CloseButton, Dialog, HStack, Portal, Text } from "@chakra-ui/react";
 
 export interface DeviceConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  deviceName?: string;
 }
 
-export function DeviceConfigDialog({ open, onOpenChange }: DeviceConfigDialogProps) {
+export function DeviceConfigDialog({ open, onOpenChange, deviceName }: DeviceConfigDialogProps) {
   return (
     <Dialog.Root
       lazyMount
@@ -19,10 +20,20 @@ export function DeviceConfigDialog({ open, onOpenChange }: DeviceConfigDialogPro
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header>
-              <Dialog.Title>设备配置</Dialog.Title>
-              <Dialog.CloseTrigger asChild>
-                <CloseButton size="sm" />
-              </Dialog.CloseTrigger>
+              <HStack justify="space-between" align="start" gap="4" w="full">
+                <Box>
+                  <Dialog.Title>配置</Dialog.Title>
+                  {deviceName ? (
+                    <Text mt="1" fontSize="sm" color="var(--text-secondary)" lineHeight="1.3">
+                      {deviceName}
+                    </Text>
+                  ) : null}
+                </Box>
+
+                <Dialog.CloseTrigger asChild>
+                  <CloseButton size="sm" />
+                </Dialog.CloseTrigger>
+              </HStack>
             </Dialog.Header>
             <Dialog.Body />
           </Dialog.Content>

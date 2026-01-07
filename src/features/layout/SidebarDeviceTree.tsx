@@ -6,15 +6,21 @@ import { useCallback, useMemo, useState } from "react";
 import type { Device, DeviceType, ScopeModeState, SelectedScope } from "../../types";
 import { formatDeviceTypeLabel } from "../../utils/deviceDisplay";
 import { DeviceConfigDialog } from "../devices/components/DeviceConfigDialog";
-import { 
-  HIGHLIGHT_TRANSITION, 
+import {
+  HIGHLIGHT_TRANSITION,
   BRANCH_TRANSITION,
-  branchContentVariants 
+  branchContentVariants
 } from "../../motion/transitions";
 
 type ControlState = "none" | "explicit" | "inherited";
 
-function DeviceContextMenu({ children }: { children: React.ReactNode }) {
+function DeviceContextMenu({
+  children,
+  deviceName,
+}: {
+  children: React.ReactNode;
+  deviceName: string;
+}) {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   return (
@@ -28,24 +34,24 @@ function DeviceContextMenu({ children }: { children: React.ReactNode }) {
           }
         }}
       >
-      <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
-      <Portal>
-        <Menu.Positioner>
-          <Menu.Content>
-            <Menu.Item value="turn-off">
-              <Power />
-              关灯
-            </Menu.Item>
-            <Menu.Item value="settings">
-              <Settings />
-              设置设备
-            </Menu.Item>
-          </Menu.Content>
-        </Menu.Positioner>
-      </Portal>
+        <Menu.ContextTrigger asChild>{children}</Menu.ContextTrigger>
+        <Portal>
+          <Menu.Positioner>
+            <Menu.Content>
+              <Menu.Item value="turn-off">
+                <Power />
+                关灯
+              </Menu.Item>
+              <Menu.Item value="settings">
+                <Settings />
+                设置设备
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Portal>
       </Menu.Root>
 
-      <DeviceConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} />
+      <DeviceConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} deviceName={deviceName} />
     </>
   );
 }
@@ -97,14 +103,14 @@ function buildTree(devices: Device[]): DeviceTreeNode[] {
         children:
           o.output_type === "Linear" && o.segments.length > 0
             ? o.segments.map((s) => ({
-                id: `seg:${d.port}:${o.id}:${s.id}`,
-                name: s.name,
-                kind: "segment",
-                port: d.port,
-                outputId: o.id,
-                segmentId: s.id,
-                controlState: controlStateFromMode(s.mode),
-              }))
+              id: `seg:${d.port}:${o.id}:${s.id}`,
+              name: s.name,
+              kind: "segment",
+              port: d.port,
+              outputId: o.id,
+              segmentId: s.id,
+              controlState: controlStateFromMode(s.mode),
+            }))
             : undefined,
       };
     }
@@ -127,14 +133,14 @@ function buildTree(devices: Device[]): DeviceTreeNode[] {
         children:
           o.output_type === "Linear" && o.segments.length > 0
             ? o.segments.map((s) => ({
-                id: `seg:${d.port}:${o.id}:${s.id}`,
-                name: s.name,
-                kind: "segment",
-                port: d.port,
-                outputId: o.id,
-                segmentId: s.id,
-                controlState: controlStateFromMode(s.mode),
-              }))
+              id: `seg:${d.port}:${o.id}:${s.id}`,
+              name: s.name,
+              kind: "segment",
+              port: d.port,
+              outputId: o.id,
+              segmentId: s.id,
+              controlState: controlStateFromMode(s.mode),
+            }))
             : undefined,
       })),
     };
@@ -194,6 +200,16 @@ export function SidebarDeviceTree({
 
   const nodes = useMemo(() => buildTree(devices), [devices]);
 
+  // Map port -> device display name.
+  // This keeps the tree node model smaller while still letting us show device-level info in menus.
+  const deviceNameByPort = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of devices) {
+      map.set(d.port, d.model);
+    }
+    return map;
+  }, [devices]);
+
   const collection = useMemo(
     () =>
       createTreeCollection<DeviceTreeNode>({
@@ -249,6 +265,7 @@ export function SidebarDeviceTree({
             onMouseMove={onMouseMove}
             onMouseLeave={onMouseLeave}
             expandedValue={expandedValue}
+            deviceNameByPort={deviceNameByPort}
             onToggleDeviceCollapsed={toggleDeviceCollapsed}
             onUncollapseDevice={uncollapseDevice}
             onToggleOutputCollapsed={toggleOutputCollapsed}
@@ -266,6 +283,7 @@ interface DeviceTreeItemProps extends TreeView.NodeProviderProps<DeviceTreeNode>
   onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
   onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => void;
   expandedValue: string[];
+  deviceNameByPort: Map<string, string>;
   onToggleDeviceCollapsed: (deviceNodeId: string) => void;
   onUncollapseDevice: (deviceNodeId: string) => void;
   onToggleOutputCollapsed: (outputNodeId: string) => void;
@@ -280,6 +298,7 @@ const DeviceTreeItem = ({
   onMouseMove,
   onMouseLeave,
   expandedValue,
+  deviceNameByPort,
   onToggleDeviceCollapsed,
   onUncollapseDevice,
   onToggleOutputCollapsed,
@@ -341,6 +360,8 @@ const DeviceTreeItem = ({
   const isMultiZoneDevice = node.id.startsWith("dev:") && node.kind === "device" && !!node.children;
   const isSegmentedOutput = node.id.startsWith("out:") && !!node.children;
 
+  const deviceNameForMenu = deviceNameByPort.get(node.port) ?? node.name;
+
   const handleClick = () => {
     // Toggle collapse/expand when clicking the same multi-zone device again.
     if (isMultiZoneDevice && isSelected) {
@@ -376,7 +397,7 @@ const DeviceTreeItem = ({
     <TreeView.NodeProvider node={node} indexPath={indexPath}>
       {node.children ? (
         <TreeView.Branch className="layout-tree-branch">
-          <DeviceContextMenu>
+          <DeviceContextMenu deviceName={deviceNameForMenu}>
             <motion.div layout transition={BRANCH_TRANSITION}>
               <TreeView.BranchControl
                 className={clsx("device-list-item layout-branch-control", isSelected && "active")}
@@ -425,6 +446,7 @@ const DeviceTreeItem = ({
                       onMouseMove={onMouseMove}
                       onMouseLeave={onMouseLeave}
                       expandedValue={expandedValue}
+                      deviceNameByPort={deviceNameByPort}
                       onToggleDeviceCollapsed={onToggleDeviceCollapsed}
                       onUncollapseDevice={onUncollapseDevice}
                       onToggleOutputCollapsed={onToggleOutputCollapsed}
@@ -437,7 +459,7 @@ const DeviceTreeItem = ({
           </AnimatePresence>
         </TreeView.Branch>
       ) : (
-        <DeviceContextMenu>
+        <DeviceContextMenu deviceName={deviceNameForMenu}>
           <motion.div layout transition={BRANCH_TRANSITION}>
             <TreeView.Item
               className={clsx(
