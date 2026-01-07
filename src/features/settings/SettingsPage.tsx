@@ -10,6 +10,12 @@ import { logger } from "../../services/logger";
 import { usePlatform } from "../../hooks/usePlatform";
 import { useMinimizeToTray } from "../../hooks/useMinimizeToTray";
 import { useLatestThrottledInvoker } from "../../hooks/useLatestThrottledInvoker";
+import {
+  CAPTURE_QUALITY_PRESETS,
+  DEFAULT_CAPTURE_MAX_PIXELS,
+  getCaptureQualityIndex,
+  getCaptureQualityPreset,
+} from "../../utils/captureQuality";
 import "./Settings.css";
 
 // Windows-specific capture methods
@@ -19,22 +25,8 @@ const windowsCaptureMethodOptions = [
   { value: "gdi" as const, label: "GDI (Legacy)" },
 ];
 
-const buildMipScalePoints = () => {
-  const points: number[] = [100];
-  let current = 100;
-
-  while (current > 1) {
-    const next = Math.max(1, Math.round(current / 2));
-    if (points[points.length - 1] === next) break;
-    points.push(next);
-    current = next;
-  }
-
-  return points;
-};
-
-const formatPercent = (value: number) =>
-  Number.isInteger(value) ? value.toString() : value.toFixed(1);
+const formatPixelBudget = (pixels: number) =>
+  pixels === 0 ? "No limit" : `${pixels.toLocaleString()} px`;
 
 // Live sync is handled via a ready/busy gate (latest-wins), so no timer-based throttling is needed.
 
@@ -140,7 +132,9 @@ const windowEffectMeta: Record<WindowEffectId, { label: string; description: str
 export function SettingsPage() {
   const { isWindows } = usePlatform();
   const { minimizeToTray, setMinimizeToTray } = useMinimizeToTray();
-  const [captureScale, setCaptureScale] = useState<number>(5);
+  const [captureQualityIndex, setCaptureQualityIndex] = useState<number>(
+    getCaptureQualityIndex(DEFAULT_CAPTURE_MAX_PIXELS),
+  );
   const [captureFps, setCaptureFps] = useState<number>(30);
   const [captureMethod, setCaptureMethod] = useState<CaptureMethod>(isWindows ? "dxgi" : "xcap");
   const [loading, setLoading] = useState(true);
@@ -159,41 +153,15 @@ export function SettingsPage() {
   // Whether to show capture method selector (only when multiple options available)
   const showCaptureMethodSelector = captureMethodOptions.length > 1;
 
-  const mipScalePoints = useMemo(buildMipScalePoints, []);
-  // Both DXGI and Graphics Capture benefit from GPU-optimized mip scaling
-  const isGpuAccelerated = captureMethod === "dxgi" || captureMethod === "graphics";
-
-  const snapToMipScale = useCallback(
-    (value: number) =>
-      mipScalePoints.reduce(
-        (closest, point) =>
-          Math.abs(point - value) < Math.abs(closest - value) ? point : closest,
-        mipScalePoints[0],
-      ),
-    [mipScalePoints],
-  );
-
-  const animationFrameRef = useRef<number | null>(null);
-  const animationStartRef = useRef<number>(0);
-  const animationFromRef = useRef<number>(0);
-  const animationToRef = useRef<number>(0);
-  const animationDuration = 220; // ms
-  const lastSyncedScaleRef = useRef<number | null>(null);
+  const lastSyncedQualityRef = useRef<number | null>(null);
   const lastSyncedFpsRef = useRef<number | null>(null);
 
-  const cancelAnimation = () => {
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-  };
-
-  const scaleLive = useLatestThrottledInvoker<number>(
-    (percent) => configManager.setCaptureScale(percent),
+  const qualityLive = useLatestThrottledInvoker<number>(
+    (maxPixels) => configManager.setCaptureMaxPixels(maxPixels),
     0,
     {
       areEqual: (a, b) => a === b,
-      onError: (err) => logger.error("settings.captureScale.live_failed", {}, err),
+      onError: (err) => logger.error("settings.captureMaxPixels.live_failed", {}, err),
     },
   );
 
@@ -206,16 +174,15 @@ export function SettingsPage() {
     },
   );
 
-  const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
-
-  const syncLiveScale = useCallback(
-    (value: number, options?: { force?: boolean }) => {
-      const target = isGpuAccelerated ? snapToMipScale(value) : value;
-      if (lastSyncedScaleRef.current === target && !options?.force) return;
-      lastSyncedScaleRef.current = target;
-      scaleLive.schedule(target, { force: options?.force });
+  const syncLiveQuality = useCallback(
+    (index: number, options?: { force?: boolean }) => {
+      const preset = getCaptureQualityPreset(index);
+      const maxPixels = preset.maxPixels;
+      if (lastSyncedQualityRef.current === maxPixels && !options?.force) return;
+      lastSyncedQualityRef.current = maxPixels;
+      qualityLive.schedule(maxPixels, { force: options?.force });
     },
-    [isGpuAccelerated, scaleLive, snapToMipScale],
+    [qualityLive],
   );
 
   const syncLiveFps = useCallback(
@@ -228,64 +195,9 @@ export function SettingsPage() {
     [fpsLive],
   );
 
-  // 吸附到最近有效点并同步后端（无动画，用于初始化/切换模式）
-  const alignToMipScale = useCallback(
-    (value: number) => {
-      const snapped = snapToMipScale(value);
-      setCaptureScale(snapped);
-      lastSyncedScaleRef.current = snapped;
-      if (snapped !== value) {
-        scaleLive.schedule(snapped, { force: true });
-      }
-    },
-    [scaleLive, snapToMipScale],
-  );
-
-  // 带动画吸附到最近有效点
-  const animateToMipScale = useCallback(
-    (from: number) => {
-      const snapped = snapToMipScale(from);
-
-      // 已经在有效点上
-      if (Math.abs(snapped - from) < 0.01) {
-        setCaptureScale(snapped);
-        lastSyncedScaleRef.current = snapped;
-        scaleLive.schedule(snapped, { force: true });
-        return;
-      }
-
-      cancelAnimation();
-      animationStartRef.current = performance.now();
-      animationFromRef.current = from;
-      animationToRef.current = snapped;
-
-      const step = (now: number) => {
-        const elapsed = now - animationStartRef.current;
-        const t = Math.min(1, elapsed / animationDuration);
-        const eased = easeOutExpo(t);
-        const next =
-          animationFromRef.current +
-          (animationToRef.current - animationFromRef.current) * eased;
-        setCaptureScale(next);
-
-        if (t < 1) {
-          animationFrameRef.current = requestAnimationFrame(step);
-        } else {
-          animationFrameRef.current = null;
-          setCaptureScale(animationToRef.current);
-          lastSyncedScaleRef.current = animationToRef.current;
-          scaleLive.schedule(animationToRef.current, { force: true });
-        }
-      };
-
-      animationFrameRef.current = requestAnimationFrame(step);
-    },
-    [scaleLive, snapToMipScale, animationDuration],
-  );
-
   useEffect(() => {
     Promise.all([configManager.getAppConfig(), api.getWindowEffects()]).then(([cfg, windowEffects]) => {
-      const scale = cfg.screenCapture.scalePercent;
+      const maxPixels = cfg.screenCapture.maxPixels;
       const fps = cfg.screenCapture.fps;
       const method = cfg.screenCapture.method;
 
@@ -307,19 +219,15 @@ export function SettingsPage() {
         setWindowEffect("");
       }
 
-      // DXGI 模式下初始化时对齐 mip（无动画，静默纠正配置异常值）
-      if (method === "dxgi") {
-        alignToMipScale(scale);
-      } else {
-        setCaptureScale(scale);
-        lastSyncedScaleRef.current = scale;
-      }
+      const qualityIndex = getCaptureQualityIndex(maxPixels);
+      const preset = getCaptureQualityPreset(qualityIndex);
+      setCaptureQualityIndex(qualityIndex);
+      lastSyncedQualityRef.current = preset.maxPixels;
 
       setLoading(false);
     });
     return () => {
-      cancelAnimation();
-      scaleLive.cancel();
+      qualityLive.cancel();
       fpsLive.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -346,8 +254,7 @@ export function SettingsPage() {
   }, []);
 
   const handleMethodChange = (value: CaptureMethod) => {
-    cancelAnimation();
-    scaleLive.cancel();
+    qualityLive.cancel();
     fpsLive.cancel();
     // Optimistic UI update; we'll reconcile with backend response below.
     setCaptureMethod(value);
@@ -357,34 +264,20 @@ export function SettingsPage() {
       .then((saved) => {
         const effective = saved.screenCapture.method;
         setCaptureMethod(effective);
-
-        // Only animate snap when DXGI is actually effective.
-        if (effective === "dxgi") {
-          animateToMipScale(captureScale);
-        }
       })
       .catch((err) => {
         logger.error("settings.captureMethod.update_failed", { requested: value }, err);
       });
   };
 
-  const handleScaleChange = (value: number) => {
-    setCaptureScale(value);
-    syncLiveScale(value);
+  const handleQualityChange = (value: number) => {
+    setCaptureQualityIndex(value);
+    syncLiveQuality(value);
   };
 
-  const handleScaleCommit = (value: number) => {
-    syncLiveScale(value, { force: true });
-
-    // GDI 无 mipmap 约束，直接提交
-    if (!isGpuAccelerated) {
-      cancelAnimation();
-      setCaptureScale(value);
-      return;
-    }
-
-    // DXGI 使用动画吸附
-    animateToMipScale(value);
+  const handleQualityCommit = (value: number) => {
+    setCaptureQualityIndex(value);
+    syncLiveQuality(value, { force: true });
   };
 
   const handleFpsChange = (value: number) => {
@@ -402,9 +295,17 @@ export function SettingsPage() {
     configManager.setWindowEffect(value);
   };
 
-  const displayScaleText = useCallback(() => {
-    return `${formatPercent(captureScale)}%${captureScale === 100 ? " (Original)" : ""}`;
-  }, [captureScale]);
+  const activeQuality = useMemo(
+    () => getCaptureQualityPreset(captureQualityIndex),
+    [captureQualityIndex],
+  );
+
+  const displayQualityText = useCallback(() => {
+    if (activeQuality.maxPixels === 0) {
+      return `${activeQuality.label} (${formatPixelBudget(activeQuality.maxPixels)})`;
+    }
+    return `${activeQuality.label} · ${formatPixelBudget(activeQuality.maxPixels)}`;
+  }, [activeQuality]);
 
   return (
     <div className="settings-page">
@@ -506,20 +407,20 @@ export function SettingsPage() {
             </div>
           )}
 
-          {/* Resolution Scale Slider */}
+          {/* Resolution Quality Slider */}
           <div className="setting-section">
             <Slider.Root
-              min={1}
-              max={100}
-              step={0.1}
-              value={[captureScale]}
-              onValueChange={(details) => handleScaleChange(details.value[0])}
-              onValueChangeEnd={(details) => handleScaleCommit(details.value[0])}
+              min={0}
+              max={CAPTURE_QUALITY_PRESETS.length - 1}
+              step={1}
+              value={[captureQualityIndex]}
+              onValueChange={(details) => handleQualityChange(details.value[0])}
+              onValueChangeEnd={(details) => handleQualityCommit(details.value[0])}
               disabled={loading}
             >
               <HStack justify="space-between">
-                <Slider.Label>Resolution Scale</Slider.Label>
-                <Slider.ValueText>{displayScaleText()}</Slider.ValueText>
+                <Slider.Label>Quality Level</Slider.Label>
+                <Slider.ValueText>{displayQualityText()}</Slider.ValueText>
               </HStack>
               <Slider.Control>
                 <Slider.Track>
@@ -529,13 +430,9 @@ export function SettingsPage() {
               </Slider.Control>
             </Slider.Root>
             <p>
-              Lowering resolution improves performance. 100% matches native quality.
+              Capture resolution is limited by a pixel budget and downscaled in power-of-two steps.
             </p>
-            {isGpuAccelerated && (
-              <p>
-                Values snap to GPU-optimized levels for best performance.
-              </p>
-            )}
+            <p>{activeQuality.description}</p>
           </div>
 
           {/* Frame Rate Slider */}

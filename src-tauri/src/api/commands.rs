@@ -18,11 +18,12 @@ use tauri::Manager;
 use crate::resource::screen::{
     get_capture_fps as get_screen_capture_fps,
     get_capture_method as get_screen_capture_method,
-    get_capture_scale_percent,
+    get_capture_max_pixels as get_screen_capture_max_pixels,
     list_displays as list_screen_displays,
     set_capture_fps as set_screen_capture_fps,
     set_capture_method as set_screen_capture_method,
-    set_capture_scale_percent,
+    set_capture_max_pixels as set_screen_capture_max_pixels,
+    normalize_capture_max_pixels,
     CaptureMethod,
     DisplayInfo,
     ScreenSubscription,
@@ -89,7 +90,7 @@ fn runtime_app_config_snapshot(app_handle: &tauri::AppHandle) -> AppConfigDto {
     let mut cfg = AppConfigDto::default_for_platform();
     cfg.window_effect = window_effect;
     cfg.minimize_to_tray = get_minimize_to_tray();
-    cfg.screen_capture.scale_percent = get_capture_scale();
+    cfg.screen_capture.max_pixels = get_screen_capture_max_pixels();
     cfg.screen_capture.fps = get_capture_fps();
     cfg.screen_capture.method = capture_method;
 
@@ -107,7 +108,7 @@ pub fn apply_app_config_to_runtime(cfg: &AppConfigDto, app_handle: &tauri::AppHa
     MINIMIZE_TO_TRAY.store(cfg.minimize_to_tray, Ordering::Relaxed);
 
     // Screen capture
-    set_capture_scale_percent(cfg.screen_capture.scale_percent);
+    set_screen_capture_max_pixels(cfg.screen_capture.max_pixels);
     set_screen_capture_fps(cfg.screen_capture.fps);
     if let Ok(requested) = cfg.screen_capture.method.parse::<CaptureMethod>() {
         set_screen_capture_method(requested);
@@ -177,7 +178,7 @@ pub fn set_app_config(config: AppConfigDto, app_handle: tauri::AppHandle) -> Res
     let mut cfg = config;
 
     // Clamp numeric values defensively.
-    cfg.screen_capture.scale_percent = cfg.screen_capture.scale_percent.clamp(1, 100);
+    cfg.screen_capture.max_pixels = normalize_capture_max_pixels(cfg.screen_capture.max_pixels);
     cfg.screen_capture.fps = cfg.screen_capture.fps.clamp(1, 60);
 
     // Normalize windowEffect.
@@ -418,14 +419,14 @@ pub fn set_scope_brightness(
 }
 
 #[tauri::command]
-pub fn set_capture_scale(percent: u8, app_handle: tauri::AppHandle) {
-    set_capture_scale_percent(percent);
+pub fn set_capture_max_pixels(max_pixels: u32, app_handle: tauri::AppHandle) {
+    set_screen_capture_max_pixels(max_pixels);
     save_runtime_app_config_best_effort(&app_handle);
 }
 
 #[tauri::command]
-pub fn get_capture_scale() -> u8 {
-    get_capture_scale_percent()
+pub fn get_capture_max_pixels() -> u32 {
+    get_screen_capture_max_pixels()
 }
 
 #[tauri::command]

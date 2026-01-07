@@ -52,6 +52,68 @@ pub trait ScreenCapturer {
 }
 
 // ============================================================================
+// Capture scaling helpers
+// ============================================================================
+
+/// Preset pixel budgets based on typical 16:9 resolutions (highest to lowest).
+pub(crate) const CAPTURE_PIXEL_PRESETS: &[u32] = &[
+    2_073_600, // 1080p
+    921_600,   // 720p
+    518_400,   // 540p
+    230_400,   // 360p
+    129_600,   // 270p
+    57_600,    // 180p
+    14_400,    // 90p
+    3_600,     // 45p
+    2_304,     // 36p
+    576,       // 18p
+];
+
+pub(crate) const DEFAULT_CAPTURE_MAX_PIXELS: u32 = 230_400; // 360p
+
+pub(crate) fn normalize_capture_max_pixels(value: u32) -> u32 {
+    if value == 0 {
+        return 0;
+    }
+
+    let mut closest = CAPTURE_PIXEL_PRESETS[0];
+    let mut closest_delta = closest.abs_diff(value);
+
+    for &preset in &CAPTURE_PIXEL_PRESETS[1..] {
+        let delta = preset.abs_diff(value);
+        if delta < closest_delta || (delta == closest_delta && preset > closest) {
+            closest = preset;
+            closest_delta = delta;
+        }
+    }
+
+    closest
+}
+
+pub(crate) fn compute_scaled_dimensions_by_max_pixels(
+    width: u32,
+    height: u32,
+    max_pixels: u32,
+) -> (u32, u32) {
+    let mut scaled_width = width.max(1);
+    let mut scaled_height = height.max(1);
+
+    if max_pixels == 0 {
+        return (scaled_width, scaled_height);
+    }
+
+    let max_pixels = max_pixels as u64;
+    while (scaled_width as u64) * (scaled_height as u64) > max_pixels
+        && (scaled_width > 1 || scaled_height > 1)
+    {
+        scaled_width = (scaled_width / 2).max(1);
+        scaled_height = (scaled_height / 2).max(1);
+    }
+
+    (scaled_width, scaled_height)
+}
+
+// ============================================================================
 // Platform-specific modules
 // ============================================================================
 
@@ -64,9 +126,9 @@ mod screen;
 #[cfg(target_os = "windows")]
 pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
-    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_capture_fps, get_capture_method, get_capture_max_pixels,
     get_hardware_acceleration, get_sample_ratio, list_displays,
-    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_capture_fps, set_capture_method, set_capture_max_pixels,
     set_hardware_acceleration, set_sample_ratio,
 };
 
@@ -79,9 +141,9 @@ mod screen;
 #[cfg(target_os = "macos")]
 pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
-    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_capture_fps, get_capture_method, get_capture_max_pixels,
     get_hardware_acceleration, get_sample_ratio, list_displays,
-    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_capture_fps, set_capture_method, set_capture_max_pixels,
     set_hardware_acceleration, set_sample_ratio,
 };
 
@@ -94,8 +156,8 @@ mod screen;
 #[cfg(target_os = "linux")]
 pub use screen::{
     CaptureMethod, DesktopDuplicator, DisplayInfo, ScreenSubscription,
-    get_capture_fps, get_capture_method, get_capture_scale_percent,
+    get_capture_fps, get_capture_method, get_capture_max_pixels,
     get_hardware_acceleration, get_sample_ratio, list_displays,
-    set_capture_fps, set_capture_method, set_capture_scale_percent,
+    set_capture_fps, set_capture_method, set_capture_max_pixels,
     set_hardware_acceleration, set_sample_ratio,
 };

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use crate::interface::effect::{
     DependencyBehavior, EffectParam, EffectParamDependency, EffectParamKind,
 };
+use crate::resource::screen::DEFAULT_CAPTURE_MAX_PIXELS;
 
 // ============================================================================
 // App config DTOs (persisted via tauri-plugin-store)
@@ -10,7 +11,8 @@ use crate::interface::effect::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreenCaptureConfigDto {
-    pub scale_percent: u8,
+    /// Max pixel budget for capture resolution. 0 means "no limit".
+    pub max_pixels: u32,
     pub fps: u8,
     /// Capture backend/method identifier (e.g. "dxgi", "gdi", "graphics", "xcap").
     pub method: String,
@@ -41,7 +43,7 @@ impl AppConfigDto {
             window_effect: "".to_string(),
             minimize_to_tray: false,
             screen_capture: ScreenCaptureConfigDto {
-                scale_percent: 5,
+                max_pixels: DEFAULT_CAPTURE_MAX_PIXELS,
                 fps: 30,
                 method: default_method.to_string(),
             },

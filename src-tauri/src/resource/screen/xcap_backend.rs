@@ -5,14 +5,17 @@
 
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicU64, AtomicU8, Ordering},
+    atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering},
     Mutex, OnceLock,
 };
 
 use serde::{Deserialize, Serialize};
 use xcap::Monitor;
 
-use super::{ScreenCaptureError, ScreenCapturer, ScreenFrame};
+use super::{
+    compute_scaled_dimensions_by_max_pixels, normalize_capture_max_pixels,
+    DEFAULT_CAPTURE_MAX_PIXELS, ScreenCaptureError, ScreenCapturer, ScreenFrame,
+};
 
 // ============================================================================
 // Constants
@@ -25,8 +28,8 @@ pub(crate) const DEFAULT_CAPTURE_FPS: u8 = 30;
 // Global Settings
 // ============================================================================
 
-/// Percentage scale factor (1-100) for the capture resolution.
-pub(crate) static CAPTURE_SCALE_PERCENT: AtomicU8 = AtomicU8::new(5);
+/// Max pixel budget for capture resolution. 0 means "no limit".
+pub(crate) static CAPTURE_MAX_PIXELS: AtomicU32 = AtomicU32::new(DEFAULT_CAPTURE_MAX_PIXELS);
 pub(crate) static CAPTURE_FPS: AtomicU8 = AtomicU8::new(DEFAULT_CAPTURE_FPS);
 
 /// Generation counter for capture state; bump when settings change.
@@ -77,11 +80,11 @@ pub struct DisplayInfo {
 // Public API - Settings
 // ============================================================================
 
-pub fn set_capture_scale_percent(percent: u8) {
-    let clamped = percent.clamp(1, 100);
-    let previous = CAPTURE_SCALE_PERCENT.swap(clamped, Ordering::Relaxed);
+pub fn set_capture_max_pixels(max_pixels: u32) {
+    let normalized = normalize_capture_max_pixels(max_pixels);
+    let previous = CAPTURE_MAX_PIXELS.swap(normalized, Ordering::Relaxed);
 
-    if previous != clamped {
+    if previous != normalized {
         if let Ok(mut manager) = global_manager().lock() {
             manager.clear();
         }
@@ -89,8 +92,8 @@ pub fn set_capture_scale_percent(percent: u8) {
     }
 }
 
-pub fn get_capture_scale_percent() -> u8 {
-    CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed)
+pub fn get_capture_max_pixels() -> u32 {
+    CAPTURE_MAX_PIXELS.load(Ordering::Relaxed)
 }
 
 pub fn set_capture_fps(fps: u8) {
@@ -246,20 +249,26 @@ impl XcapCapturer {
             }
         })?;
 
-        // Apply scale percent
-        let scale_percent = CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed).clamp(1, 100) as u32;
+        // Apply max pixel budget
+        let max_pixels = CAPTURE_MAX_PIXELS.load(Ordering::Relaxed);
         let source_width = image.width();
         let source_height = image.height();
-        
-        let (scaled_image, final_width, final_height) = if scale_percent < 100 {
-            let target_width = (source_width * scale_percent / 100).max(1);
-            let target_height = (source_height * scale_percent / 100).max(1);
-            
+
+        let (target_width, target_height) = compute_scaled_dimensions_by_max_pixels(
+            source_width,
+            source_height,
+            max_pixels,
+        );
+
+        let (scaled_image, final_width, final_height) = if target_width != source_width
+            || target_height != source_height
+        {
+
             // Use fast nearest-neighbor resize for performance
             let resized = image::imageops::resize(
                 &image,
-                target_width,
-                target_height,
+                target_width.max(1),
+                target_height.max(1),
                 image::imageops::FilterType::Nearest,
             );
             (resized.into_raw(), target_width, target_height)

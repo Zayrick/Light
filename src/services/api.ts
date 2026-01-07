@@ -97,12 +97,16 @@ export const api = {
     );
   },
 
-  getCaptureScale: async (): Promise<number> => {
-    return await invokeWithLog("get_capture_scale");
+  getCaptureMaxPixels: async (): Promise<number> => {
+    return await invokeWithLog("get_capture_max_pixels");
   },
 
-  setCaptureScale: async (percent: number): Promise<void> => {
-    return await invokeWithLog("set_capture_scale", { percent }, { percent });
+  setCaptureMaxPixels: async (maxPixels: number): Promise<void> => {
+    return await invokeWithLog(
+      "set_capture_max_pixels",
+      { maxPixels },
+      { maxPixels },
+    );
   },
 
   getCaptureFps: async (): Promise<number> => {

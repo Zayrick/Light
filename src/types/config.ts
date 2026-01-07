@@ -2,7 +2,7 @@ import type { CaptureMethod, WindowEffectId } from "../services/api";
 import type { SegmentType } from "./device";
 
 export interface ScreenCaptureConfig {
-  scalePercent: number;
+  maxPixels: number;
   fps: number;
   method: CaptureMethod;
 }

@@ -1,6 +1,7 @@
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use serde::{Deserialize, Serialize};
 
+use crate::resource::screen::{normalize_capture_max_pixels, DEFAULT_CAPTURE_MAX_PIXELS};
 use super::manager::global_manager;
 
 // ============================================================================
@@ -14,8 +15,8 @@ pub(crate) const DEFAULT_CAPTURE_FPS: u8 = 30;
 // Global Settings
 // ============================================================================
 
-/// Percentage scale factor (1-100) for the capture resolution.
-pub(crate) static CAPTURE_SCALE_PERCENT: AtomicU8 = AtomicU8::new(5);
+/// Max pixel budget for capture resolution. 0 means "no limit".
+pub(crate) static CAPTURE_MAX_PIXELS: AtomicU32 = AtomicU32::new(DEFAULT_CAPTURE_MAX_PIXELS);
 pub(crate) static CAPTURE_FPS: AtomicU8 = AtomicU8::new(DEFAULT_CAPTURE_FPS);
 
 /// Generation counter for capture state; bump when settings change.
@@ -57,11 +58,11 @@ impl std::str::FromStr for CaptureMethod {
 // Public API - Settings
 // ============================================================================
 
-pub fn set_capture_scale_percent(percent: u8) {
-    let clamped = percent.clamp(1, 100);
-    let previous = CAPTURE_SCALE_PERCENT.swap(clamped, Ordering::Relaxed);
+pub fn set_capture_max_pixels(max_pixels: u32) {
+    let normalized = normalize_capture_max_pixels(max_pixels);
+    let previous = CAPTURE_MAX_PIXELS.swap(normalized, Ordering::Relaxed);
 
-    if previous != clamped {
+    if previous != normalized {
         if let Ok(mut manager) = global_manager().lock() {
             manager.clear();
         }
@@ -69,8 +70,8 @@ pub fn set_capture_scale_percent(percent: u8) {
     }
 }
 
-pub fn get_capture_scale_percent() -> u8 {
-    CAPTURE_SCALE_PERCENT.load(Ordering::Relaxed)
+pub fn get_capture_max_pixels() -> u32 {
+    CAPTURE_MAX_PIXELS.load(Ordering::Relaxed)
 }
 
 pub fn set_capture_fps(fps: u8) {
