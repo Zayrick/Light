@@ -300,12 +300,27 @@ export function SettingsPage() {
     [captureQualityIndex],
   );
 
+  // Calculate color from green (low quality = high performance) to red (high quality = low performance)
+  const qualityColor = useMemo(() => {
+    const maxIndex = CAPTURE_QUALITY_PRESETS.length - 1;
+    // Normalize index to 0-1 range (0 = green, 1 = red)
+    const ratio = captureQualityIndex / maxIndex;
+    // Interpolate from green (hsl 120) to red (hsl 0)
+    const hue = 120 * (1 - ratio);
+    return `hsl(${hue}, 70%, 50%)`;
+  }, [captureQualityIndex]);
+
   const displayQualityText = useCallback(() => {
-    if (activeQuality.maxPixels === 0) {
-      return `${activeQuality.label} (${formatPixelBudget(activeQuality.maxPixels)})`;
-    }
-    return `${activeQuality.label} · ${formatPixelBudget(activeQuality.maxPixels)}`;
-  }, [activeQuality]);
+    const pixelText = activeQuality.maxPixels === 0
+      ? `(${formatPixelBudget(activeQuality.maxPixels)})`
+      : `· ${formatPixelBudget(activeQuality.maxPixels)}`;
+
+    return (
+      <span style={{ color: qualityColor }}>
+        {activeQuality.label} {pixelText}
+      </span>
+    );
+  }, [activeQuality, qualityColor]);
 
   return (
     <div className="settings-page">
