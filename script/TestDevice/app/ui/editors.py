@@ -148,6 +148,9 @@ class MatrixEditor(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model: Optional[MatrixOutputModel] = None
+        # Guard to prevent set_model() from triggering valueChanged signals
+        # that write stale UI state back into a newly selected model.
+        self._setting_model = False
 
         self.id_edit = QLineEdit()
         self.name_edit = QLineEdit()
@@ -206,7 +209,7 @@ class MatrixEditor(QWidget):
         self.table.cellClicked.connect(self._on_cell_clicked)
         self.width_spin.valueChanged.connect(self._on_dims_changed)
         self.height_spin.valueChanged.connect(self._on_dims_changed)
-        self.order_combo.currentIndexChanged.connect(self._refresh)
+        self.order_combo.currentIndexChanged.connect(self._on_order_changed)
         self.id_edit.textEdited.connect(self._sync_fields_to_model)
         self.name_edit.textEdited.connect(self._sync_fields_to_model)
         self.fill_btn.clicked.connect(self._fill_all)
@@ -216,14 +219,24 @@ class MatrixEditor(QWidget):
         self._set_table_font()
 
     def set_model(self, model: MatrixOutputModel) -> None:
-        self._model = model
-        self.id_edit.setText(model.id)
-        self.name_edit.setText(model.name)
-        self.width_spin.setValue(model.width)
-        self.height_spin.setValue(model.height)
-        idx = self.order_combo.findData(model.order)
-        if idx >= 0:
-            self.order_combo.setCurrentIndex(idx)
+        self._setting_model = True
+        widgets_to_block = [self.id_edit, self.name_edit, self.width_spin, self.height_spin, self.order_combo]
+        for w in widgets_to_block:
+            w.blockSignals(True)
+        try:
+            self._model = model
+            self.id_edit.setText(model.id)
+            self.name_edit.setText(model.name)
+            self.width_spin.setValue(model.width)
+            self.height_spin.setValue(model.height)
+            idx = self.order_combo.findData(model.order)
+            if idx >= 0:
+                self.order_combo.setCurrentIndex(idx)
+        finally:
+            for w in widgets_to_block:
+                w.blockSignals(False)
+            self._setting_model = False
+
         self._rebuild_table()
         self._refresh()
 
@@ -271,11 +284,22 @@ class MatrixEditor(QWidget):
         self._update_table_font(self._current_max_digits)
         self.table.viewport().update()
 
-    def _sync_fields_to_model(self) -> None:
+    def _sync_fields_to_model(self, *_args) -> None:
         if not self._model:
+            return
+        if self._setting_model:
             return
         self._model.id = self.id_edit.text().strip() or self._model.id
         self._model.name = self.name_edit.text().strip() or self._model.name
+        self.changed.emit()
+
+    def _on_order_changed(self) -> None:
+        if not self._model:
+            return
+        if self._setting_model:
+            return
+        self._model.order = str(self.order_combo.currentData())
+        self._refresh()
         self.changed.emit()
 
     def _rebuild_table(self) -> None:
@@ -300,6 +324,8 @@ class MatrixEditor(QWidget):
     def _on_dims_changed(self) -> None:
         if not self._model:
             return
+        if self._setting_model:
+            return
         self._model.width = int(self.width_spin.value())
         self._model.height = int(self.height_spin.value())
         self._model.clip_cells()
@@ -309,6 +335,8 @@ class MatrixEditor(QWidget):
 
     def _on_cell_clicked(self, row: int, col: int) -> None:
         if not self._model:
+            return
+        if self._setting_model:
             return
         key = (col, row)
         if key in self._model.cells:
@@ -322,6 +350,8 @@ class MatrixEditor(QWidget):
     def _fill_all(self) -> None:
         if not self._model:
             return
+        if self._setting_model:
+            return
         self._model.cells = {(x, y) for y in range(self._model.height) for x in range(self._model.width)}
         self._refresh()
         self.changed.emit()
@@ -329,12 +359,16 @@ class MatrixEditor(QWidget):
     def _clear(self) -> None:
         if not self._model:
             return
+        if self._setting_model:
+            return
         self._model.cells.clear()
         self._refresh()
         self.changed.emit()
 
     def _invert(self) -> None:
         if not self._model:
+            return
+        if self._setting_model:
             return
         all_cells = {(x, y) for y in range(self._model.height) for x in range(self._model.width)}
         self._model.cells = all_cells.difference(self._model.cells)
@@ -345,8 +379,7 @@ class MatrixEditor(QWidget):
         if not self._model:
             return
 
-        self._sync_fields_to_model()
-        self._model.order = str(self.order_combo.currentData())
+        # Refresh is UI-only: do not write back to the model here.
 
         out_cfg = self._model.to_output_config()
         m = out_cfg["matrix"]
@@ -395,6 +428,7 @@ class LinearEditor(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model: Optional[LinearOutputModel] = None
+        self._setting_model = False
 
         self.id_edit = QLineEdit()
         self.name_edit = QLineEdit()
@@ -411,13 +445,24 @@ class LinearEditor(QWidget):
         self.length_spin.valueChanged.connect(self._sync)
 
     def set_model(self, model: LinearOutputModel) -> None:
-        self._model = model
-        self.id_edit.setText(model.id)
-        self.name_edit.setText(model.name)
-        self.length_spin.setValue(model.length)
+        self._setting_model = True
+        widgets_to_block = [self.id_edit, self.name_edit, self.length_spin]
+        for w in widgets_to_block:
+            w.blockSignals(True)
+        try:
+            self._model = model
+            self.id_edit.setText(model.id)
+            self.name_edit.setText(model.name)
+            self.length_spin.setValue(model.length)
+        finally:
+            for w in widgets_to_block:
+                w.blockSignals(False)
+            self._setting_model = False
 
     def _sync(self) -> None:
         if not self._model:
+            return
+        if self._setting_model:
             return
         self._model.id = self.id_edit.text().strip() or self._model.id
         self._model.name = self.name_edit.text().strip() or self._model.name
@@ -431,6 +476,7 @@ class SingleEditor(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model: Optional[SingleOutputModel] = None
+        self._setting_model = False
 
         self.id_edit = QLineEdit()
         self.name_edit = QLineEdit()
@@ -443,12 +489,23 @@ class SingleEditor(QWidget):
         self.name_edit.textEdited.connect(self._sync)
 
     def set_model(self, model: SingleOutputModel) -> None:
-        self._model = model
-        self.id_edit.setText(model.id)
-        self.name_edit.setText(model.name)
+        self._setting_model = True
+        widgets_to_block = [self.id_edit, self.name_edit]
+        for w in widgets_to_block:
+            w.blockSignals(True)
+        try:
+            self._model = model
+            self.id_edit.setText(model.id)
+            self.name_edit.setText(model.name)
+        finally:
+            for w in widgets_to_block:
+                w.blockSignals(False)
+            self._setting_model = False
 
     def _sync(self) -> None:
         if not self._model:
+            return
+        if self._setting_model:
             return
         self._model.id = self.id_edit.text().strip() or self._model.id
         self._model.name = self.name_edit.text().strip() or self._model.name
