@@ -16,9 +16,11 @@ type ControlState = "none" | "explicit" | "inherited";
 
 function DeviceContextMenu({
   children,
+  port,
   deviceName,
 }: {
   children: React.ReactNode;
+  port: string;
   deviceName: string;
 }) {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -51,7 +53,7 @@ function DeviceContextMenu({
         </Portal>
       </Menu.Root>
 
-      <DeviceConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} deviceName={deviceName} />
+      <DeviceConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} port={port} deviceName={deviceName} />
     </>
   );
 }
@@ -397,7 +399,7 @@ const DeviceTreeItem = ({
     <TreeView.NodeProvider node={node} indexPath={indexPath}>
       {node.children ? (
         <TreeView.Branch className="layout-tree-branch">
-          <DeviceContextMenu deviceName={deviceNameForMenu}>
+          <DeviceContextMenu port={node.port} deviceName={deviceNameForMenu}>
             <motion.div layout transition={BRANCH_TRANSITION}>
               <TreeView.BranchControl
                 className={clsx("device-list-item layout-branch-control", isSelected && "active")}
@@ -459,7 +461,7 @@ const DeviceTreeItem = ({
           </AnimatePresence>
         </TreeView.Branch>
       ) : (
-        <DeviceContextMenu deviceName={deviceNameForMenu}>
+        <DeviceContextMenu port={node.port} deviceName={deviceNameForMenu}>
           <motion.div layout transition={BRANCH_TRANSITION}>
             <TreeView.Item
               className={clsx(
